@@ -1,0 +1,11 @@
+# 凭据与本地状态——绝不入库
+config.json
+test-accounts.json
+*.db
+*.db-wal
+*.db-shm
+tokens/
+*.token
+__pycache__/
+*.pyc
+.evidence-live/

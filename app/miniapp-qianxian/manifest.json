@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "id": "qianxian-guardian",
+  "version": "0.1.0",
+  "name": "牵线 · 聚会守护",
+  "capabilities": [
+    "matrix.profile",
+    "matrix.read_messages",
+    "matrix.send_message",
+    "octos.session.open",
+    "octos.session.history",
+    "octos.turn.start",
+    "octos.turn.interrupt"
+  ],
+  "compute": {
+    "instruction_budget": 8000000,
+    "memory_bytes": 33554432
+  }
+}

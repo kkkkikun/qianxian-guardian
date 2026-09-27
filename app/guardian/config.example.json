@@ -1,0 +1,8 @@
+{
+  "homeserver": "http://127.0.0.1:8128",
+  "bot_user_id": "@guardian_bot:127.0.0.1:8128",
+  "bot_password": "PUT-YOUR-LOCAL-BOT-PASSWORD-HERE",
+  "db_path": "../../guardian.db",
+  "timezone": "Asia/Shanghai",
+  "poll_timeout_ms": 15000
+}
