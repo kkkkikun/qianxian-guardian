@@ -7,29 +7,28 @@ let case_lines = []
 let seq = 0
 let selected_id = 0  // 选中态：0 表示无选中
 
-fn status_color(s){
-    if s == "Confirmed" { return #x34c759 }
-    if s == "Cancelled" { return #xff3b30 }
-    return #x8e8e93  // Proposing / 兜底灰
-}
-
 fn rebuild_lines(){
     case_lines.clear()
     for i in cases.len() {
         let tag = "  "
         if cases[i]["id"] == selected_id { tag = "▶ " }
-        case_lines.push(tag + "#" + "" + cases[i]["id"] + " · " + cases[i]["activity"] + " · " + cases[i]["status"])
-        case_lines.push(cases[i]["text"])
+        case_lines.push(tag + "#" + "" + cases[i]["id"] + " · " + ("" + cases[i]["activity"]) + " · " + ("" + cases[i]["status"]))
+        case_lines.push("" + cases[i]["text"])
         // 回执草稿：仅 Confirmed 行下追加（活动/地点/原文三行 + T-24h 占位行）
+        // 注：Splash 嵌套对象字面量读回为 null，receipt 用平行顶层字段存
         if cases[i]["status"] == "Confirmed" {
-            let r = cases[i]["receipt"]
-            if r == nil {
-                r = {activity: cases[i]["activity"], place: cases[i]["place"], text: cases[i]["text"]}
-                cases[i]["receipt"] = r
+            if cases[i]["receipt_done"] != "yes" {
+                cases[i]["receipt_activity"] = "" + cases[i]["activity"]
+                cases[i]["receipt_place"] = "" + cases[i]["place"]
+                cases[i]["receipt_text"] = "" + cases[i]["text"]
+                cases[i]["receipt_done"] = "yes"
             }
-            case_lines.push("  ↳ 活动：" + r["activity"])
-            case_lines.push("  ↳ 地点：" + r["place"])
-            case_lines.push("  ↳ 原文：" + r["text"])
+            let ra = "" + cases[i]["receipt_activity"]
+            let rp = "" + cases[i]["receipt_place"]
+            let rt = "" + cases[i]["receipt_text"]
+            case_lines.push("  ↳ 活动：" + ra)
+            case_lines.push("  ↳ 地点：" + rp)
+            case_lines.push("  ↳ 原文：" + rt)
             case_lines.push("  ↳ T-24h 提醒（本地提醒文本，需宿主定时能力）")
         }
     }
@@ -109,7 +108,7 @@ fn add_case(){
         return
     }
     seq = seq + 1
-    cases.push({id: seq, text: text, activity: guess_activity(text), place: guess_place(text), status: "Proposing"})
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": ""})
     selected_id = seq  // 新建后自动选中，体验闭环
     ui.msg_input.set_text("")
     rebuild_lines()
@@ -240,15 +239,8 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         if cases.len() == 0 {
             Label{text: "暂无守护：输入一条群消息开始" draw_text.color: secondary}
         }
-        for i in cases.len() {
-            let c = cases[i]
-            let row_color = status_color(c["status"])
-            GestureView{width: Fill height: Fit on_tap: || select_case(c["id"])
-                View{width: Fill height: Fit flow: Down spacing: 2
-                    Label{width: Fill text: "#" + "" + c["id"] + " · " + c["activity"] + " · " + c["status"] draw_text.color: row_color draw_text.text_style.font_size: 14}
-                    Label{width: Fill text: c["text"] draw_text.color: secondary draw_text.text_style.font_size: 13}
-                }
-            }
+        for i in case_lines.len() {
+            Label{width: Fill text: case_lines[i] draw_text.color: ink draw_text.text_style.font_size: 14}
         }
     }}
     action_row := View{width: Fill height: Fit flow: Right spacing: 8
