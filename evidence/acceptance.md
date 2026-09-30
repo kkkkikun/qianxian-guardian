@@ -1,7 +1,14 @@
 # 验收记录（task.md 验收条件逐条执行）
 
-执行时间：2026-09-27 深夜 ｜ 执行方式：确定性冒烟脚本 + 真实 LLM 通道 + 本地 Palpo
-全量回归：`evidence/全量回归-20260927.txt`（7/7 + 19/19 + 10/10 + 9/9 + 9/9 + 9/9 全绿）
+> ⚠️ **口径说明**：`task.md` 的 12 条验收写于 2026-09-27，原型是 **Python guardian +
+> 双账号 Matrix + bot**。**下方表格逐条是 guardian 口径的验证结果**（场外链路证明，
+> 真实 Matrix + LLM 通道，六套冒烟全绿）。
+> **提交物是 script-app**（`app/qianxian/`），其逐条对应见
+> **[acceptance-mapping.md](acceptance-mapping.md)**（第 6/10 条因形态差异不适用）。
+>
+> 执行时间：2026-09-27 深夜（guardian）｜ 2026-10-01（script-app 全量回归）
+> guardian 全量回归：`evidence/全量回归-20260927.txt`（6 套全绿）
+> script-app 全量回归：`evidence/regression-20261001.md`（14 项真机通过）
 
 A 路线补充（2026-09-30，script-app `app/qianxian/`）：`hub check — PASSED`（仅 unsigned warning；
 构建链 App-Hub `46d67e5` + makepad `db4691d0` + OSM `3d3ef80`）；`hub scan` 7 问作答
@@ -28,7 +35,7 @@ A 路线补充（2026-09-30，script-app `app/qianxian/`）：`hub check — PAS
 
 | 要求 | 状态 |
 |---|---|
-| 可运行的原型 + 启动说明 | ✅ guardian 全链可运行；run.md 启动说明 |
+| 可运行的原型 + 启动说明 | ✅ script-app：`hub check PASSED` + run.md 三段式复现（全实测）；guardian 亦可运行（场外证明） |
 | 固定版本公开源码 + Apache 2.0 | ✅ 已推送（https://github.com/kkkkikun/qianxian-guardian，`master`；LICENSE 在仓；历史已脱敏） |
 | 2-3 分钟演示视频 | ⏳ 待录（脚本见 evidence/demo-script.md，10 步双线+口播稿） |
 | 两张关键截图 | ⏳ 待截（script-app Confirmed 态 + AI 降级/注入失败态；占位图待换，见 demo-script.md） |
