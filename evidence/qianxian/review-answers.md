@@ -49,6 +49,12 @@
 
 **pass**（待换真截图后）。publisher 三字段已换真值（Aurora-X /
 kkkkikun@foxmail.com / 公仓 PRIVACY.md 链接），`hub check — PASSED` 无占位提示
-（digest `fdcae9bb`，privacy 链接分支修正后重检）。仅剩一处占位：`screenshots/01-main.png` 为 1×1
+（digest `fdcae9bb`，privacy 链接分支修正后重检）。截图说明（诚实标注）：`bundle/screenshots/01-main.png`（412×892）**不是宿主渲染的像素**——
+本评审环境无图形会话，card-host 的 `/g` 抓帧超时（llvmpipe 无 present）。
+该图由 `app/qianxian/tools/snap-to-png.py` 依据**应用运行时的真实控件树**
+（card-host `/snap?all=1` 的类型/文本/矩形）重绘而成：
+文字内容、层级顺序、坐标、状态语义色均来自实际运行，不是设计稿。
+若评审在有图形会话的机器上运行 `tools/octo shot <port> bundle/screenshots/01-main.png`，
+会得到宿主渲染的原始像素图。
 （`/g` 在 llvmpipe 无头后端抓帧超时，`snap` 树 11 控件验证通过）。
 真图替换后重 `stamp`+`check` 即可提交；功能与权限侧无问题。

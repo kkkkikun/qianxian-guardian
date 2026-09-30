@@ -4,3 +4,4 @@ target/
 *.key
 *.cert
 .DS_Store
+.shot-work/
