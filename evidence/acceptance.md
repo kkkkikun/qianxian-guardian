@@ -22,14 +22,14 @@ A 路线补充（2026-09-30，script-app `app/qianxian/`）：`hub check — PAS
 | 9 | 注入用例被拦截并留审计 | ✅ 通过 | smoke_g5「分诊层/解析校验层」双拦截 + 真实 LLM 注入实测（ModelScope DeepSeek 拒答 → activity 空 → 校验拒绝） |
 | 10 | 崩溃重启：任务补偿 + 事件不重复处理 | ✅ 通过 | smoke_g5「独立子进程 sweep」「processed_events 跨连接持久化」 |
 | 11 | （P1）天气与 Open-Meteo 对账 | ⏸ 未实现（P1 明确划出） | — |
-| 12 | 队外用户按 run.md 独立复现 | 🟡 run.md 已交付；**公开仓库结构已就绪**（git 仓库已 init 并提交 `703afb1`（历史脱敏重写后；原 `91120c5`），含 LICENSE/.gitignore/README；凭据已 gitignore）；待用户 `gh repo create --public --source . --push` 后由队外用户执行 | run.md + 全量回归 |
+| 12 | 队外用户按 run.md 独立复现 | 🟡 run.md 已交付；**已推送公开仓库**（https://github.com/kkkkikun/qianxian-guardian，`master`，含 LICENSE/.gitignore/README/PRIVACY；历史已脱敏，真密码 0 残留；submit issue #1）；待队外用户执行 + 真截图回填 | run.md + 公仓 |
 
 ## task.md 初赛清单对照
 
 | 要求 | 状态 |
 |---|---|
 | 可运行的原型 + 启动说明 | ✅ guardian 全链可运行；run.md 启动说明 |
-| 固定版本公开源码 + Apache 2.0 | 🟡 待用户推送公开仓库（代码 + LICENSE 已在仓内就绪） |
+| 固定版本公开源码 + Apache 2.0 | ✅ 已推送（https://github.com/kkkkikun/qianxian-guardian，`master`；LICENSE 在仓；历史已脱敏） |
 | 2-3 分钟演示视频 | ⏳ 待录（演示脚本 10 步在蓝图） |
 | 两张关键截图 | ⏳ 待录（活动簿 Confirmed 页 + 失败态页） |
 | 简短需求说明 | ✅ task.md |
