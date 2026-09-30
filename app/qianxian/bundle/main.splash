@@ -17,6 +17,7 @@ let case_place_lines = []   // 每条 case 的地点字符串（供 on_render �
 let case_slot_day = []      // 每条 case 的「星期几」字符串（"周一"…/"周日"/""）
 let case_slot_part = []     // 每条 case 的「时段」字符串（"上午"/"中午"/"下午"/"晚上"/""）
 let case_conflict = []      // 每条 case 的冲突标记（"yes"/"no"）
+let case_people_line = []            // 每条 case 的参与人字符串（"未填写" 或 "小明、小红"）
 let case_conflict_lines = []
 let case_conflict_party = []   // 冲突双方整行（扁平字符串，单独存避免 split/嵌套）// 每条 case 的冲突卡内容字符串数组（双方拼成单个字符串，防陷阱 A）
 // === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
@@ -175,6 +176,7 @@ fn rebuild_lines(){
     case_slot_day.clear()
     case_slot_part.clear()
     case_conflict.clear()
+    case_people_line.clear()
     case_conflict_lines.clear()
     case_conflict_party.clear()
     // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
@@ -205,6 +207,9 @@ fn rebuild_lines(){
         if pl == "" { pl = "（未抽取到）" }
         case_place_full.push(pl)
         case_status_text.push(status_badge_text(st))
+        let ppl = "" + cases[i]["people"]
+        if ppl == "" { ppl = "未填写" }
+        case_people_line.push(ppl)
 
         // === #17b 新增：扁平「星期几 / 时段 / 冲突标记」三字段（供 on_render 只读） ===
         // 对象字段访问在闭包里不稳，硬约束 #4/#5；预置到 push 字面量 + 重建时落到扁平数组。
@@ -408,6 +413,93 @@ fn target_id(){
 }
 
 // === #8 保留：清除取消二次确认态（任何非「取消」按钮/动作都放弃确认） ===
+// === #23：追加参与人（逗号分隔，上限 10 人） ===
+//   C4 重建数组 / C6 闭包用 selected_id / C7 字符串标记
+let people_save_result = "ok"
+fn add_person(id_str, raw){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再添加参与人")
+        return
+    }
+    let name = "" + raw
+    name = name.trim()
+    if name == "" {
+        ui.hint.set_text("请先输入姓名（多个用逗号分隔）")
+        return
+    }
+    let cur = -1
+    for pi in cases.len() {
+        if "" + cases[pi]["id"] == id_str { cur = pi }
+    }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
+    }
+    let old = "" + cases[cur]["people"]
+    let added = []
+    for nm in name.split(",") {
+        let one = nm.trim()
+        if one != "" { added.push(one) }
+    }
+    if added.len() == 0 {
+        ui.hint.set_text("没解析到有效姓名（多个请用逗号分隔）")
+        return
+    }
+    // 上限 10 人（手册纪律：先检查再写）
+    let total = 0
+    if old != "" {
+        for ex in old.split(",") { if ex.trim() != "" { total = total + 1 } }
+    }
+    if total + added.len() > 10 {
+        ui.hint.set_text("参与人已达上限 10 人，未添加")
+        return
+    }
+    let merged = old
+    for an in added {
+        if merged == "" { merged = an } else { merged = merged + "," + an }
+    }
+    // C4：重建数组
+    let new_cases = []
+    for qi in cases.len() {
+        if qi == cur {
+            new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
+                "activity": cases[qi]["activity"], "place": cases[qi]["place"],
+                "status": cases[qi]["status"],
+                "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
+                "conflict": cases[qi]["conflict"], "people": merged,
+                "receipt_activity": cases[qi]["receipt_activity"],
+                "receipt_place": cases[qi]["receipt_place"],
+                "receipt_text": cases[qi]["receipt_text"],
+                "receipt_done": cases[qi]["receipt_done"]})
+        } else {
+            new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
+                "activity": cases[qi]["activity"], "place": cases[qi]["place"],
+                "status": cases[qi]["status"],
+                "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
+                "conflict": cases[qi]["conflict"], "people": cases[qi]["people"],
+                "receipt_activity": cases[qi]["receipt_activity"],
+                "receipt_place": cases[qi]["receipt_place"],
+                "receipt_text": cases[qi]["receipt_text"],
+                "receipt_done": cases[qi]["receipt_done"]})
+        }
+    }
+    cases = new_cases
+    rebuild_lines()
+    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
+    people_save_result = "ok"
+    if r != nil {
+        let m = "" + r
+        if m != "" { people_save_result = "fail" }
+    }
+    ui.case_list.render()
+    ui.people_input.set_text("")
+    if people_save_result == "fail" {
+        ui.hint.set_text("已加 " + "" + added.len() + " 人（保存失败，仅在内存）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 参与人：" + merged)
+    }
+}
+
 // === #22 重启：改时间（5 个常见槽位轮换） ===
 //   手册约束：C4 对象字段动态赋值不可靠 → **重建整个 cases 数组**再整体替换；
 //   C7 布尔返回不可靠 → 字符串标记；C6 闭包不捕获循环变量 → 用 selected_id。
@@ -447,7 +539,7 @@ fn cycle_slot(id_str){
                 "activity": cases[ri]["activity"], "place": cases[ri]["place"],
                 "status": cases[ri]["status"],
                 "slot_day": nd, "slot_part": np,
-                "conflict": cases[ri]["conflict"],
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
                 "receipt_activity": cases[ri]["receipt_activity"],
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
@@ -457,7 +549,7 @@ fn cycle_slot(id_str){
                 "activity": cases[ri]["activity"], "place": cases[ri]["place"],
                 "status": cases[ri]["status"],
                 "slot_day": cases[ri]["slot_day"], "slot_part": cases[ri]["slot_part"],
-                "conflict": cases[ri]["conflict"],
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
                 "receipt_activity": cases[ri]["receipt_activity"],
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
@@ -735,7 +827,7 @@ fn build_case_from_text(text, level){
     if seq <= max_existing_id {
         seq = max_existing_id + 1
     }
-    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no"})
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no"})
     // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
     // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
     // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
@@ -1403,6 +1495,16 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                         // 按钮直接作为该 View 的子节点，不再多包一层（手册 A1/A2）。
                         let _slot_now = "" + case_slot_day[j] + "-" + case_slot_part[j]
                         if _slot_now == "-" { _slot_now = "未抽取" }
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "参与人"}
+                            BodyLine{text: "" + case_people_line[j]}
+                            View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                                people_input := TextInput{width: Fill height: 28 empty_text: "输入姓名，逗号分隔" on_change: |txt| add_person("" + selected_id, txt)}
+                                ButtonFlat{text: "添加" height: 28 padding: Inset{left: 12 right: 12} on_click: || add_person("" + selected_id, ui.people_input.text())
+                                    draw_bg +: {border_radius: 14.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
+                                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+                            }
+                        }
                         View{width: Fill height: Fit flow: Down spacing: 2
                             SectionLabel{text: "时间"}
                             BodyLine{text: "时段：" + _slot_now}
