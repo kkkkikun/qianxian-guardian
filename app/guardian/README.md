@@ -1,24 +1,40 @@
-「牵线」guardian — G1 骨架
-====
+# 「牵线」guardian（Python）：场外链路证明（A 路线）
 
-结构：
-  schema.sql        唯一事实源（蓝图 v0.7.1 全量 schema）
-  guardian/config.py    配置加载
-  guardian/db.py        连接(WAL)/schema 初始化/审计与 revision 助手
-  guardian/matrix.py    Matrix Client-Server API 最小封装（login/sync/send，txn 幂等）
-  guardian/ingress.py   入站幂等 + bot 自排除 + 事件分发
-  guardian/main.py      常驻循环（sync long-poll + scheduler 占位）
-  smoke_g1.py           G1 端到端冒烟：双账号发消息 → guardian 落库 → 重放不重复
+> **定位（A 路线，2026-09-30 起）**：本目录是**场外证据**，不是提交物。
+> 提交物是 `../qianxian/`（script-app，`bundle/main.splash`）。
+> 本目录证明“同一套业务设计（分诊→提案→确认→活动簿）在真实 Matrix + 真实 LLM 通道上跑通过”，
+> 与包内 Splash 的本地规则实现共享同一套状态机语义（Proposing/Confirmed/Cancelled），
+> 但**不进 Hub 包**（gate 扩展名白名单无 `.py`）。
 
-运行：
-  pip install requests
-  cp config.example.json config.json   # 填 bot 账号
-  python3 -m guardian.main             # 常驻
-  python3 smoke_g1.py                  # 冒烟
+## 它证明了什么
 
-设计要点（对应蓝图 v0.7.1）：
-  - 入站幂等：last_sync_token 持久化 + processed_event_id 主键去重 + 同事务提交
-  - bot 自身事件在 ingress 层丢弃（防自触发闭环）
-  - m.room.message 之外的 event 类型仅分类不入分诊
-  - 每房间至多一个 Active Case：cases 表部分唯一索引（DB 保证，非业务代码自觉）
-  - 审计只追加；case_revision 单调递增
+- G1：schema 全量 + Matrix sync + 入站幂等 + 审计链（`smoke_g1.py` 7/7）。
+- G2：分诊引擎 + 时间归一化 + 关联判定四分法（`smoke_g2.py` 19/19）+ 分发闭环（10/10）。
+- G3：OUP 真链路 GO/NO-GO——真实模型回合（DeepSeek-V4-Flash，21 秒出
+  `{"activity": "骑车", "date_text": "周六上午", "place": "深圳湾"}`）。
+- G4a：状态机事务层（Proposal/organizer 校验/改期 Superseded/取消级联/读回断言，9/9）。
+- G4b：主链缝合（M1/M2/M3 grant/Outbox 对账，9/9）。
+- G5：注入双层拦截 + 真实 LLM 注入实测 + scheduler 崩溃补偿（9/9）。
+- 全量回归：`../../evidence/全量回归-20260927.txt`（6 套全绿）。
+
+## 与包内实现的关系
+
+| 环节 | 包内（Splash，无 AI 可用） | 场外（本目录，有 AI 可用） |
+|---|---|---|
+| 分诊 | `triage()` 本地正则 | `guardian/triage.py` 规则引擎 |
+| 解析 | `guess_activity/place()` 关键词呈现 | OUP 真实 LLM + 严格 JSON 校验 |
+| 确认 | `confirm_case()` 组织者拍板 | `cases.py` organizer 校验 + revision |
+| 持久化 | `cases.json`（storage） | SQLite 唯一事实源 + 审计 |
+| 外发 | 无（`hosts: {}`） | Outbox + txn 对账（M1/M2/M3） |
+
+## 运行（复现证据用）
+
+```sh
+pip install requests
+cp config.example.json config.json   # 填 bot 账号（已 gitignore，不入库）
+python3 -m guardian.main             # 常驻（本地 Palpo 127.0.0.1:8128）
+python3 smoke_g4b.py                 # 主链 9/9
+python3 smoke_g5.py                  # 注入+补偿 9/9
+```
+
+详见 `../../run.md`（版本锁定/双账号复现）与 `../../evidence/acceptance.md`（12 条验收）。
