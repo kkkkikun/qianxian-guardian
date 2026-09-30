@@ -47,6 +47,17 @@ let clear_pending_flag = "no"           // 清空待确认标记（"yes"/"no"）
 let clear_pending_deadline = 0         // 清空确认的截止时刻（仅占位，不做时间比较，start_timeout 自身 5s 守护）
 let clear_prev_count = 0               // 进入待确认态时记下当前条数，用于最终 hint 明示
 
+// === #19 新增：「仍然建守护」二次确认态（分诊仅命中时间词时使用）===
+// 当 triage 返回 "time_only"（仅命中时间词、缺活动/约定/聚会场景词），
+// 不直接拦死用户——而是进入"待用户主动确认"态：force_create_pending = "yes"，
+// force_create_text 记下首次按"建守护"时的输入原文；hint 文案明示
+// "有时间，但这看起来不像聚会安排——要牵线跟这条吗？"并提示再点一次"建守护"即可。
+// 第二次按"建守护"且原文未变 → 强制建守护（标记 level="force"，便于回执/hint 溯源）。
+// 用户改了输入原文 / 5s 超时 / 点了别的按钮 → 放弃。
+let force_create_pending = "no"
+let force_create_text = ""
+let force_create_deadline = 0
+
 // === #10 新增：筛选状态 + 计数（扁平字符串，不读 cases[i][...]） ===
 // current_filter 是当前选中的筛选标签："all" / "Proposing" / "Confirmed" / "Cancelled"
 // filtered_idxs 是按当前筛选过滤后的下标整数数组（驱动 on_render 列表，避免字符串→int 回转）
@@ -494,21 +505,37 @@ fn set_query(q){
 }
 
 // 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清
+// === #19 修改：加「约定/聚会语气」门槛
+//   时间词 + 活动词 / 约定语气词 / 聚会场景词 才自动建守护。
+//   只有时间词（如"3月15日下午"可能是工作/政务安排）→ "time_only"：
+//   走到 add_case 里的澄清卡分支，给「仍然建守护」入口，绝不直接拦死用户。
+//   三档返回："time"=完整命中自动建；"verb"=只有活动词无时间（保留旧行为）；
+//   "time_only"=只有时间词需澄清；"none"=既无时间也无意图。
 fn triage(text){
     let hit_time = regex("周|明天|后天|今天|\\d+月\\d+|上午|下午|晚上|周末|\\d+号|\\d+点", "").test(text)
-    let hit_verb = regex("聚|吃饭|骑车|爬山|看电影|约|唱歌|打球|露营|烧烤|逛街|喝茶", "").test(text)
-    if hit_time { return "time" }
+    // 活动词（保留原词表）
+    let hit_act = regex("聚|吃饭|骑车|爬山|看电影|约|唱歌|打球|露营|烧烤|逛街|喝茶", "").test(text)
+    // 约定语气词：约/一起/咱们/大家/集合/报名/接龙/约吗/来吗/安排
+    let hit_commit = regex("约|一起|咱们|大家|集合|报名|接龙|约吗|来吗|安排", "").test(text)
+    // 聚会场景词：聚餐/团建/生日/聚会/聚会吧
+    let hit_scene = regex("聚餐|团建|生日|聚会|聚会吧", "").test(text)
+    let hit_verb = hit_act || hit_commit || hit_scene
+    if hit_time && hit_verb { return "time" }
+    if hit_time { return "time_only" }
     if hit_verb { return "verb" }
     return "none"
 }
 
 // 极简抽取：只做关键词呈现，不编造结构化事实（防编造：抽不到就留空）
+// === #19 修改：删除 "聚会" 兜底——抽不到就返回空串
+//   「卡片」与「回执」的活动字段随后落到 case_activity_lines 既有占位逻辑
+//   （"（未抽取到）"）——绝不编造一个看似合理的活动名。
 fn guess_activity(text){
     let words = ["骑车", "吃饭", "聚餐", "爬山", "看电影", "唱歌", "打球", "露营", "烧烤", "逛街", "喝茶", "聚会"]
     for w in words {
         if text.search(w) >= 0 { return w }
     }
-    return "聚会"
+    return ""
 }
 
 fn guess_place(text){
@@ -551,11 +578,56 @@ fn add_case(){
         ui.hint.set_text("先输入一条群消息，例如：周六上午去深圳湾骑车")
         return
     }
+    // === #19 新增：「仍然建守护」二次确认态的第二次按压
+    //   若首次按下后已落在 force_create_pending="yes" 且原文未改，
+    //   则此次直接落库（按用户主动意图走）。用 force 作为 level 标签便于
+    //   后续 hint / 日志溯源，但本质上仍按完整 case 走。
+    if force_create_pending == "yes" && text == force_create_text {
+        force_create_pending = "no"
+        force_create_text = ""
+        force_create_deadline = 0
+        build_case_from_text(text, "force")
+        return
+    }
+    // 原文变了 / 超时已自动清空 → 重新走分诊（不沿用旧 force_create_text）
+    if force_create_pending == "yes" {
+        force_create_pending = "no"
+        force_create_text = ""
+        force_create_deadline = 0
+    }
     let level = triage(text)
+    if level == "time_only" {
+        // === #19 新增：仅命中时间词 → 澄清卡（不直接拦死）
+        //   「有时间，但这看起来不像聚会安排——要牵线跟这条吗？」
+        //   + 给「仍然建守护」入口：用户再点一次「建守护」即按 force 走。
+        //   不清空 msg_input（让用户能直接看到原文 + 二次按压）。
+        force_create_pending = "yes"
+        force_create_text = text
+        force_create_deadline = 1
+        ui.hint.set_text("有时间，但这看起来不像聚会安排——要牵线跟这条吗？再点一次「建守护」即可（仍是您主动）")
+        start_timeout(5.0, || {
+            if force_create_pending == "yes" {
+                force_create_pending = "no"
+                force_create_text = ""
+                force_create_deadline = 0
+                ui.hint.set_text("「仍然建守护」确认已过期（5s 内未再点），未建守护")
+            }
+        })
+        return
+    }
     if level == "none" {
         ui.hint.set_text("澄清卡：这条消息里没看到时间或聚会意图，不建守护（规则分诊未命中）")
         return
     }
+    build_case_from_text(text, level)
+}
+
+// === #19 新增：建守护的实际落库逻辑（拆出来供 add_case 复用）
+//   把「时间词+约定词」自动建 与 「仍然建守护」用户主动强制建 两条路径
+//   共享同一段落库代码，避免双份冲突检测 / 落盘逻辑漂移。
+//   level 入参保留 "time" / "verb" / "force" 三种标签，
+//   仅用于 hint 文案溯源——业务行为完全相同（不编造、不漏存）。
+fn build_case_from_text(text, level){
     seq = seq + 1
     // #13 第 3 条：id 撞库守卫。load() 后异常场景下 cases 有内容而 seq == 0，
     //   上面 seq+1 得 1，会与已有 id=1 撞。这里取 max(seq, 已有最大 id) + 1，
