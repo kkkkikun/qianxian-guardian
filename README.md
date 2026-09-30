@@ -4,6 +4,8 @@
 > 本作品是**活动生命周期守护**（Case 状态机），不是聊天增强——聊天只是意图的入口和结果的回执通道。
 
 - **主场景**：日历（时间收敛、**冲突检测**、待定 vs 已确认）
+  → 与官方「日历」场景四步演示的逐条对齐见
+  **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
 - **提交形态**：OctoSense **script-app**（`app/qianxian/bundle/`，`hub check — PASSED`）
 - **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）
 
