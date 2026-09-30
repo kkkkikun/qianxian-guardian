@@ -28,6 +28,17 @@ let undo_win_open = "no"
 let cancel_pending_flag = "no"          // 取消待确认标记（供 on_render 渲染确认态按钮）
 let undo_show_flag2 = "no"             // 撤销条可见标记（供 on_render 渲染撤销按钮）            // "yes"/"no"
 
+// === #14 新增：示例填充 / 导出 / 清空全部 三个数据控制动作的状态 ===
+// 清空走"两段式确认"复用 cancel_pending_flag 的 5s 思路：
+//   第一次点：clear_pending_flag = "yes"，按钮文案变"再点一次清空（5s）"，hint 提示；
+//   第二次点（5s 内）：fs.remove("cases.json") + 内存清空 + hint 明示条数；
+//   超时 / 点别的按钮 → 放弃。
+// 用**字符串标记**而非布尔，与 cancel_pending_flag 同源；本 runtime 下函数返回
+// 布尔在调用点 == false 比较不可靠（黑板 #13 实证）。
+let clear_pending_flag = "no"           // 清空待确认标记（"yes"/"no"）
+let clear_pending_deadline = 0         // 清空确认的截止时刻（仅占位，不做时间比较，start_timeout 自身 5s 守护）
+let clear_prev_count = 0               // 进入待确认态时记下当前条数，用于最终 hint 明示
+
 // === #10 新增：筛选状态 + 计数（扁平字符串，不读 cases[i][...]） ===
 // current_filter 是当前选中的筛选标签："all" / "Proposing" / "Confirmed" / "Cancelled"
 // filtered_idxs 是按当前筛选过滤后的下标整数数组（驱动 on_render 列表，避免字符串→int 回转）
@@ -678,6 +689,126 @@ fn ai_parse(){
     }
 }
 
+// === #14 新增：示例一键填充（演示友好） ===
+// 输入框为空时供用户点；点完只填输入框、**不自动建守护**——
+// 仍需用户主动点"建守护"，符合规范第 2 条"用户主动"原则。
+fn fill_example(){
+    // 任何非取消按钮都视为"放弃取消确认"
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    undo_show_flag2 = "no"
+    cancel_pending_flag = "no"
+    // 点示例按钮本身也放弃清空确认
+    clear_pending_flag = "no"
+    clear_pending_deadline = 0
+    let cur = ui.msg_input.text()
+    if cur != "" {
+        // 输入框已有内容就不再覆盖，避免误丢用户手打的稿子
+        ui.hint.set_text("输入框已有内容，未替换；点「建守护」继续，或手动清空再点示例")
+        return
+    }
+    ui.msg_input.set_text("周六上午去深圳湾骑车，大概两小时？")
+    ui.hint.set_text("已填示例到输入框（不自动建守护），点「建守护」继续")
+}
+
+// === #14 新增：导出数据（cases.json 原文屏显在 hint 区） ===
+// 本 runtime 无法调起系统分享/把数据写到 jail 外（PRIVACY.md 同样承诺不出网），
+// 故只能屏显：用户可长按/手动复制下方文本备份。文案必须说明「复制可备份」。
+fn export_data(){
+    // 任何非取消按钮都视为"放弃取消确认"
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    undo_show_flag2 = "no"
+    cancel_pending_flag = "no"
+    // 点导出按钮也放弃清空确认（互斥语义：先看清楚再考虑删）
+    clear_pending_flag = "no"
+    clear_pending_deadline = 0
+    if !fs.exists("cases.json") {
+        ui.hint.set_text("暂无 cases.json（一条守护都没建），无可导出内容")
+        return
+    }
+    let raw = fs.read("cases.json")
+    // 原样屏显 + 引导用户复制备份。hint 区是单行 Label，长内容直接塞入会撑高；
+    // 这里就是用单 Label 容纳多行文本，Splash Label 自身会自然换行。
+    ui.hint.set_text("—— cases.json 原文（复制可备份）——\n" + raw + "\n—— 复制以上文本即可备份 ——")
+}
+
+// === #14 新增：清空全部（两段式确认，复用 cancel_pending_flag 的 5s 机制） ===
+// 第一次点：clear_pending_flag = "yes"，记下当前条数，按钮文案切到 hint 提示
+//           "再点一次清空（5s）"；hint 明示将清空 N 条守护。
+// 第二次点（5s 内）：fs.remove("cases.json") + 内存清空（cases=[]、seq=0、
+//           selected_id=0、扁平数组全部清掉、rebuild_lines）+ hint 明示
+//           "已清空 N 条守护"。超时 / 点别的按钮 → 放弃。
+// 5s 后清空确认态的回收用 start_timeout(5.0, ...) —— 与 cancel_case 同源。
+fn clear_all_data(){
+    // 互斥：清空流程中放弃取消确认 + 撤销窗口（场景不重叠，避免 hint 互相覆盖）
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    undo_show_flag2 = "no"
+    cancel_pending_flag = "no"
+    let cur_n = cases.len()
+    // 第二次点（已在确认态 + 5s 内） → 真正执行清空
+    if clear_pending_flag == "yes" {
+        // fs.remove 在文件不存在时返回错误值（非 nil/非 true）；按 #13 字符串标记约定
+        // 判成败：消息字符串非空视为失败。注意：fs 也没有 rename，不要尝试先备份
+        // 再删——本动作是用户主动清空，无需保留副本。
+        let removed_msg = ""
+        if fs.exists("cases.json") {
+            let rr = fs.remove("cases.json")
+            if rr != nil {
+                removed_msg = "" + rr
+            }
+        }
+        // 内存清空：扁平数组也要清，否则 on_render 闭包会读到旧 case_lines 等残留
+        cases = []
+        seq = 0
+        selected_id = 0
+        case_ids = []
+        case_lines = []
+        case_text_lines = []
+        case_statuses = []
+        case_selected = []
+        case_badge_text = []
+        case_receipt = []
+        case_place_lines = []
+        case_expanded = []
+        case_activity_lines = []
+        case_place_full = []
+        case_status_text = []
+        case_counts = []
+        filtered_idxs = []
+        filter_count_str = "0"
+        filter_total_str = "0"
+        matched_total_str = "0"
+        current_query = ""
+        rebuild_lines()
+        ui.case_list.render()
+        clear_pending_flag = "no"
+        clear_pending_deadline = 0
+        if removed_msg != "" {
+            ui.hint.set_text("清空完成（已移除 cases.json 失败：" + removed_msg + "），内存已清 0 条守护")
+        } else {
+            ui.hint.set_text("已清空 " + "" + clear_prev_count + " 条守护（cases.json 已移除，内存已重置）")
+        }
+        clear_prev_count = 0
+        return
+    }
+    // 第一次点：进入待确认态（不执行任何数据变更）
+    clear_pending_flag = "yes"
+    clear_pending_deadline = 1
+    clear_prev_count = cur_n
+    ui.hint.set_text("再点一次「清空全部」才会真删 " + "" + cur_n + " 条守护（不可逆）；5 秒内点别的按钮可放弃")
+    // 5 秒后超时 → 放弃确认态
+    start_timeout(5.0, || {
+        if clear_pending_flag == "yes" {
+            clear_pending_flag = "no"
+            clear_pending_deadline = 0
+            clear_prev_count = 0
+            ui.hint.set_text("清空确认已过期（5s 内未再点），未删除任何数据")
+        }
+    })
+}
+
 start_timeout(0.05, || load())
 
 let ink = #x1c1c1e
@@ -707,6 +838,12 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         msg_input := TextInput{width: Fill height: 40 empty_text: "粘贴群消息，如：周六上午去深圳湾骑车"
             draw_bg +: {color: #xf2f2f7 color_hover: #xf2f2f7 color_focus: #xf2f2f7 color_empty: #xf2f2f7 border_radius: 10.0}
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: secondary color_empty_hover: secondary}}
+        // === #14：示例一键填充按钮（演示友好）===
+        // 放根组件静态位置——根组件 if 只在首次求值定型，这里是固定按钮；
+        // fill_example() 内部用 "cur != "" 守卫避免覆盖用户手打稿子。
+        ButtonFlat{text: "用示例试试" height: 40 padding: Inset{left: 12 right: 12} on_click: || fill_example()
+            draw_bg +: {border_radius: 20.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+            draw_text +: {color: accent color_hover: accent color_down: accent}}
         ButtonFlat{text: "建守护" height: 40 padding: Inset{left: 16 right: 16} on_click: || add_case()
             draw_bg +: {border_radius: 20.0 color: accent color_hover: #x0a84ff color_down: #x0062cc border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
@@ -959,5 +1096,19 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         ButtonFlat{text: "AI 解析（可选）" height: 32 padding: Inset{left: 14 right: 14} on_click: || ai_parse()
             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
             draw_text +: {color: accent color_hover: accent color_down: accent}}
+        // === #14：导出数据按钮（cases.json 原文屏显到 hint） ===
+        // 屏显而非系统分享——本 runtime 无法调起分享/jail 外写文件（PRIVACY.md 承诺不出网）。
+        ButtonFlat{text: "导出数据" height: 32 padding: Inset{left: 14 right: 14} on_click: || export_data()
+            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+        // === #14：清空全部按钮（两段式确认，复用 cancel_pending_flag 机制） ===
+        // 根组件属性只在首次求值定型 → 按钮文案无法随状态切换（参考 #8 实证的取消按钮，
+        // 它的"确认取消（5s）"变体是放在 case_list on_render 内的；这里同样约束，
+        // 但本条要求"放根组件静态位置"——故采用"单一按钮 + on_click 内按 clear_pending_flag
+        // 分支切两段行为"的方案，文案/状态切换走 ui.hint.set_text，与 cancel_case 同源）。
+        // 视觉：次级灰底 + 警示红字，与"取消守护"同色系但不抢眼。
+        ButtonFlat{text: "清空全部" height: 32 padding: Inset{left: 14 right: 14} on_click: || clear_all_data()
+            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+            draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
     }
 }
