@@ -22,7 +22,7 @@
 
 匹配，无多余。`grants: capabilities {"octos.turn.start", "storage"}, hosts {}`。
 - `storage`：`fs.write("cases.json")` 存守护列表，界面“已载入 N 个聚会守护”即其呈现。
-- `octos.turn.start`：仅“试用 AI 解析（可选增强）”按钮用；`main.splash` `ai_parse()` 先查
+- `octos.turn.start`：仅“AI 解析（可选）”按钮用；`main.splash` `ai_parse()` 先查
   `host.capabilities()`，card-host 下走“本设备无 AI 服务……本地规则继续可用”降级分支。
   商店权限行会如实显示该项，用户知情。
 - `hosts: {}`：无 `net`，不请求任何外部主机。屏幕上无任何项用不到已授权限。
