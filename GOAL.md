@@ -49,8 +49,9 @@
   - **验收逐条执行**：`evidence/acceptance.md`（12 条验收：9 通过 / 1 P1 划出 / 2 待用户 GUI 或推送）+ `evidence/checks.md` 一页验收 + `evidence/全量回归-20260927.txt`。
   - **全量回归终态**：G1 7/7 + G2 19/19 + G2 分发 10/10 + G4a 9/9 + G4b 9/9 + G5 9/9 全绿。
 - **交付状态**：P0-A 主链 ✅ / P0-B 可信性 ✅ / **P0-C 独立复现 ✅**。
-  - **公开仓库结构已整理并本地提交（`91120c5`）**：Apache 2.0 LICENSE、README（架构/快速开始/目录）、.gitignore（config.json/test-accounts/*.db/tokens 全部忽略，已验证无凭据入库）、整理后全套冒烟复验 6 套全绿。
-  - 剩余全部为用户操作项：① `gh repo create <名> --public --source . --push`（在 my-entry/ 内）+ issue #5 占坑 ② 演示视频 + 两张截图 ③ Rinx GUI 六步验证轨 2 spike ④ 队外用户按 run.md 复现并回填 acceptance.md 第 6/12 条。
+  - **公开仓库结构已整理并本地提交（`91120c5` + `d259d66`）**：Apache 2.0 LICENSE、README（架构/快速开始/目录）、.gitignore（config.json/test-accounts/*.db/tokens 全部忽略，已验证无凭据入库）、整理后全套冒烟复验 6 套全绿。
+  - **A 路线 script-app（`app/qianxian/`，2026-09-30，`d259d66`）**：`hub check — PASSED`（仅 unsigned warning）+ `hub scan` 7 问作答（`evidence/qianxian/`）；真机 card-host（自建 9-26 构建链）`/snap` 11 控件验证；剩余占位：publisher 真值 + 真截图（llvmpipe 无头抓帧超时，待有头重截）重 stamp。
+  - 剩余全部为用户操作项：① `gh repo create <名> --public --source . --push`（在 my-entry/ 内）+ issue #5 占坑 ② publisher 真值 + 真截图 ③ 演示视频 + Rinx GUI 六步验证 ④ 队外用户按 run.md 复现并回填 acceptance.md 第 6/12 条。
 
 ## 双轨状态（blueprint-gpt.md 附录 A）
 
