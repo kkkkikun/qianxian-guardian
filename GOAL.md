@@ -56,7 +56,10 @@
 ## 双轨状态（blueprint-gpt.md 附录 A）
 
 - **轨 1（独立 guardian）**：G1/G2/G3 全部完成。LLM 已用 ModelScope（环境 key，DeepSeek-V4-Flash，OpenAI 兼容 base_url）实测通过——正式提交时按赞助额度切 MiniMax/Kimi（同一 OUP/配置机制，只换 provider/model/base_url 三行）。
-- **轨 2（Rinx mini-app）**：spike 包就绪（`app/miniapp-qianxian/`）。**最新 Rinx main（a72e4b00）已构建成功**（131MB，`target/release/rinx`，splash feature 修复 + 链接用 `~/.local/gosim-libs`），`--remote` 接口实测可用。剩余：按 `app/miniapp-qianxian/README.md` 六步做 GUI 导入验证（需人操作）。两轨共享业务设计。
+- **轨 2（Rinx mini-app → A 路线 script-app）**：2026-09-30 已定 A 路线，
+  提交物为 `app/qianxian/`（官方 script-app 形态，`hub check — PASSED` + scan 7 问作答，
+  见 `evidence/qianxian/`）。旧 spike（`app/miniapp-qianxian/`）已归档保留。
+  **最新 Rinx main（a72e4b00）已构建成功**（131MB，`target/release/rinx`，splash feature 修复 + 链接用 `~/.local/gosim-libs`），`--remote` 接口实测可用。剩余：GUI 六步演示（需人操作）。两轨共享业务设计。
 
 ## 最新 Rinx 构建纪要（vendor 方案 v2）
 

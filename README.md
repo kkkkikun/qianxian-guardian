@@ -55,15 +55,19 @@ Guardian（本仓库，OUP 客户端）
 ## 目录
 
 ```
-app/guardian/          guardian 守护进程（本作品主体）
+app/guardian/          guardian 守护进程（场外链路证明，G1–G5 冒烟证据）
   guardian/            核心模块（db/triage/dispatcher/cases/oup/outbox_sender/parser/activity_book）
   schema.sql           唯一事实源 schema
   smoke_g1..g5.py      六套确定性冒烟（70+ 断言）
-miniapp-qianxian/      Rinx 原生小程序形态 spike（manifest + main.splash）
-evidence/              验收记录与全量回归留档
+app/qianxian/          script-app 主提交物（A 路线，hub check PASSED）
+  bundle/              THE SUBMISSION（manifest/listing/main.splash/icon/截图）
+  build/               hub scan review 包 + 7 问作答（gitignore，副本见 evidence/qianxian/）
+app/miniapp-qianxian/  旧 Rinx spike（已归档，被 app/qianxian 取代）
+evidence/              验收记录与全量回归留档（含 qianxian review 包副本）
+PRIVACY.md             隐私政策（对齐 hosts 无网络 + 本机存储）
 task.md                任务说明与验收条件
 blueprint-gpt.md       设计蓝图（v0.7.1 冻结）
-run.md                 复现步骤
+run.md                 复现步骤（含 script-app 复现节）
 GOAL.md                执行总纲（内环任务书）
 ```
 
