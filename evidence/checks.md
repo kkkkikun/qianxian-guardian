@@ -12,5 +12,7 @@
 | 状态过期场景有反馈 | 提案过期 = min(+48h, start−1h)；Superseded 处理 | smoke_g4a「旧快照」 | 通过 |
 | 注入场景有反馈 | 真实 LLM 注入 → 校验拦截 + 审计 | smoke_g5 + 真实通道实测 | 通过 |
 | 崩溃恢复 | 子进程 sweep 补偿 + 事件持久化 | smoke_g5「独立子进程」 | 通过 |
+| 提交包可安装检查通过 | `hub check — PASSED`（仅 unsigned warning）+ `hub scan` 7 问作答 | evidence/qianxian/review.json + review-answers.md | 通过 |
+| 提交包真机运行可用 | card-host 真跑：输入→建守护→确认→Confirmed，`/snap` 11 控件 | 本轮验证记录（真截图待有头重截） | 通过 |
 
 （"通过"= 冒烟脚本断言 + 命令输出；详见 acceptance.md 证据表）
