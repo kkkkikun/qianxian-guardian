@@ -48,10 +48,15 @@ AI 只是可选增强——宿主提供 `octos.turn.start` 时才出现「AI 解
 配套阅读：[evidence/demo-script.md](evidence/demo-script.md)（21 步操作）、
 [evidence/regression-20261001.md](evidence/regression-20261001.md)（14 项真机验证）。
 
-**② 门禁核验**（需要上游 `hub` 工具）
+**② 门禁核验**（需要上游 `hub` 工具；约 5 分钟）
+> 注意：`OctoSense-App-Hub` 把 makepad / Octoscript patch 到**兄弟路径**，
+> 只 clone 它一个仓**编不出来**（实测报 `failed to read ../makepad/…/Cargo.toml`）。
+> 用官方的一键脚本把兄弟仓拉齐：
 ```sh
-git clone https://github.com/OctoSense-org/OctoSense-App-Hub.git
-cd OctoSense-App-Hub && cargo build --release -p octosense-app-hub --bin hub
+git clone https://github.com/OctoSense-org/OctoScript-App-Design-Flow.git
+cd OctoScript-App-Design-Flow && python3 tools/setup-native.py   # 拉齐 makepad/octoscript/octoscript-makepad
+cd ../OctoSense-App-Hub
+cargo build --release -p octosense-app-hub --bin hub
 ./target/release/hub check <你的-clone>/my-entry/app/qianxian/bundle --allow-unsigned
 # 期望：qianxian 0.1.0 — PASSED（仅 unsigned warning）
 ```
