@@ -32,7 +32,8 @@
     "schema": 1,
     "screenshots": [
       "screenshots/01-main.png",
-      "screenshots/02-expanded.png"
+      "screenshots/02-expanded.png",
+      "screenshots/03-conflict.png"
     ],
     "subtitle": "群里说好的聚会，盯到人人到场"
   },
@@ -48,7 +49,7 @@
     },
     "id": "qianxian",
     "integrity": {
-      "bundle_blake3": "c6dbd2f47f10f84e0b5171a10853c2237d8425f5768270507f460924ea1e906f",
+      "bundle_blake3": "dcabff8dd6cd83cbbde1edd9d3f1cc1332642e39c3a66dd0538b1d9cf862bc15",
       "signature": null
     },
     "name": "牵线",

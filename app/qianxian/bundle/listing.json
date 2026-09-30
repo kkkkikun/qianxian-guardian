@@ -12,7 +12,8 @@
   ],
   "screenshots": [
     "screenshots/01-main.png",
-    "screenshots/02-expanded.png"
+    "screenshots/02-expanded.png",
+    "screenshots/03-conflict.png"
   ],
   "icon": "assets/icon.svg",
   "platforms": [

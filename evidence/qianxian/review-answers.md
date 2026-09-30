@@ -49,7 +49,7 @@
 
 **pass**（待换真截图后）。publisher 三字段已换真值（Aurora-X /
 kkkkikun@foxmail.com / 公仓 PRIVACY.md 链接），`hub check — PASSED` 无占位提示
-（digest `fdcae9bb`，privacy 链接分支修正后重检）。截图说明（诚实标注）：`bundle/screenshots/01-main.png`（折叠态，412×892）与 `02-expanded.png`（展开态：状态/时间/参与人/回执）**不是宿主渲染的像素**——
+（digest `fdcae9bb`，privacy 链接分支修正后重检）。截图说明（诚实标注）：`bundle/screenshots/` 三张（均 412×892）：`01-main.png` 折叠态、`02-expanded.png` 展开态（状态/时间/参与人/回执）、`03-conflict.png` **冲突/失败态**（两条同时段 + 橙色「⚠ 时间冲突：#1 也占「周六-上午」时段」，对应官方要求的"数据来源与失败状态"）**不是宿主渲染的像素**——
 本评审环境无图形会话，card-host 的 `/g` 抓帧超时（llvmpipe 无 present）。
 该图由 `app/qianxian/tools/snap-to-png.py` 依据**应用运行时的真实控件树**
 （card-host `/snap?all=1` 的类型/文本/矩形）重绘而成：
