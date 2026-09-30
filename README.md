@@ -89,6 +89,11 @@ run.md                   复现步骤 / 版本锁定
 GOAL.md changes.md       执行总纲与变更记录
 ```
 
+## 提交形态与验收
+
+- **为什么选 script-app**（四条官方形态逐一对照）→ [evidence/submission-form-decision.md](evidence/submission-form-decision.md)
+- **验收条件逐条映射**（task.md 的 guardian 口径 → script-app 实际）→ [evidence/acceptance-mapping.md](evidence/acceptance-mapping.md)
+
 ## 设计依据
 
 交互与可用性规范（含第一方系统应用逐条对照）见

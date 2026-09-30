@@ -6,7 +6,7 @@
 > 运行环境不同、部分能力不适用。
 > **逐条映射见 [`evidence/acceptance-mapping.md`](evidence/acceptance-mapping.md)**
 > （哪条已实现、哪条因形态差异不适用、哪条待做，都有证据）。
-> 提交形态决策与依据见 `task.md` 末「附录」与 `GOAL.md`。
+> **提交形态选型决策（四形态对照）见 [`evidence/submission-form-decision.md`](evidence/submission-form-decision.md)**。
 
 > **定位（一句话）**：本作品是**活动生命周期守护**（Case 状态机），不是聊天增强。
 > 聊天只是意图的入口和结果的回执通道——"一条群消息，长成一个被照顾到收尾的完整活动。"
