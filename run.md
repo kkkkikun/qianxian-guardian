@@ -40,10 +40,37 @@ curl -s http://127.0.0.1:8128/_matrix/client/versions   # 应返回版本列表
 > `on_render` 行修复 `eeb9a33`）+ OctoScript-Makepad `3d3ef80` + Octoscript `68f6a9d`。
 > 构建见本轮记录（`CARGO_HOME` 指到可写目录 + `RUSTFLAGS="-L ~/.local/gosim-libs"`）。
 
+### A. 已有构建产物（本机）
+
 ```sh
 cd my-entry/app/qianxian
-export OCTOSENSE_APP_HUB=<构建产物目录>   # 含 target/release/hub + card-host
-OCTO=<OctoScript-App-Design-Flow>/tools/octo
+export OCTOSENSE_APP_HUB=../../../.build-hub-926/OctoSense-App-Hub
+OCTO=../../../octosense-ws/OctoScript-App-Design-Flow/tools/octo
+ls "$OCTOSENSE_APP_HUB/target/release/"{hub,card-host}   # 应存在两个二进制
+```
+
+### B. 自行构建（干净环境，约 5 分钟）
+
+工作区需**并排布局**（App-Hub 的 `Cargo.toml` 把 makepad/Octoscript patch 到兄弟路径）：
+
+```sh
+cd <你的工作区>
+git clone https://github.com/OctoSense-org/OctoSense-App-Hub.git
+git clone https://github.com/OctoSense-org/OctoScript-App-Design-Flow.git
+cd OctoScript-App-Design-Flow && python3 tools/setup-native.py   # 拉 makepad/octoscript/octoscript-makepad
+cd ../OctoSense-App-Hub
+export CARGO_HOME="$PWD/../.cargo-home"    # ~/.cargo 只读时用可写目录
+export RUSTFLAGS="-L $HOME/.local/gosim-libs"   # 无 pulse/drm 系统库时
+cargo build --release -p octosense-card-host -p octosense-app-hub
+ls target/release/{hub,card-host}
+```
+
+### C. 运行
+
+```sh
+cd my-entry/app/qianxian
+export OCTOSENSE_APP_HUB=../../../.build-hub-926/OctoSense-App-Hub
+OCTO=../../../octosense-ws/OctoScript-App-Design-Flow/tools/octo
 
 python3 $OCTO run bundle --port 8141 --detach --hidden   # 真跑 card-host
 # 驱动（坐标以 /snap 为准）：点输入框 → /t 输入群消息 → 点“建守护” →
