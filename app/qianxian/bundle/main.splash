@@ -10,25 +10,28 @@ let case_statuses = []      // 每条 case 的状态字符串（"Proposing"/"Con
 let case_selected = []      // 每条 case 的选中标记字符串（"yes"/"no"）
 let case_badge_text = []    // 每条 case 的徽章文字字符串
 let case_receipt = []       // 每条 case 的回执四行（字符串数组，无回执为空数组 []）
-let case_place_lines = []   // 每条 case 的地点字符串（供详情层读，避免闭包读对象字段）
+let case_place_lines = []   // 每条 case 的地点字符串（供 on_render 读，避免闭包读对象字段）
+// === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
+let case_expanded = []      // 点卡片 = 选中 + 切换该条的展开/折叠
 let seq = 0
 let selected_id = 0  // 选中态：0 表示无选中
 
-// === #8 新增：详情层扁平字符串（on_render 闭包只读字符串数组） ===
-let detail_visible = "no"           // "yes"/"no" —— 详情层是否显示
-let detail_id = ""                  // 当前详情对应的 case id（字符串，0 表示空）
-let detail_title = ""               // 详情标题 "#N · 活动"
-let detail_status = ""              // 详情状态字符串
-let detail_badge_text = ""          // 详情徽章文字
-let detail_activity = ""            // 详情活动字符串
-let detail_place = ""               // 详情地点字符串
-let detail_text = ""                // 详情原文
-let detail_receipt_lines = []       // 详情回执四行（字符串数组，无则为 []）
-
-// === #8 新增：取消二次确认 + 撤销态 ===
+// === #8 保留：取消二次确认 + 撤销态 ===
 let cancel_pending_id = 0           // 第一次点取消时的目标 id（0 = 无待确认）
 let cancel_prev_status = ""         // 取消前该条的状态（用于撤销恢复）
 let cancel_pending_deadline = 0     // 取消二次确认的截止时刻（ms 级 epoch，由 start_timeout 推进）
+
+// === #9 新增：撤销窗口标记 —— 防止 5 秒定时器在用户已撤销之后再次覆盖 hint 文案 ===
+// 撤销窗口打开 = 撤销按钮可用；一旦撤销成功或窗口到期，必须把它关掉，
+// 否则 5s 后那个 start_timeout 回调会把"已撤销 #N"的提示覆盖掉。
+let undo_win_open = "no"            // "yes"/"no"
+
+// === #9 新增：扁平字段——避免 on_render 闭包读 cases[i][...]（#4/#5/#7/#8 实证坑） ===
+// 卡片内联展开后，"活动/地点/原文/状态" 这些原来只在详情层用的字段也要按行铺平，
+// 否则 on_render 闭包要去摸对象字段，触发实证过的类型/作用域问题。
+let case_activity_lines = []        // 每条 case 的活动字符串（无则"（未抽取到）"）
+let case_place_full = []            // 每条 case 的地点字符串（无则"（未抽取到）"）
+let case_status_text = []           // 每条 case 的状态中文（"待拍板"/"已确认"/"已取消"）
 
 // 状态色：行首徽章文字色与底色（Proposing 灰 / Confirmed 绿 / Cancelled 红）
 // 注：颜色必须是颜色字面量（#x…），不能返回字符串——draw_bg.color 期望 Vec4f
@@ -55,7 +58,7 @@ fn status_bar_color(st){
 }
 
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
-// 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5 实证坑）
+// 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
 fn rebuild_lines(){
     case_ids.clear()
     case_lines.clear()
@@ -65,6 +68,11 @@ fn rebuild_lines(){
     case_badge_text.clear()
     case_receipt.clear()
     case_place_lines.clear()
+    case_activity_lines.clear()
+    case_place_full.clear()
+    case_status_text.clear()
+    // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
+    // （点同一张卡：折叠；点别的卡：保留各自展开态，保留用户的"展开阅读"行为）
     for i in cases.len() {
         let id_str = "" + cases[i]["id"]
         case_ids.push(id_str)
@@ -74,18 +82,33 @@ fn rebuild_lines(){
         let st = "" + cases[i]["status"]
         case_statuses.push(st)
         case_badge_text.push(status_badge_text(st))
-        let title = "" + cases[i]["activity"]
-        case_lines.push("#" + id_str + " · " + title)
+        let title_act = "" + cases[i]["activity"]
+        if title_act == "" { title_act = "聚会" }
+        case_lines.push("#" + id_str + " · " + title_act)
         case_text_lines.push("" + cases[i]["text"])
-        case_place_lines.push("" + cases[i]["place"])
-        // 回执：仅 Confirmed 行下追加（活动/地点/原文三行 + T-24h 占位行）
+
+        // === #9 新增：扁平活动/地点/状态中文（供卡片内联展开块读） ===
+        let act = "" + cases[i]["activity"]
+        if act == "" { act = "（未抽取到）" }
+        case_activity_lines.push(act)
+        let pl = "" + cases[i]["place"]
+        if pl == "" { pl = "（未抽取到）" }
+        case_place_full.push(pl)
+        case_status_text.push(status_badge_text(st))
+
+        // === #9 新增：保持现有 case_expanded 长度与 cases 同步 ===
+        if i >= case_expanded.len() {
+            case_expanded.push("no")
+        }
+        // 已存在的展开态保持不动（用户切别的卡不强制收拢）
+
+        // === #8 保留：place 给收起态 placeholder 用 ===
+        let place_disp = "" + cases[i]["place"]
+        if place_disp == "" { place_disp = "（未抽取到）" }
+        case_place_lines.push(place_disp)
+
+        // === #8 保留：Confirmed 才填回执四行 ===
         if st == "Confirmed" {
-            if cases[i]["receipt_done"] != "yes" {
-                cases[i]["receipt_activity"] = "" + cases[i]["activity"]
-                cases[i]["receipt_place"] = "" + cases[i]["place"]
-                cases[i]["receipt_text"] = "" + cases[i]["text"]
-                cases[i]["receipt_done"] = "yes"
-            }
             let ra = "" + cases[i]["receipt_activity"]
             let rp = "" + cases[i]["receipt_place"]
             let rt = "" + cases[i]["receipt_text"]
@@ -99,40 +122,9 @@ fn rebuild_lines(){
             case_receipt.push([])
         }
     }
-
-    // === #8 新增：详情层扁平字符串重建 ===
-    detail_id = ""
-    detail_title = ""
-    detail_status = ""
-    detail_badge_text = ""
-    detail_activity = ""
-    detail_place = ""
-    detail_text = ""
-    detail_receipt_lines = []
-    if detail_visible == "yes" {
-        for i in cases.len() {
-            if "" + cases[i]["id"] == selected_id {
-                let st = "" + cases[i]["status"]
-                detail_id = "" + cases[i]["id"]
-                detail_status = st
-                detail_badge_text = status_badge_text(st)
-                detail_activity = "" + cases[i]["activity"]
-                detail_place = "" + cases[i]["place"]
-                detail_text = "" + cases[i]["text"]
-                detail_title = "#" + detail_id + " · " + detail_activity
-                if st == "Confirmed" {
-                    let ra = "" + cases[i]["receipt_activity"]
-                    let rp = "" + cases[i]["receipt_place"]
-                    let rt = "" + cases[i]["receipt_text"]
-                    let arr = []
-                    arr.push("活动：" + ra)
-                    arr.push("地点：" + rp)
-                    arr.push("原文：" + rt)
-                    arr.push("T-24h 提醒（本地提醒文本，需宿主定时能力）")
-                    detail_receipt_lines = arr
-                }
-            }
-        }
+    // 多余的展开态条目截断（cases 缩短时）
+    while case_expanded.len() > cases.len() {
+        case_expanded.pop()
     }
 }
 
@@ -146,7 +138,6 @@ fn load(){
     }
     rebuild_lines()
     ui.case_list.render()
-    ui.detail.render()
     ui.hint.set_text("已载入 " + "" + cases.len() + " 个聚会守护")
 }
 
@@ -166,7 +157,7 @@ fn target_id(){
     return {id: 0, fallback: true}
 }
 
-// === #8 新增：清除取消二次确认态（任何非「取消」按钮/动作都放弃确认） ===
+// === #8 保留：清除取消二次确认态（任何非「取消」按钮/动作都放弃确认） ===
 fn clear_cancel_pending(hint_text){
     cancel_pending_id = 0
     cancel_prev_status = ""
@@ -176,16 +167,46 @@ fn clear_cancel_pending(hint_text){
     }
 }
 
-fn select_case(id){
-    selected_id = id
-    // 切到其他行 → 放弃取消确认态
+// === #9 改造：点卡片 = 选中 + 切换该条的展开/折叠（取代 #8 的 open_detail） ===
+fn toggle_case(id){
+    if id == 0 {
+        ui.hint.set_text("先选中一条守护再展开/折叠")
+        return
+    }
+    // 切到其他行 → 放弃取消确认态（避免提示与展开态语义混淆）
     if cancel_pending_id != 0 && cancel_pending_id != id {
         clear_cancel_pending("")
     }
+    selected_id = id
+    // 切换该条的展开态
+    for i in case_ids.len() {
+        if case_ids[i] == ("" + id) {
+            if case_expanded[i] == "yes" {
+                case_expanded[i] = "no"
+            } else {
+                case_expanded[i] = "yes"
+            }
+            break
+        }
+    }
     rebuild_lines()
     ui.case_list.render()
-    ui.detail.render()
-    ui.hint.set_text("已选中 #" + "" + id)
+    let idx = -1
+    for i in case_ids.len() {
+        if case_ids[i] == ("" + id) { idx = i; break }
+    }
+    let msg = "已选中 #" + "" + id
+    if idx >= 0 && case_expanded[idx] == "yes" {
+        msg = "已展开 #" + "" + id + "（再点一次可折叠）"
+    } else if idx >= 0 {
+        msg = "已折叠 #" + "" + id + "（点卡片可展开详情）"
+    }
+    ui.hint.set_text(msg)
+}
+
+// === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
+fn on_tap_card(id){
+    toggle_case(id)
 }
 
 // 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清
@@ -215,8 +236,9 @@ fn guess_place(text){
 }
 
 fn add_case(){
-    // 建守护算"非取消按钮" → 放弃任何待确认
+    // 建守护算"非取消按钮" → 放弃任何待确认 + 关掉撤销窗口
     clear_cancel_pending("")
+    undo_win_open = "no"
     let text = ui.msg_input.text()
     if text == "" {
         ui.hint.set_text("先输入一条群消息，例如：周六上午去深圳湾骑车")
@@ -234,13 +256,13 @@ fn add_case(){
     rebuild_lines()
     save()
     ui.case_list.render()
-    ui.detail.render()
-    ui.hint.set_text("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，等你拍板")
+    ui.hint.set_text("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，点卡片可展开详情")
 }
 
 fn confirm_case(){
-    // 同意 → 放弃任何待确认
+    // 同意 → 放弃任何待确认 + 关掉撤销窗口（操作后用户应当看到最新状态）
     clear_cancel_pending("")
+    undo_win_open = "no"
     let t = target_id()
     if t["id"] == 0 {
         ui.hint.set_text("列表为空：先建一条守护再拍板")
@@ -262,7 +284,6 @@ fn confirm_case(){
             rebuild_lines()
             save()
             ui.case_list.render()
-            ui.detail.render()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
             ui.hint.set_text("已确认 #" + "" + t["id"] + " → Confirmed（组织者拍板，读回一致）" + tag)
@@ -272,8 +293,9 @@ fn confirm_case(){
 }
 
 fn reschedule_case(){
-    // 改口 → 放弃任何待确认
+    // 改口 → 放弃任何待确认 + 关掉撤销窗口
     clear_cancel_pending("")
+    undo_win_open = "no"
     let t = target_id()
     if t["id"] == 0 {
         ui.hint.set_text("列表为空：先建一条守护再改口")
@@ -289,7 +311,6 @@ fn reschedule_case(){
             rebuild_lines()
             save()
             ui.case_list.render()
-            ui.detail.render()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
             ui.hint.set_text("改口：#" + "" + t["id"] + " 回到 Proposing，重新收敛（旧确认作废）" + tag)
@@ -298,7 +319,7 @@ fn reschedule_case(){
     }
 }
 
-// === #8 改造：取消二次确认（两段式按钮态，不用模态） ===
+// === #8 保留：取消二次确认（两段式按钮态，不用模态） ===
 // 第一次点：进入"待确认"态，按钮文案变"再点一次取消（5s）"，hint 提示；
 // 第二次点：在 5 秒内才执行真正的取消；超时/选其他卡/点其他按钮 → 放弃
 fn cancel_case(){
@@ -317,16 +338,24 @@ fn cancel_case(){
                 cases[i]["status"] = "Cancelled"
                 cancel_pending_id = 0
                 cancel_pending_deadline = 0
+                // === #9：撤销窗口打开 —— 现在起 5 秒内可点「撤销取消」 ===
+                undo_win_open = "yes"
                 rebuild_lines()
                 save()
                 ui.case_list.render()
-                ui.detail.render()
                 let tag = ""
                 if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
                 ui.hint.set_text("已取消 #" + "" + target + "（5 秒内可点「撤销取消」）" + tag)
                 // 5 秒后撤销窗口到期：自动清掉 hint 文案里的"可撤销"暗示
+                // === #9 修：守卫 undo_win_open —— 若用户已撤销则不再覆盖 ===
                 start_timeout(5.0, || {
-                    ui.hint.set_text("取消 #" + "" + target + " 已生效（撤销窗口已过）")
+                    if undo_win_open == "yes" {
+                        undo_win_open = "no"
+                        cancel_prev_status = ""
+                        rebuild_lines()
+                        ui.case_list.render()
+                        ui.hint.set_text("取消 #" + "" + target + " 已生效（撤销窗口已过）")
+                    }
                 })
                 return
             }
@@ -342,7 +371,6 @@ fn cancel_case(){
             cancel_pending_deadline = 1
             rebuild_lines()
             ui.case_list.render()
-            ui.detail.render()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
             ui.hint.set_text("再点一次「确认取消」才会真取消 #" + "" + target + "；5 秒内点别的按钮或选别的卡可放弃" + tag)
@@ -354,7 +382,6 @@ fn cancel_case(){
                     cancel_prev_status = ""
                     rebuild_lines()
                     ui.case_list.render()
-                    ui.detail.render()
                     ui.hint.set_text("已放弃取消 #" + "" + target + "（5 秒内未再点取消）")
                 }
             })
@@ -363,31 +390,28 @@ fn cancel_case(){
     }
 }
 
-// === #8 新增：撤销刚发生的取消（5 秒窗口内） ===
+// === #8 保留 + #9 修：撤销刚发生的取消（5 秒窗口内） ===
 fn undo_cancel(){
-    if cancel_prev_status == "" {
+    if cancel_prev_status == "" || undo_win_open == "no" {
         ui.hint.set_text("没有可撤销的取消（5 秒窗口已过或未取消过）")
         return
     }
-    // 找到刚才被取消的那条（状态 = Cancelled 且 prev 已知）
-    // 直接按 cancel_prev_status 已知 —— 我们记住的是 prev target 取消前的状态，
-    // 但撤销后要把"刚被取消"的同一条恢复。简化：扫一遍最近一次 status 变成 Cancelled 的条目
-    let restored_id = 0
+    let restored_id = "0"
     for i in cases.len() {
         if cases[i]["status"] == "Cancelled" {
-            // 把所有 Cancelled 的都恢复（取消按钮作用于选中条，单用户场景下撤销就是恢复它）
-            restored_id = "" + cases[i]["id"]
             cases[i]["status"] = cancel_prev_status
+            restored_id = "" + cases[i]["id"]
         }
     }
     cancel_pending_id = 0
     cancel_pending_deadline = 0
     let prev = cancel_prev_status
     cancel_prev_status = ""
+    // === #9 关键：关撤销窗口 + 阻止 5s 定时器覆盖当前 hint ===
+    undo_win_open = "no"
     rebuild_lines()
     save()
     ui.case_list.render()
-    ui.detail.render()
     if restored_id != "0" && restored_id != "" {
         ui.hint.set_text("已撤销取消 #" + restored_id + " → 恢复到 " + prev)
     } else {
@@ -395,36 +419,10 @@ fn undo_cancel(){
     }
 }
 
-// === #8 新增：详情层打开/关闭 ===
-// 点卡片即"选中 + 开详情"：用被点的 id 拿数据，避免详情错指别的卡
-fn open_detail(id){
-    if id == 0 {
-        ui.hint.set_text("先选中一条守护再查看详情")
-        return
-    }
-    // 切到其他行 → 放弃取消确认态
-    if cancel_pending_id != 0 && cancel_pending_id != id {
-        clear_cancel_pending("")
-    }
-    selected_id = id
-    detail_visible = "yes"
-    rebuild_lines()
-    ui.case_list.render()
-    ui.detail.render()
-    ui.hint.set_text("已打开详情 #" + "" + id)
-}
-
-fn close_detail(){
-    detail_visible = "no"
-    rebuild_lines()
-    ui.case_list.render()
-    ui.detail.render()
-    ui.hint.set_text("已返回列表")
-}
-
 // AI 增强（可选）：仅当宿主提供 octos.* 时才尝试，否则明确降级
 fn ai_parse(){
     clear_cancel_pending("")
+    undo_win_open = "no"
     let caps = host.capabilities()
     let has_octos = false
     for c in caps {
@@ -463,11 +461,10 @@ let TitleLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_s
 let TextLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
 let ReceiptLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 12}
 
-// === #8 新增：详情层用的扁平文本（与 on_render 一致——颜色函数直接返回字面量） ===
-let DetailTitle = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 22}}
-let DetailSection = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
-let DetailBody = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 15}
-let DetailMeta = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
+// === #9 新增：内联展开用的小字段标签（次级色粗体 13），照 #8 DetailSection 范式 ===
+let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
+let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 14}
+let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
 
 SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.color: #xffffff
     Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}
@@ -491,27 +488,83 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             // 空分支兜底：永远留 1px 占位，防上帧残留（ai-providers:241 注释范式）
             View{width: Fill height: 1}
         } else {
+            // === #9 新增：撤销条放在 on_render 内的 undo_bar View 中（根组件 if 不重算，#8 外环修） ===
+            // 撤销条必须放在渲染闭包里——根组件属性只在首次定型，不随状态变。
+            // undo_win_open 守卫防止 5s 定时器在用户已撤销后再次覆盖。
+            if undo_win_open == "yes" {
+                View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                    padding: Inset{left: 12 right: 12 top: 8 bottom: 8}
+                    show_bg: true draw_bg.color: #xf2efff draw_bg.border_radius: 12.0
+                    Label{width: Fill text: "撤销窗口已开（点下方按钮恢复）" draw_text.color: #x5856d6 draw_text.text_style: theme.font_bold{font_size: 13}}
+                    ButtonFlat{text: "撤销取消" height: 32 padding: Inset{left: 14 right: 14} on_click: || undo_cancel()
+                        draw_bg +: {border_radius: 16.0 color: #x5856d6 color_hover: #x4e4dc2 color_down: #x4443ab border_size: 0.0}
+                        draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+                }
+            }
+
             for i in case_lines.len() {
                 let cur_id = case_ids[i]
+                let expanded = case_expanded[i]
                 // 高亮条：选中态左侧 4pt 色条（保留 ▶ 兼顾读屏）
                 let hi_color = status_bar_color(case_statuses[i])
                 let hi_w = 4
                 if case_selected[i] != "yes" { hi_w = 0 }
                 // 注：on_tap 只属 GestureView（RoundedView/Card 没有此属性），
-                // 照第一方 news:319 的 GestureView 包 Card 写法
-                GestureView{width: Fill height: Fit on_tap: |x, y| open_detail(cur_id)
+                // 照第一方 news:319 的 GestureView 包 Card 写法；
+                // #9：点卡片 = 选中 + 切换展开（取代 #8 open_detail）
+                GestureView{width: Fill height: Fit on_tap: |x, y| on_tap_card(cur_id)
                     Card{
                         View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.0}
                         View{width: hi_w height: 56 draw_bg.color: hi_color}
                         View{width: Fill height: Fit flow: Down spacing: 6
                             View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                                // 标题：选中时前缀 ▶
-                                Label{width: Fill text: (if case_selected[i] == "yes" { "▶ " } else { "  " }) + case_lines[i] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                                // 标题：选中时前缀 ▶，展开时前缀 ▾（给折叠/展开一个视觉差）
+                                let prefix = "  "
+                                if case_selected[i] == "yes" { prefix = "▶ " }
+                                let exp_prefix = "  "
+                                if expanded == "yes" { exp_prefix = "▾ " }
+                                Label{width: Fill text: prefix + exp_prefix + case_lines[i] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
                                 Badge{BadgeText{text: case_badge_text[i] draw_text.color: status_badge_fg(case_statuses[i])}
                                     draw_bg +: {color: status_badge_bg(case_statuses[i])}}
                             }
-                            // #8：卡片摘要只保留原文一行（活动在标题里），更聚焦
+                            // === #9：卡片摘要折叠态只保留原文一行（活动在标题里） ===
                             TextLine{text: case_text_lines[i]}
+                            // === #9：展开态内联详情块（状态/活动/地点/原文 + 回执四行） ===
+                            if expanded == "yes" {
+                                // 展开与摘要之间留一道细线（用次级色细 View 模拟）
+                                View{width: Fill height: 1 draw_bg.color: #xefeff4}
+                                // 状态
+                                View{width: Fill height: Fit flow: Down spacing: 2
+                                    SectionLabel{text: "状态"}
+                                    BodyLine{text: case_status_text[i]}
+                                }
+                                // 活动
+                                View{width: Fill height: Fit flow: Down spacing: 2
+                                    SectionLabel{text: "活动"}
+                                    BodyLine{text: case_activity_lines[i]}
+                                }
+                                // 地点
+                                View{width: Fill height: Fit flow: Down spacing: 2
+                                    SectionLabel{text: "地点"}
+                                    BodyLine{text: case_place_full[i]}
+                                }
+                                // 原文（已在摘要显示过，这里做"完整原文"占位，便于区分）
+                                View{width: Fill height: Fit flow: Down spacing: 2
+                                    SectionLabel{text: "原文"}
+                                    MetaLine{text: case_text_lines[i]}
+                                }
+                                // 回执四行：仅 Confirmed 渲染（用 case_receipt[i].len() 守护）
+                                if case_receipt[i].len() > 0 {
+                                    View{width: Fill height: Fit flow: Down spacing: 2
+                                        SectionLabel{text: "回执"}
+                                        for j in case_receipt[i].len() {
+                                            ReceiptLine{text: "  ↳ " + case_receipt[i][j]}
+                                        }
+                                    }
+                                }
+                                // 展开态兜底：1px 占位（防上帧残留）
+                                View{width: Fill height: 1}
+                            }
                         }
                     }
                 }
@@ -532,65 +585,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         ButtonFlat{text: (if cancel_pending_id == 0 { "取消" } else { "确认取消（5s）" }) height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
             draw_bg +: {border_radius: 16.0 color: #xff3b30 color_hover: #xe6352b color_down: #xcc2f26 border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        // #8：撤销按钮 —— 仅在刚发生取消（cancel_prev_status 非空）时显示
-        if cancel_pending_id == 0 && cancel_prev_status != "" {
-            ButtonFlat{text: "撤销取消" height: 32 padding: Inset{left: 14 right: 14} on_click: || undo_cancel()
-                draw_bg +: {border_radius: 16.0 color: #x5856d6 color_hover: #x4e4dc2 color_down: #x4443ab border_size: 0.0}
-                draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        }
+        // #9：撤销按钮已移到 case_list on_render 内的 undo_bar，根组件不再放 if 块
+        // （#8 外环复验：根组件属性不随状态重算，必须放闭包里）
     }
     ButtonFlat{text: "试用 AI 解析（可选增强）" height: 36 padding: Inset{left: 14 right: 14} on_click: || ai_parse()
         draw_bg +: {border_radius: 18.0 color: #x5856d6 color_hover: #x4e4dc2 color_down: #x4443ab border_size: 0.0}
         draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-
-    // === #8 新增：详情层（独立 batch + show_bg + visible 切换，参考 news reader_pane 写法） ===
-    detail := View{width: Fill height: Fill flow: Down padding: 16 spacing: 12
-        visible: (detail_visible == "yes") new_batch: true show_bg: true draw_bg.color: #xffffff
-        on_render: || {
-            // 顶部返回条
-            View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                ButtonFlat{text: "‹ 返回" height: 36 padding: Inset{left: 14 right: 14} on_click: || close_detail()
-                    draw_bg +: {border_radius: 18.0 color: #xefeff4 color_hover: #xe5e5ea color_down: #xd1d1d6 border_size: 0.0}
-                    draw_text +: {color: ink color_hover: ink color_down: ink}}
-                View{width: Fill height: 1}
-            }
-            // 标题 + 状态徽章
-            View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.5}
-                DetailTitle{text: detail_title}
-                Badge{BadgeText{text: detail_badge_text draw_text.color: status_badge_fg(detail_status)}
-                    draw_bg +: {color: status_badge_bg(detail_status)}}
-            }
-            // 状态块
-            Card{
-                DetailSection{text: "状态"}
-                DetailBody{text: detail_status}
-            }
-            // 活动块
-            Card{
-                DetailSection{text: "活动"}
-                DetailBody{text: (if detail_activity == "" { "（未抽取到）" } else { detail_activity })}
-            }
-            // 地点块
-            Card{
-                DetailSection{text: "地点"}
-                DetailBody{text: (if detail_place == "" { "（未抽取到）" } else { detail_place })}
-            }
-            // 原文块
-            Card{
-                DetailSection{text: "原文"}
-                DetailMeta{text: detail_text}
-            }
-            // 回执块：仅 Confirmed 渲染
-            if detail_receipt_lines.len() > 0 {
-                Card{
-                    DetailSection{text: "回执"}
-                    for j in detail_receipt_lines.len() {
-                        ReceiptLine{text: "  ↳ " + detail_receipt_lines[j]}
-                    }
-                }
-            }
-            // 兜底 1px
-            View{width: Fill height: 1}
-        }
-    }
 }
