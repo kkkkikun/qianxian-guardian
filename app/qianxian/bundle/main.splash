@@ -750,18 +750,12 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         ButtonFlat{text: "重新收敛" height: 32 padding: Inset{left: 14 right: 14} on_click: || reschedule_case()
             draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xf08a00 color_down: #xd67d00 border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        // === #11 动词化文案 + 取消按钮降权 ===
-        // 默认态（cancel_pending_id==0）：浅底 #xf2f2f7 + 红字 #xff3b30 —— 视觉弱化，与主行动拉开层级
-        // 待确认态（cancel_pending_id!=0）：实心红 #xff3b30 底 + 白字 —— 危险在生效瞬间才高亮
-        if cancel_pending_id == 0 {
-            ButtonFlat{text: "取消守护" height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
-                draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
-                draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
-        } else {
-            ButtonFlat{text: "确认取消（5s）" height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
-                draw_bg +: {border_radius: 16.0 color: #xff3b30 color_hover: #xe6352b color_down: #xcc2f26 border_size: 0.0}
-                draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        }
+        // === #11 动词化文案 + 取消按钮降权（默认态：浅底红字，视觉弱化）===
+        // 注：确认态的「确认取消（5s）」变体由 case_list 的 on_render 渲染
+        // （根组件属性不随状态重算，#8 实证）；此处只保留固定的默认态按钮。
+        ButtonFlat{text: "取消守护" height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
+            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+            draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
         // #9：撤销按钮已移到 case_list on_render 内的 undo_bar，根组件不再放 if 块
         // （#8 外环复验：根组件属性不随状态重算，必须放闭包里）
     }
