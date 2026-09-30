@@ -107,8 +107,14 @@ fn rebuild_lines(){
         if place_disp == "" { place_disp = "（未抽取到）" }
         case_place_lines.push(place_disp)
 
-        // === #8 保留：Confirmed 才填回执四行 ===
+        // === #8 保留：Confirmed 才填回执四行（首次进入时快照，幂等） ===
         if st == "Confirmed" {
+            if cases[i]["receipt_done"] != "yes" {
+                cases[i]["receipt_activity"] = "" + cases[i]["activity"]
+                cases[i]["receipt_place"] = "" + cases[i]["place"]
+                cases[i]["receipt_text"] = "" + cases[i]["text"]
+                cases[i]["receipt_done"] = "yes"
+            }
             let ra = "" + cases[i]["receipt_activity"]
             let rp = "" + cases[i]["receipt_place"]
             let rt = "" + cases[i]["receipt_text"]
