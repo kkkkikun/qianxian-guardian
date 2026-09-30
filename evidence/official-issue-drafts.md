@@ -37,6 +37,6 @@ GitHub 仓库地址：https://github.com/kkkkikun/qianxian-guardian
 
 ## 前置确认
 
-- 公仓 `master` 已推至 `1526d6d`（含 LICENSE/PRIVACY/README/run/task/blueprint/evidence）
-- submit issue：https://github.com/kkkkikun/qianxian-guardian/issues/1（digest `fdcae9bb`）
-- bundle：`app/qianxian/bundle`（`hub check — PASSED`，digest `fdcae9bb`）
+- 公仓 `master` 已推至 `c7b8078`（含 LICENSE/PRIVACY/README/run/task/blueprint/evidence）
+- submit issue：https://github.com/kkkkikun/qianxian-guardian/issues/1（digest `dcabff8d`）
+- bundle：`app/qianxian/bundle`（`hub check — PASSED`，digest `dcabff8d`）

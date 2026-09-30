@@ -41,6 +41,6 @@ A 路线补充（2026-09-30，script-app `app/qianxian/`）：`hub check — PAS
 
 **P0-A（主链）/ P0-B（可信性）全部通过并有自动化证据；A 路线 script-app 门已过
 （`hub check PASSED` + scan 7 问，证据见 `evidence/qianxian/`）；P0-C 独立复现：
-仓库结构就绪（本地 commits 至 `1ff7e44` 起，Apache 2.0 LICENSE + .gitignore + README +
+仓库结构就绪（本地 commits 至 `c7b8078` 起，Apache 2.0 LICENSE + .gitignore + README +
 PRIVACY），已推送至 https://github.com/kkkkikun/qianxian-guardian（`master`，submit issue #1），
 待真截图回填 + 队外用户执行。**

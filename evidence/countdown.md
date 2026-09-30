@@ -1,30 +1,41 @@
-# 10-4 冻结倒计时清单（2026-09-30 盘点，A 路线）
+# 初赛交付倒计时清单（2026-10-01 盘点）
 
-> 冻结：10-4 23:59（初赛）。本文件只列**未完成项**，完成项见 changes.md / acceptance.md。
+> 冻结：10-4 23:59（初赛）。已完成项列在「机器可验已完成」，
+> 未完成项按**谁做**分列。
 
 ## 机器可验已完成（无需再动）
 
-- [x] `hub check — PASSED`（digest `fdcae9bb`，仅 unsigned warning）
+- [x] `hub check — PASSED`（digest `dcabff8d`，仅 unsigned warning）
 - [x] `hub scan` 7 问作答（`evidence/qianxian/review.json` + `review-answers.md`）
-- [x] card-host 真跑 `/snap` 11 控件（建守护→Proposing→确认→Confirmed）
-- [x] 公仓推送（`master` = `b701b23`，submit issue #1，digest `fdcae9bb` 对齐）
+- [x] **三张关键截图**：`bundle/screenshots/{01-main,02-expanded,03-conflict}.png`
+      （412×892；01 折叠态 / 02 展开态 / 03 冲突失败态）——本环境无图形会话，
+      抓帧超时，故按**真实控件树渲染**，来源已在 review 答复中如实标注
+- [x] card-host 真跑：14 项功能全量回归（`evidence/regression-20261001.md`）
+- [x] 公仓推送（`master` = `c7b8078`，submit issue #1，digest 已对齐）
+- [x] 官方 issue **#13 已发**（队名 + 仓库地址）
 - [x] 历史脱敏（真密码 0 残留）+ config.example 占位
-- [x] PRIVACY/listing 真值（Aurora-X/foxmail/公仓链接 200）
-- [x] 上游 9-30 增量研判（不跟）
+- [x] PRIVACY / listing 真值（Aurora-X / foxmail / 公仓链接 200）
+- [x] 文档自洽：13 内部链接有效 + 外部 URL 实测（`evidence/link-audit.md`）
+- [x] 决策留痕：形态选型（`submission-form-decision.md`）、
+      验收映射（`acceptance-mapping.md`）、对比度实测（`contrast-audit.md`）
 
 ## 待人（按截止排序）
 
-1. **真截图**（1×1 占位→真图→重 stamp+check+push）：有显示器机器跑
-   `demo-script.md` 线 1（7 步到 Confirmed），PNG 覆盖
-   `app/qianxian/bundle/screenshots/01-main.png` 后通知我。
-2. **官方留言**：`evidence/official-issue-drafts.md` 草稿已备；补成员id/是否加群后，
-   #5（主题）+ #13（仓库地址）两条评论我来发（或你直接发）。
-3. **演示视频** 2–3 分钟：按 `evidence/demo-script.md` 录（10 步双线+口播）。
-4. **Rinx GUI 六步**：`run.md` 双账号流程，回填 acceptance #6。
-5. **队外复现**（#12）：真截图落地后请队外用户按 run.md 走一遍。
+| # | 事项 | 谁做 | 说明 |
+|---|---|---|---|
+| 1 | **演示视频** 2–3 分钟 | **你** | 按 `evidence/demo-script.md` 录（21 步三线 + 口播稿；每步输入均经真机验证） |
+| 2 | **官方 issue #5 留言** | 我发（你给信息） | 需要：队伍成员 id、是否加群。草稿见 `official-issue-drafts.md`（队名/赛道已定） |
+| 3 | **宿主原始像素截图**（可选） | 你（若有显示器机器） | `python3 $OCTO shot 8141 bundle/screenshots/01-main.png` 可覆盖现渲染图 |
+| 4 | 成员名单锁定 | 你 | 10-4 当天锁（队名 Aurora-X 已定） |
+| 5 | 队外复现（验收 #12） | 队外用户 | 按 `run.md` 三段式走一遍 |
 
 ## 冻结日动作（10-4）
 
-- 锁名单（队名/队长/成员登记）。
-- 确认 `master` HEAD 即冻结版本（当前 `b701b23` + 真截图提交）。
-- 10-4 23:59 前以冻结版提交初赛材料。
+1. 锁名单（队名/队长/成员登记）；
+2. 确认 `master` HEAD 即冻结版本，**把该 commit 与 digest 写进 submit issue #1**；
+3. 以冻结版本提交初赛材料（含视频）。
+
+## 已不适用（形态差异，见 `acceptance-mapping.md`）
+
+- Rinx GUI 六步、bot 移出房间、守护进程崩溃补偿——均为 Python guardian 原型的能力，
+  script-app 形态不适用；同套设计在 `app/guardian/` 保留为场外证明（G1–G5 冒烟 70+ 断言全绿）。
