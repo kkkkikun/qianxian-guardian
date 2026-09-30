@@ -3,6 +3,12 @@
 执行时间：2026-09-27 深夜 ｜ 执行方式：确定性冒烟脚本 + 真实 LLM 通道 + 本地 Palpo
 全量回归：`evidence/全量回归-20260927.txt`（7/7 + 19/19 + 10/10 + 9/9 + 9/9 + 9/9 全绿）
 
+A 路线补充（2026-09-30，script-app `app/qianxian/`）：`hub check — PASSED`（仅 unsigned warning；
+构建链 App-Hub `46d67e5` + makepad `db4691d0` + OSM `3d3ef80`）；`hub scan` 7 问作答
+（`evidence/qianxian/review.json` + `review-answers.md`）；真机 card-host `/snap` 11 控件验证
+（建守护→`#1 · 骑车 · Proposing`→确认→`Confirmed`）。待补：publisher 真值、真截图
+（llvmpipe 无头抓帧超时，待有头重截）重 stamp。
+
 | # | 验收条件 | 结果 | 证据 |
 |---|---|---|---|
 | 1 | 分诊命中全部关键消息、误报 ≤1 | ✅ 通过（误报 1/3） | smoke_g2.py 19/19；命中表随材料提交 |
@@ -33,4 +39,7 @@
 
 ## 结论
 
-**P0-A（主链）/ P0-B（可信性）全部通过并有自动化证据；P0-C 独立复现：仓库结构就绪（本地 commit `91120c5`，Apache 2.0 LICENSE + .gitignore + README），待用户推送公开仓库后由队外用户执行。**
+**P0-A（主链）/ P0-B（可信性）全部通过并有自动化证据；A 路线 script-app 门已过
+（`hub check PASSED` + scan 7 问，证据见 `evidence/qianxian/`）；P0-C 独立复现：
+仓库结构就绪（本地 commits 至 `40d3c98` 起，Apache 2.0 LICENSE + .gitignore + README +
+PRIVACY），待用户推送公开仓库（publisher 真值 + 真截图回填后）由队外用户执行。**
