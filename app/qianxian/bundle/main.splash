@@ -530,6 +530,43 @@ fn cycle_slot(id_str){
     // 5 个常见槽位序列（确定性，无日期计算——本 runtime 无时钟 API）
     let sd = "" + cases[cur]["slot_day"]
     let sp = "" + cases[cur]["slot_part"]
+    // === #27：时段未抽取时不静默编造初值。
+    //   sd/sp 任一为空 = 用户原话里没抽到时间点。如果直接走下面的轮换逻辑，
+    //   会被强行写入"周六-上午"——这是替用户编造了一个时间。
+    //   改为：第一次点只提示 + 翻 slot_init_asked="yes"（重建数组走 C4/C5），
+    //   第二次点（sasked=="yes"）才真正写入；写入后顺手把标记归零（表示已接受）。
+    let sasked = "" + cases[cur]["slot_init_asked"]
+    if (sd == "" || sp == "") && sasked == "" {
+        let new_cases_ask = []
+        for ai in cases.len() {
+            let mk = "" + cases[ai]["slot_init_asked"]
+            if ai == cur { mk = "yes" }
+            new_cases_ask.push({"id": cases[ai]["id"], "text": cases[ai]["text"],
+                "activity": cases[ai]["activity"], "place": cases[ai]["place"],
+                "status": cases[ai]["status"],
+                "slot_day": cases[ai]["slot_day"], "slot_part": cases[ai]["slot_part"],
+                "conflict": cases[ai]["conflict"], "people": cases[ai]["people"],
+                "receipt_activity": cases[ai]["receipt_activity"],
+                "receipt_place": cases[ai]["receipt_place"],
+                "receipt_text": cases[ai]["receipt_text"],
+                "receipt_done": cases[ai]["receipt_done"],
+                "slot_init_asked": mk})
+        }
+        cases = new_cases_ask
+        cycle_save_result = "ok"
+        let ra = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
+        if ra != nil {
+            let ma = "" + ra
+            if ma != "" { cycle_save_result = "fail" }
+        }
+        ui.case_list.render()
+        if cycle_save_result == "fail" {
+            ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）（保存标记失败，仅在内存）")
+        } else {
+            ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）")
+        }
+        return
+    }
     let nd = "周六"
     let np = "上午"
     if sd == "周六" && sp == "上午" { nd = "周六"  np = "下午" }
@@ -537,7 +574,9 @@ fn cycle_slot(id_str){
     if sd == "周六" && sp == "晚上" { nd = "周日"  np = "上午" }
     if sd == "周日" && sp == "上午" { nd = "周日"  np = "下午" }
     if sd == "周日" && sp == "下午" { nd = "周六"  np = "上午" }
-    // C4：重建整个数组（逐个 push 新对象，key 带引号）
+    // C4：重建整个数组（逐个 push 新对象，key 带引号）。
+    //   #27 同步预置 slot_init_asked：当前这条刚走完首次确认→写入路径，
+    //   把标记归零（""）表示「已接受默认值，不再追问」；其余保持原值。
     let new_cases = []
     for ri in cases.len() {
         if ri == cur {
@@ -549,7 +588,8 @@ fn cycle_slot(id_str){
                 "receipt_activity": cases[ri]["receipt_activity"],
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
-                "receipt_done": cases[ri]["receipt_done"]})
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": ""})
         } else {
             new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
                 "activity": cases[ri]["activity"], "place": cases[ri]["place"],
@@ -559,7 +599,8 @@ fn cycle_slot(id_str){
                 "receipt_activity": cases[ri]["receipt_activity"],
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
-                "receipt_done": cases[ri]["receipt_done"]})
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": cases[ri]["slot_init_asked"]})
         }
     }
     cases = new_cases
@@ -835,7 +876,10 @@ fn build_case_from_text(text, level){
     if seq <= max_existing_id {
         seq = max_existing_id + 1
     }
-    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no"})
+    // === #27：slot_init_asked 字段预置（C5）。case 对象带这个标记后，cycle_slot
+    //   才能在「时段未抽取」时进入二次确认：第一次点只翻标记 + 提示，第二次点
+    //   才真正写入「周六-上午」初值。初值 "" 表示从未问过。
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "slot_init_asked": ""})
     // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
     // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
     // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
@@ -1174,11 +1218,15 @@ fn clear_all_data(){
         // fs.remove 在文件不存在时返回错误值（非 nil/非 true）；按 #13 字符串标记约定
         // 判成败：消息字符串非空视为失败。注意：fs 也没有 rename，不要尝试先备份
         // 再删——本动作是用户主动清空，无需保留副本。
+        // === #27：失败判定改严格——`rr != nil` 只排除了 nil，但 #13 实证过
+        //   "" + rr 可能为空（rr 是 true/空字符串等）会被误判成功；要求 **字符串
+        //   文本非空** 才算失败，与本文件其它 fs 调用（cycle_slot/save）同源。
         let removed_msg = ""
         if fs.exists("cases.json") {
             let rr = fs.remove("cases.json")
             if rr != nil {
-                removed_msg = "" + rr
+                let m = "" + rr
+                if m != "" { removed_msg = m }
             }
         }
         // 内存清空：扁平数组也要清，否则 on_render 闭包会读到旧 case_lines 等残留
@@ -1208,7 +1256,9 @@ fn clear_all_data(){
         clear_pending_flag = "no"
         clear_pending_deadline = 0
         if removed_msg != "" {
-            ui.hint.set_text("清空完成（已移除 cases.json 失败：" + removed_msg + "），内存已清 0 条守护")
+            // 内存已清、但 cases.json 还在盘上（下次启动会再读回）——明示失败，
+            // 不让用户误以为数据真的删了
+            ui.hint.set_text("清空未完成：" + removed_msg)
         } else {
             ui.hint.set_text("已清空 " + "" + clear_prev_count + " 条守护（cases.json 已移除，内存已重置）")
         }
