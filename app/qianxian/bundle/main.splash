@@ -1023,8 +1023,34 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 Badge{BadgeText{text: case_badge_text[j] draw_text.color: status_badge_fg(case_statuses[j])}
                                     draw_bg +: {color: status_badge_bg(case_statuses[j])}}
                             }
-                            // === #9：卡片摘要折叠态只保留原文一行（活动在标题里） ===
-                            TextLine{text: case_text_lines[j]}
+                            // === #15：折叠态三行（标题+徽章 / 活动·地点 / 原文截断24字+…）
+                            //   第二行末尾追加「· 共 N 字」（N = case_text_lines[j].len() 真实计算）。
+                            //   本 runtime 无时钟 API，按外环契约不做假时间。
+                            //   原文超过 24 字则截断并加 …（截断长度不含 …）；
+                            //   24 字及以内原样显示，无 … 后缀。
+                            //   地点为「（未抽取到）」时折叠态显示「地点未抽取到」。
+                            let _act_full = "" + case_activity_lines[j]
+                            let _pl_disp = "" + case_place_lines[j]
+                            if _pl_disp == "（未抽取到）" { _pl_disp = "地点未抽取到" }
+                            let _full_text = "" + case_text_lines[j]
+                            let _text_len = _full_text.len()
+                            let _shown_text = ""
+                            if _text_len > 24 {
+                                // 截取前 24 个字符（用 slice 按下标截，Splash 不一定支持 substring，
+                                // 故用逐字符 push 兜底：取 0..23 共 24 个字符）
+                                let _tr = []
+                                let _k = 0
+                                while _k < _full_text.len() {
+                                    if _k == 24 { break }
+                                    _tr.push(_full_text[_k])
+                                    _k = _k + 1
+                                }
+                                _shown_text = _tr.join("") + "…"
+                            } else {
+                                _shown_text = _full_text
+                            }
+                            TextLine{text: _act_full + " · " + _pl_disp + " · 共 " + "" + _text_len + " 字"}
+                            TextLine{text: _shown_text}
                             // === #9：展开态内联详情块（状态/活动/地点/原文 + 回执四行） ===
                             if expanded == "yes" {
                                 // 展开与摘要之间留一道细线（用次级色细 View 模拟）
