@@ -37,6 +37,11 @@ let current_filter = "all"
 let filtered_idxs = []
 let filter_count_str = "0"
 let filter_total_str = "0"
+// === #12 新增：搜索词状态（"all" 之外的第二维度，叠加在标签筛选之上） ===
+// current_query 是搜索框当前文本（实时过滤触发源；空串=不过滤）
+// matched_total_str 是「按当前标签的总命中数」（不含搜索词），即"共 N/M"中的 M
+let current_query = ""
+let matched_total_str = "0"
 
 // === #9 新增：扁平字段——避免 on_render 闭包读 cases[i][...]（#4/#5/#7/#8 实证坑） ===
 // 卡片内联展开后，"活动/地点/原文/状态" 这些原来只在详情层用的字段也要按行铺平，
@@ -72,11 +77,16 @@ fn status_bar_color(st){
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
 // 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
 fn rebuild_lines(){
-    // === #10 新增：筛选下标数组 + 计数串在这里重建（filter 逻辑放函数上下文，不进 on_render） ===
+    // === #10/#12 新增：筛选下标数组 + 计数串在这里重建（filter 逻辑放函数上下文，不进 on_render） ===
+    // #12 叠加：先用 current_filter 过一遍得到「标签总数 M」与候选 idxs；
+    //   再用 current_query（search(p)>=0，命中 activity/place/text 子串）
+    //   在候选里二次过滤，最终 push 进 filtered_idxs 的就是"标签+搜索"两层之后的命中数 N。
+    //   显示文案"共 N / M 条"：N=filter_count_str，M=matched_total_str（不含搜索词）。
     filtered_idxs.clear()
-    filter_total_str = "" + cases.len()
     let cf = "" + current_filter
-    let matched = 0
+    let q = "" + current_query
+    let label_matched = 0
+    let view_idxs = []
     for i in cases.len() {
         let st = "" + cases[i]["status"]
         let keep = false
@@ -85,11 +95,35 @@ fn rebuild_lines(){
         else if cf == "Confirmed" && st == "Confirmed" { keep = true }
         else if cf == "Cancelled" && st == "Cancelled" { keep = true }
         if keep {
-            filtered_idxs.push(i)
-            matched = matched + 1
+            view_idxs.push(i)
+            label_matched = label_matched + 1
         }
     }
-    filter_count_str = "" + matched
+    matched_total_str = "" + label_matched
+    filter_total_str = "" + label_matched
+    // 第二层：搜索词叠加（在标签候选内命中 activity / place / 原文子串）
+    let n = 0
+    if q == "" {
+        // 搜索词为空：直接全部保留（标签结果 = 实际渲染结果），保持创建序稳定
+        for i in view_idxs.len() {
+            filtered_idxs.push(view_idxs[i])
+        }
+        n = view_idxs.len()
+    } else {
+        for i in view_idxs.len() {
+            let j = view_idxs[i]
+            let act = "" + cases[j]["activity"]
+            let pl = "" + cases[j]["place"]
+            let txt = "" + cases[j]["text"]
+            // search(p) >= 0：命中即返回 >=0，没命中返回 -1（照 #12 契约明示，不用 regex）
+            let hit = (act.search(q) >= 0) || (pl.search(q) >= 0) || (txt.search(q) >= 0)
+            if hit {
+                filtered_idxs.push(j)
+                n = n + 1
+            }
+        }
+    }
+    filter_count_str = "" + n
     case_ids.clear()
     case_lines.clear()
     case_text_lines.clear()
@@ -259,6 +293,21 @@ fn set_filter(ft){
     if ft == "Confirmed" { label_all = "已确认" }
     if ft == "Cancelled" { label_all = "已取消" }
     ui.hint.set_text("筛选：" + label_all + " · 共 " + filter_count_str + " 条 / 总 " + filter_total_str + " 条")
+}
+
+// === #12 新增：搜索词入口（TextInput on_change 回调；与 set_filter 同样放函数上下文）
+// q 是用户输入的搜索词（空串=清空）；逻辑放函数上下文才能在 cases[j]["activity/place/text"]
+// 上调 search(p)>=0；on_render 闭包只读扁平字符串。set_query 只动 current_query + 触发重建 +
+// 更新 hint，不动 current_filter，所以搜索词与标签是叠加而非替换。
+fn set_query(q){
+    current_query = "" + q
+    rebuild_lines()
+    ui.case_list.render()
+    if current_query == "" {
+        ui.hint.set_text("已清空搜索，按当前标签显示（" + filter_count_str + " / " + filter_total_str + " 条）")
+    } else {
+        ui.hint.set_text("搜索 " + current_query + " · 共 " + filter_count_str + " / " + filter_total_str + " 条")
+    }
 }
 
 // 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清
@@ -542,6 +591,27 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     }
     hint := Label{width: Fill text: "载入中…" draw_text.color: secondary draw_text.text_style.font_size: 13}
     case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
+        // === #12 新增：搜索框（放在筛选栏之上、确认取消变体之上；
+        //   根组件 if 只在首次求值定型，所以搜索框必须放在 on_render 闭包内；
+        //   闭包内只读 current_query 字符串，不读 cases[i][...]） ===
+        // on_change 实时调 set_query(q)；× 用 GestureView on_tap 清空；空字符串不过滤。
+        // 照第一方 news 搜索框写法：TextInput empty_text + on_change 触发布尔过滤。
+        let q_now = "" + current_query
+        View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+            // 搜索框本体（占满剩余宽度）
+            TextInput{width: Fill height: 32 empty_text: "搜活动或地点，如：深圳湾"
+                text: q_now
+                on_change: |t| set_query("" + t)}
+            // 清空按钮：有词才显示（用 q_now 字面量作可见性条件，闭包内可读全局字符串）
+            if q_now != "" {
+                GestureView{on_tap: |x, y| set_query("") height: 32
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        Label{text: "× 清空" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    }
+                }
+            }
+        }
         // === #11 外环修：取消确认态变体（根组件 if 不随状态重算，必须放闭包内）===
         if cancel_pending_flag == "yes" {
             View{width: Fill height: Fit flow: Right align: Align{y: 0.5}
