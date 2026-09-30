@@ -47,8 +47,8 @@
 
 ## 7. 路由
 
-**pass**（待换真截图与 publisher 真值后）。当前两处占位：
-① `screenshots/01-main.png` 为 1×1 占位（`/g` 在 llvmpipe 无头后端抓帧超时，
-`snap` 树验证通过，见本目录验证记录）；
-② `listing.json` publisher 三字段为模板占位（`hub check` 已提示）。
-两者替换后重 `stamp`+`check` 即可提交；功能与权限侧无问题。
+**pass**（待换真截图后）。publisher 三字段已换真值（Aurora-X /
+kkkkikun@foxmail.com / 公仓 PRIVACY.md 链接），`hub check — PASSED` 无占位提示
+（digest `91d69ba5`）。仅剩一处占位：`screenshots/01-main.png` 为 1×1
+（`/g` 在 llvmpipe 无头后端抓帧超时，`snap` 树 11 控件验证通过）。
+真图替换后重 `stamp`+`check` 即可提交；功能与权限侧无问题。

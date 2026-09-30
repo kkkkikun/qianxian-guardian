@@ -8,9 +8,9 @@
   "icon": "assets/icon.svg",
   "platforms": ["linux"],
   "publisher": {
-    "name": "TBD",
-    "support": "https://example.com/support",
-    "privacy_policy_url": "https://example.com/privacy"
+    "name": "Aurora-X",
+    "support": "kkkkikun@foxmail.com",
+    "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/main/PRIVACY.md"
   },
   "release_notes": "初版：群消息建守护、组织者确认、改口重收敛、取消保留历史，全部本地规则可用。",
   "age_rating": "all",
