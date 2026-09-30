@@ -34,6 +34,27 @@ curl -s http://127.0.0.1:8128/_matrix/client/versions   # 应返回版本列表
 #    二次带【相同 device_id】+ session + m.login.dummy），注意限流 429 退避
 ```
 
+## script-app 复现（A 路线提交物 / `app/qianxian/`）
+
+> 构建链 pin（已验证）：App-Hub `46d67e5` + makepad `db4691d0`（含 `/snap` 的
+> `on_render` 行修复 `eeb9a33`）+ OctoScript-Makepad `3d3ef80` + Octoscript `68f6a9d`。
+> 构建见本轮记录（`CARGO_HOME` 指到可写目录 + `RUSTFLAGS="-L ~/.local/gosim-libs"`）。
+
+```sh
+cd my-entry/app/qianxian
+export OCTOSENSE_APP_HUB=<构建产物目录>   # 含 target/release/hub + card-host
+OCTO=<OctoScript-App-Design-Flow>/tools/octo
+
+python3 $OCTO run bundle --port 8141 --detach --hidden   # 真跑 card-host
+# 驱动（坐标以 /snap 为准）：点输入框 → /t 输入群消息 → 点“建守护” →
+# 点“同意选中” → /snap 见 Confirmed
+python3 $OCTO shot 8141 bundle/screenshots/01-main.png   # 真截图（需可渲染后端；llvmpipe 无头抓帧超时）
+curl -s 127.0.0.1:8141/quit
+
+python3 $OCTO check bundle    # 目标：— PASSED（仅 unsigned warning）
+<hub> scan bundle --packet build/review.json   # 7 问作答见 build/review-answers.md
+```
+
 ## 双账号全流程复现（P0-C / 验收条件 12）
 
 ```sh

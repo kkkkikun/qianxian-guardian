@@ -1,5 +1,9 @@
-# 轨 2 Spike：「牵线」mini-app（Rinx host services）
+# 轨 2 Spike：「牵线」mini-app（Rinx host services）【已归档：被 ../qianxian 取代】
 
+> ⚠️ **A 路线（2026-09-30）**：提交物是 `../qianxian/`（官方 script-app 形态，
+> `hub check — PASSED`）。本目录是 G2.5 时期验证 Rinx host-services 可行性的 spike，
+> 保留作设计证据，不再更新、不进提交包。
+>
 > 目的：验证 script-app 提交形态的可行性（blueprint-gpt.md 附录 A 轨 2）。
 > 本 bundle 是 G2.5 spike——一个屏幕证明全链路：Matrix 身份 → Octos 会话 → 消息解析(JSON)。
 
