@@ -176,7 +176,11 @@ fn rebuild_lines(){
         case_selected.push(sel)
         let st = "" + cases[i]["status"]
         case_statuses.push(st)
-        case_badge_text.push(status_badge_text(st))
+        // === #18 新增：冲突时把「·冲突」追加到徽章文字（折叠态色点已让位给 status_bar_color，不再用红色点表冲突） ===
+        let badge_t = status_badge_text(st)
+        let cf_lab0 = "" + cases[i]["conflict"]
+        if cf_lab0 == "yes" { badge_t = badge_t + "·冲突" }
+        case_badge_text.push(badge_t)
         let title_act = "" + cases[i]["activity"]
         if title_act == "" { title_act = "聚会" }
         case_lines.push("#" + id_str + " · " + title_act)
@@ -648,6 +652,12 @@ fn reschedule_case(){
                 return
             }
             cases[i]["status"] = "Proposing"
+            // === #18 新增：改口后让回执随下次确认刷新；receipt_done 置 ""，
+            //   rebuild_lines 里 Confirmed 分支的幂等判断就会重新填充 receipt_* ===
+            cases[i]["receipt_activity"] = ""
+            cases[i]["receipt_place"] = ""
+            cases[i]["receipt_text"] = ""
+            cases[i]["receipt_done"] = ""
             rebuild_lines()
             save()   // 结果写入全局 save_result
             ui.case_list.render()
@@ -680,6 +690,12 @@ fn cancel_case(){
             if cases[i]["id"] == target {
                 cancel_prev_status = "" + cases[i]["status"]
                 cases[i]["status"] = "Cancelled"
+                // === #18 新增：取消后回执无意义，连同 receipt_done 一起清空；
+                //   若后续撤销恢复状态，下次确认时 rebuild_lines 会重新快照 ===
+                cases[i]["receipt_activity"] = ""
+                cases[i]["receipt_place"] = ""
+                cases[i]["receipt_text"] = ""
+                cases[i]["receipt_done"] = ""
                 cancel_pending_id = 0
                 cancel_pending_deadline = 0
                 cancel_pending_flag = "no"  // #11：确认态按钮撤下
@@ -1166,11 +1182,8 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 Label{width: Fill text: prefix + exp_prefix + case_lines[j] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
                                 Badge{BadgeText{text: case_badge_text[j] draw_text.color: status_badge_fg(case_statuses[j])}
                                     draw_bg +: {color: status_badge_bg(case_statuses[j])}}
-                                // === #17b：折叠态冲突红点（8×8，徽章旁；RoundedView 显式 width+height 防陷阱 B）===
-                                if case_conflict[j] == "yes" {
-                                    RoundedView{width: 8 height: 8
-                                        show_bg: true draw_bg.color: #xff3b30 draw_bg.border_radius: 4.0}
-                                }
+                                // === #18：折叠态冲突改在徽章文字体现（「待拍板·冲突」等），不再单独渲染冲突红点；
+                                //   标题行最左的 10×10 状态色点（status_bar_color）已经承担状态视觉。 ===
                             }
                             // === #15：折叠态三行（标题+徽章 / 活动·地点 / 原文截断24字+…）
                             //   第二行末尾追加「· 共 N 字」（N = case_text_lines[j].len() 真实计算）。
