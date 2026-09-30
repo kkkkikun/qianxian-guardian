@@ -48,6 +48,13 @@ let current_filter = "all"
 let filtered_idxs = []
 let filter_count_str = "0"
 let filter_total_str = "0"
+
+// === #16 新增：「怎么用」说明卡展开标记 ===
+// 字符串标记（"yes"/"no"），与 cancel_pending_flag / undo_show_flag2 同源（本 runtime
+//   函数返回布尔不可靠，#13 实证）。默认行为：seq == 0（从未建过守护）→ "yes" 自动展开；
+//   seq > 0（建过守护）→ "no" 默认收起。用户点首屏底部「怎么用？」按钮可手动切换。
+// 这里直接读顶层 seq 初值（load() 之前为 0；load() 完成后若 parsed_seq > 0 自动落到 "no"）。
+let howto_show_flag = if seq == 0 { "yes" } else { "no" }
 // === #12 新增：搜索词状态（"all" 之外的第二维度，叠加在标签筛选之上） ===
 // current_query 是搜索框当前文本（实时过滤触发源；空串=不过滤）
 // matched_total_str 是「按当前标签的总命中数」（不含搜索词），即"共 N/M"中的 M
@@ -335,6 +342,20 @@ fn clear_cancel_pending(hint_text){
     if hint_text != "" {
         ui.hint.set_text(hint_text)
     }
+}
+
+// === #16 新增：切换「怎么用」说明卡的展开/收起 ===
+// 用字符串标记（#13 实证：函数返回布尔在调用点 == false 不可靠）。
+// 触发后再走 ui.case_list.render()，让 on_render 闭包按新 flag 重渲染。
+fn toggle_howto(){
+    if howto_show_flag == "yes" {
+        howto_show_flag = "no"
+        ui.hint.set_text("已收起「怎么用」说明卡")
+    } else {
+        howto_show_flag = "yes"
+        ui.hint.set_text("已展开「怎么用」说明卡")
+    }
+    ui.case_list.render()
 }
 
 // === #9 改造：点卡片 = 选中 + 切换该条的展开/折叠（取代 #8 的 open_detail） ===
@@ -964,6 +985,24 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     Label{text: "③ 组织者点同意，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
                 }
             }
+            // === #16 新增：「怎么用」说明卡 ——
+            //   写在 case_list.on_render 闭包里（根组件属性不随状态重算，#8 硬约束外环修）。
+            //   显隐走 howto_show_flag（字符串标记，#13 实证布尔不可靠）："yes" 才渲染整张卡；
+            //   折叠时只留 1px 占位，防上帧残留（ai-providers:241 兜底范式）。
+            //   默认展开策略：未建过守护（seq==0）→ 第一次启动自动展开；
+            //   建过守护（seq>0）→ 默认收起，不打扰老用户。点首屏底部「怎么用？」按钮可手动切。
+            //   只读 howto_show_flag / seq 两个字符串/整数，不读 cases[i][...]（符合硬约束 #2）。
+            if howto_show_flag == "yes" {
+                Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
+                    Label{text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                    Label{text: "1. 粘贴群里那条聚会消息，或点「用示例试试」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "2. 点建守护——牵线会分诊，命中时间/约定才生成提案" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "3. 点卡片展开详情，组织者点「确认这条守护」，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
+                }
+            } else {
+                // 折叠时留 1px 占位（on_render 空分支硬约束 #5：至少一个子节点）
+                View{width: Fill height: 1}
+            }
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
                 Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
                 Label{text: "粘贴一条群消息开始（例如：周六上午去深圳湾骑车）。点建守护后，行可点选。" draw_text.color: secondary draw_text.text_style.font_size: 13}
@@ -1014,6 +1053,12 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                         View{width: hi_w height: 56 draw_bg.color: hi_color}
                         View{width: Fill height: Fit flow: Down spacing: 6
                             View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                                // === #16 新增：标题行最左 10×10 状态色点 ===
+                                // RoundedView + show_bg:true + border_radius:5.0 → 圆角色块。
+                                // 颜色由 status_bar_color(status) 直接给（颜色字面量，不经字符串）。
+                                // 选中态时左侧另有 hi_w 色条，二者并存不冲突（#16 契约）。
+                                RoundedView{width: 10 height: 10
+                                    show_bg: true draw_bg.color: status_bar_color(case_statuses[j]) draw_bg.border_radius: 5.0}
                                 // 标题：选中时前缀 ▶，展开时前缀 ▾（给折叠/展开一个视觉差）
                                 let prefix = "  "
                                 if case_selected[j] == "yes" { prefix = "▶ " }
@@ -1135,4 +1180,12 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
             draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
     }
+    // === #16 新增：首屏底部可点「怎么用？」—— 放在 ai_row 下方、整屏最底 ===
+    // 文本按钮（次级灰底 + accent 蓝字，视觉弱化但不抢眼）；
+    // 点击触发 toggle_howto() 翻转 howto_show_flag，再走 ui.case_list.render() 重渲染说明卡。
+    // 根组件属性只在首次求值定型——但按钮本身的 on_click 是事件回调，不依赖 if 重算；
+    //   说明卡的显隐走 on_render 闭包内的 howto_show_flag 判断，符合硬约束 #1。
+    ButtonFlat{text: "怎么用？" height: 32 padding: Inset{left: 14 right: 14} on_click: || toggle_howto()
+        draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+        draw_text +: {color: accent color_hover: accent color_down: accent}}
 }
