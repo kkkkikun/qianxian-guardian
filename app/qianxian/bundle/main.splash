@@ -86,6 +86,12 @@ let matched_total_str = "0"
 let case_activity_lines = []        // 每条 case 的活动字符串（无则"（未抽取到）"）
 let case_place_full = []            // 每条 case 的地点字符串（无则"（未抽取到）"）
 let case_status_text = []           // 每条 case 的状态中文（"待拍板"/"已确认"/"已取消"）
+// === #20 新增：参与人 + 参考人数（扁平字符串数组，供 on_render 只读） ===
+// people 是逗号分隔的真实姓名列表；ref_count 是消息里"N人"提到的数字（仅参考）。
+// 展开态展示「参与人：xxx」/「参与人：未填写」/「约 N 人（消息中提到）」。
+// cap 10 人由 cycle/add_person 入口处守护，超出 hint 提示「先到 10 人上限」。
+let case_people_lines = []          // 每条 case 的「参与人」展示串（无则"未填写"）
+let case_refcount_lines = []        // 每条 case 的「约 N 人」展示串（无则""，不渲染该行）
 
 // 状态色：行首徽章文字色与底色（Proposing 灰 / Confirmed 绿 / Cancelled 红）
 // 注：颜色必须是颜色字面量（#x…），不能返回字符串——draw_bg.color 期望 Vec4f
@@ -177,6 +183,9 @@ fn rebuild_lines(){
     case_conflict.clear()
     case_conflict_lines.clear()
     case_conflict_party.clear()
+    // === #20 新增：参与人 + 参考人数 扁平数组重置（只保留一份） ===
+    case_people_lines.clear()
+    case_refcount_lines.clear()
     // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
     // （点同一张卡：折叠；点别的卡：保留各自展开态，保留用户的"展开阅读"行为）
     for i in cases.len() {
@@ -205,6 +214,17 @@ fn rebuild_lines(){
         if pl == "" { pl = "（未抽取到）" }
         case_place_full.push(pl)
         case_status_text.push(status_badge_text(st))
+
+        // === #20 新增：扁平「参与人 + 参考人数」（供 on_render 只读） ===
+        // people：直接展示存的名字串（空 → "未填写"，非空 → 原样）。
+        // ref_count：消息里"N人/N个人"提到的数字，仅参考，绝不编造姓名。
+        //   没抽到数字时留空串，on_render 看到空就不渲染该行。
+        let ppl = "" + cases[i]["people"]
+        if ppl == "" { ppl = "未填写" }
+        case_people_lines.push(ppl)
+        let rc = "" + cases[i]["ref_count"]
+        if rc == "" { case_refcount_lines.push("") }
+        else { case_refcount_lines.push("约 " + rc + " 人（消息中提到）") }
 
         // === #17b 新增：扁平「星期几 / 时段 / 冲突标记」三字段（供 on_render 只读） ===
         // 对象字段访问在闭包里不稳，硬约束 #4/#5；预置到 push 字面量 + 重建时落到扁平数组。
@@ -569,6 +589,205 @@ fn guess_slot_part(text){
     return ""
 }
 
+// === #20 新增：抽取消息中的参考人数（"N 人" / "N个人" / "N人"）===
+//   命中仅记录数字（字符串），绝不编造姓名。抽不到返回 ""。
+//   这里用 regex + capture group 拿数字；本 runtime 的 regex 支持 \d 与 \s*。
+fn guess_ref_count(text){
+    let m = regex("\\d+\\s*个?人", "").exec(text)
+    if m == nil { return "" }
+    // exec 返回 match groups 数组（数字部分），[0] 是整串；优先取 [1]（第一个括号组）。
+    // 为稳健起见，遍历所有组，遇到"纯数字串"就用它。都不像就 fallback 用整串去
+    // 掉"人"和"个"两字得到数字部分。
+    let g = m["groups"]
+    if g != nil {
+        for gi in g.len() {
+            let cand = "" + g[gi]
+            let digits = ""
+            let parts = cand.split("")
+            for pi in parts.len() {
+                let ch = parts[pi]
+                if ch == "0" || ch == "1" || ch == "2" || ch == "3" || ch == "4" || ch == "5" || ch == "6" || ch == "7" || ch == "8" || ch == "9" {
+                    digits = digits + ch
+                }
+            }
+            if digits != "" { return digits }
+        }
+    }
+    // fallback：去尾部"人"/"个人"得数字部分
+    let full = "" + m["text"]
+    let out = ""
+    let parts2 = full.split("")
+    for pi2 in parts2.len() {
+        let ch = parts2[pi2]
+        if ch == "0" || ch == "1" || ch == "2" || ch == "3" || ch == "4" || ch == "5" || ch == "6" || ch == "7" || ch == "8" || ch == "9" {
+            out = out + ch
+        }
+    }
+    return out
+}
+
+// === #20 新增：5 个常见时间槽轮换 ===
+//   顺序：周六-上午 → 周六-下午 → 周六-晚上 → 周日-上午 → 周日-下午 → 回到周六-上午
+//   确定性、无日期计算（本 runtime 无时钟 API）。
+fn cycle_slot_current(day, part){
+    if day == "周六" && part == "上午" { return ["周六", "下午"] }
+    if day == "周六" && part == "下午" { return ["周六", "晚上"] }
+    if day == "周六" && part == "晚上" { return ["周日", "上午"] }
+    if day == "周日" && part == "上午" { return ["周日", "下午"] }
+    if day == "周日" && part == "下午" { return ["周六", "上午"] }
+    // 不在 5 个槽里（抽不到时间/或为非这 5 个时段）→ 默认跳到第一个常见槽
+    return ["周六", "上午"]
+}
+
+// === #20 新增：把当前槽翻到下一个常见槽 ===
+//   入参 id 是被改的那条 case 的 id 字符串（on_tap 闭包只能拿到扁平 id）。
+//   行为：找到 cases 中对应条目 → cycle_slot_current → 写回 slot_day/slot_part
+//   → 重算冲突（针对所有非 Cancelled 条目：若 slot_day/slot_part 都非空且与新槽同，
+//   双向标记 conflict:"yes"）→ save+rebuild+render → hint 明示新时段与冲突状态。
+fn cycle_slot(id){
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    let id_str = "" + id
+    for i in cases.len() {
+        if "" + cases[i]["id"] != id_str { continue }
+        if cases[i]["status"] == "Cancelled" {
+            ui.hint.set_text("该守护已取消，改时间无效（#" + id_str + "）")
+            return
+        }
+        let old_day = "" + cases[i]["slot_day"]
+        let old_part = "" + cases[i]["slot_part"]
+        let next = cycle_slot_current(old_day, old_part)
+        let new_day = "" + next[0]
+        let new_part = "" + next[1]
+        cases[i]["slot_day"] = new_day
+        cases[i]["slot_part"] = new_part
+        // 重算全部非 Cancelled 条目的 conflict：
+        //   1) 先全部置 "no"
+        //   2) 同槽且双方 slot_day+slot_part 都非空的，互相标 conflict:"yes"
+        for ci in cases.len() {
+            if cases[ci]["status"] != "Cancelled" { cases[ci]["conflict"] = "no" }
+        }
+        for ci2 in cases.len() {
+            if cases[ci2]["status"] == "Cancelled" { continue }
+            let d2 = "" + cases[ci2]["slot_day"]
+            let p2 = "" + cases[ci2]["slot_part"]
+            if d2 == "" || p2 == "" { continue }
+            for cj in cases.len() {
+                if cj == ci2 { continue }
+                if cases[cj]["status"] == "Cancelled" { continue }
+                let dj = "" + cases[cj]["slot_day"]
+                let pj = "" + cases[cj]["slot_part"]
+                if dj == "" || pj == "" { continue }
+                if dj == d2 && pj == p2 {
+                    cases[ci2]["conflict"] = "yes"
+                    cases[cj]["conflict"] = "yes"
+                }
+            }
+        }
+        // 检查自己这条改完后是否还有冲突
+        let self_conflict = "" + cases[i]["conflict"]
+        rebuild_lines()
+        save()
+        ui.case_list.render()
+        let new_label = new_day + "-" + new_part
+        if save_result == "fail" {
+            ui.hint.set_text("保存失败：时间已改为 " + new_label + "（in-memory；#" + id_str + "）")
+        } else if self_conflict == "yes" {
+            ui.hint.set_text("#" + id_str + " 时间改为 " + new_label + "（仍有冲突，看上方红卡）")
+        } else {
+            ui.hint.set_text("#" + id_str + " 时间改为 " + new_label + "（已无冲突）")
+        }
+        return
+    }
+    ui.hint.set_text("未找到 #" + id_str + "，改时间失败")
+}
+
+// === #20 新增：追加参与人 ===
+//   入参：id 是 case id 字符串，raw_text 是用户在输入框键入的原文（可能含逗号/空格/全角逗号）。
+//   行为：split 拆分 → 计数 + cap 10 → 追加到 people 字段 → rebuild+render → hint 明示。
+//   拆分策略：先按"，"切，再按","切，最后按空白切，得到所有非空片段。
+fn add_person(id, raw_text){
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    let id_str = "" + id
+    let raw = "" + raw_text
+    if raw == "" {
+        ui.hint.set_text("先在「参与人」框里输入一个名字（逗号分隔可一次多个），再点「追加」")
+        return
+    }
+    for i in cases.len() {
+        if "" + cases[i]["id"] != id_str { continue }
+        // 先按全角逗号拆，再按半角逗号拆（半角转全角再统一处理）
+        let pieces = []
+        let stage1 = raw.split("，")
+        for si in stage1.len() {
+            let seg = "" + stage1[si]
+            let stage2 = seg.split(",")
+            for sj in stage2.len() {
+                let seg2 = "" + stage2[sj]
+                // 第三层：按空白拆（覆盖"老王 老李"这种带空格的输入）
+                let stage3 = seg2.split(" ")
+                for sk in stage3.len() {
+                    let p = "" + stage3[sk]
+                    if p != "" { pieces.push(p) }
+                }
+            }
+        }
+        let cur_ppl = "" + cases[i]["people"]
+        // 计算 cur_ppl 已有人数（逗号分隔 → 用真实遍历计人数，不用 split.join）
+        let cur_count = 0
+        if cur_ppl != "" {
+            let cur_parts = cur_ppl.split(",")
+            for ck in cur_parts.len() {
+                if "" + cur_parts[ck] != "" { cur_count = cur_count + 1 }
+            }
+        } else {
+            cur_count = 0
+        }
+        // 上限守护：超过 10 人即拒绝并提示（不追加任何片段）
+        if cur_count >= 10 {
+            ui.hint.set_text("先到 10 人上限（当前 " + "" + cur_count + " 人，无法再追加）")
+            return
+        }
+        let added_count = 0
+        let added_names = ""
+        for ai in pieces.len() {
+            if cur_count >= 10 { break }
+            let name = "" + pieces[ai]
+            if name == "" { continue }
+            if cur_ppl == "" {
+                cur_ppl = name
+            } else {
+                cur_ppl = cur_ppl + "," + name
+            }
+            cur_count = cur_count + 1
+            added_count = added_count + 1
+            if added_names == "" { added_names = name }
+            else { added_names = added_names + "、" + name }
+        }
+        cases[i]["people"] = cur_ppl
+        rebuild_lines()
+        save()
+        ui.case_list.render()
+        let new_total = cur_count
+        if added_count == 0 {
+            if save_result == "fail" {
+                ui.hint.set_text("保存失败：参与人未追加（#" + id_str + "）")
+            } else {
+                ui.hint.set_text("没有可追加的名字（输入可能全是空白）")
+            }
+        } else {
+            if save_result == "fail" {
+                ui.hint.set_text("保存失败：已追加 " + added_names + "（in-memory；#" + id_str + "，当前 " + "" + new_total + " 人）")
+            } else {
+                ui.hint.set_text("#" + id_str + " 追加参与人：" + added_names + "（当前 " + "" + new_total + " 人）")
+            }
+        }
+        return
+    }
+    ui.hint.set_text("未找到 #" + id_str + "，追加参与人失败")
+}
+
 fn add_case(){
     // 建守护算"非取消按钮" → 放弃任何待确认 + 关掉撤销窗口
     clear_cancel_pending("")
@@ -640,7 +859,10 @@ fn build_case_from_text(text, level){
     if seq <= max_existing_id {
         seq = max_existing_id + 1
     }
-    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no"})
+    // === #20 新增：people / ref_count 字段预置（硬约束：新增 case 字段必须在 push 字面量预置）
+    //   people：逗号分隔的真实姓名（用户手动追加；上限 10 人，由 add_person 入口守护）
+    //   ref_count：消息里"N人/N个人"提到的数字，仅参考人数，绝不编造姓名
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "people": "", "ref_count": guess_ref_count(text)})
     // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
     // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
     // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
@@ -1319,6 +1541,44 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 View{width: Fill height: Fit flow: Down spacing: 2
                                     SectionLabel{text: "原文"}
                                     MetaLine{text: case_text_lines[j]}
+                                }
+                                // === #20 新增：时间行 + 改时间入口（5 个常见槽位轮换）===
+                                //   槽位抽不到时（slot_day 或 slot_part 为空）展示「未抽取」+ 改时间按钮照常工作
+                                //   （cycle_slot_current 默认会跳到「周六-上午」第一次常见槽）。
+                                //   改完后由 cycle_slot 重算 conflict + 刷新冲突卡 + hint 明示新时段与是否仍有冲突。
+                                let _slot_label = "" + case_slot_day[j] + "-" + case_slot_part[j]
+                                if case_slot_day[j] == "" || case_slot_part[j] == "" { _slot_label = "未抽取" }
+                                View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                                    View{width: Fill height: Fit flow: Down spacing: 2
+                                        SectionLabel{text: "时间"}
+                                        BodyLine{text: _slot_label}
+                                    }
+                                    // 「改时间」按钮：和 #11 状态色保持一致（橙=警示），低视觉权重
+                                    ButtonFlat{text: "改时间" height: 32 padding: Inset{left: 12 right: 12} on_click: || cycle_slot(cur_id)
+                                        draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xf08a00 color_down: #xd67d00 border_size: 0.0}
+                                        draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+                                }
+                                // === #20 新增：参考人数（消息中"N人/N个人"抽到的数字，仅参考；抽不到则不渲染）===
+                                if case_refcount_lines[j] != "" {
+                                    View{width: Fill height: Fit flow: Down spacing: 2
+                                        SectionLabel{text: "参考人数"}
+                                        BodyLine{text: case_refcount_lines[j]}
+                                    }
+                                }
+                                // === #20 新增：参与人行（显示 + 追加输入框）===
+                                //   case_people_lines[j] 已是"未填写"或具体姓名列表（rebuild_lines 拼好）。
+                                //   输入框回车/失焦触发 add_person，逗号分隔可一次多个，上限 10 人。
+                                //   TextInput 的 value 用 people 原值（首屏/重建后回填）。
+                                let _cur_people_val = "" + cases[j]["people"]
+                                View{width: Fill height: Fit flow: Down spacing: 2
+                                    SectionLabel{text: "参与人"}
+                                    BodyLine{text: case_people_lines[j]}
+                                }
+                                View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                                    TextInput{width: Fill height: 32 value: _cur_people_val placeholder: "输入姓名（逗号分隔）" on_change: |s| add_person(cur_id, s)}
+                                    ButtonFlat{text: "追加" height: 32 padding: Inset{left: 12 right: 12} on_click: || add_person(cur_id, _cur_people_val)
+                                        draw_bg +: {border_radius: 16.0 color: #x007aff color_hover: #x0070e0 color_down: #x0066cc border_size: 0.0}
+                                        draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
                                 }
                                 // 回执四行：仅 Confirmed 渲染（用 case_receipt[j].len() 守护）
                                 if case_receipt[j].len() > 0 {
