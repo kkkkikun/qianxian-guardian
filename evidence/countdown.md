@@ -7,7 +7,7 @@
 - [x] `hub check — PASSED`（digest `fdcae9bb`，仅 unsigned warning）
 - [x] `hub scan` 7 问作答（`evidence/qianxian/review.json` + `review-answers.md`）
 - [x] card-host 真跑 `/snap` 11 控件（建守护→Proposing→确认→Confirmed）
-- [x] 公仓推送（`master` = `2f0cb7b`，submit issue #1，digest 对齐）
+- [x] 公仓推送（`master` = `b701b23`，submit issue #1，digest `fdcae9bb` 对齐）
 - [x] 历史脱敏（真密码 0 残留）+ config.example 占位
 - [x] PRIVACY/listing 真值（Aurora-X/foxmail/公仓链接 200）
 - [x] 上游 9-30 增量研判（不跟）
@@ -26,5 +26,5 @@
 ## 冻结日动作（10-4）
 
 - 锁名单（队名/队长/成员登记）。
-- 确认 `master` HEAD 即冻结版本（当前 `6745cbd` + 真截图提交）。
+- 确认 `master` HEAD 即冻结版本（当前 `b701b23` + 真截图提交）。
 - 10-4 23:59 前以冻结版提交初赛材料。
