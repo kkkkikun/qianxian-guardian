@@ -198,21 +198,100 @@ fn rebuild_lines(){
     }
 }
 
+// #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
+//   cases 不是数组 / seq 不是数字），不覆盖现有数据，而是把坏文件改名为
+//   cases.corrupt-<n>.json（<n> 用文件里的 seq；seq 不是数字时用固定名
+//   cases.corrupt.json，允许覆盖上一次的备份），然后以空状态启动并在 hint 明示。
+//   绝不 silently 丢掉用户数据——数据是本应用唯一资产。
 fn load(){
+    let hint = "已载入 " + "" + cases.len() + " 个聚会守护"
+    let hint_suffix = ""
     if fs.exists("cases.json") {
-        let v = fs.read("cases.json").parse_json()
-        if v != nil {
-            if v["cases"] != nil { cases = v["cases"] }
-            if v["seq"] != nil { seq = v["seq"] }
+        let raw = fs.read("cases.json")
+        let v = raw.parse_json()
+        let bad = (v == nil)
+        let parsed_cases = []
+        let parsed_seq = 0
+        let seq_is_num = false
+        if !bad {
+            // 校验 v["cases"] 是数组、v["seq"] 是数字；任何一个不达标即视为损坏
+            let raw_cases = v["cases"]
+            let raw_seq = v["seq"]
+            if raw_cases != nil {
+                // 数组的真值特征：可取 .len()。非数组对象/字符串/数字在这里调用
+                // .len() 在 Splash 不会报错，会返回不预期的值；改用 "长度 > 0 且
+                // 第一项是字典" 这种保守判定（cases 至少有一个对象）。
+                if raw_cases.len() > 0 {
+                    let first = raw_cases[0]
+                    if first != nil {
+                        parsed_cases = raw_cases
+                    }
+                } else if raw_cases.len() == 0 {
+                    // 空数组是合法状态（用户清空了），接纳
+                    parsed_cases = raw_cases
+                }
+                // 注意：raw_cases.len() 对非数组可能不抛错，但后续 rebuild_lines
+                // 会读到一致行为；如果 parsed_cases 保持 []，后面 bad 会被翻成 true
+            }
+            if raw_seq != nil {
+                // 数字判定：加 0 后与原值一致；否则把 seq_is_num 留 false
+                let as_num = raw_seq + 0
+                if "" + as_num == "" + raw_seq {
+                    seq_is_num = true
+                    parsed_seq = as_num
+                }
+            }
+            // 校验通过的条件：raw_cases != nil 且 raw_seq != nil 且 seq_is_num
+            // parsed_cases 已经接受了空数组；非数组场景下 parsed_cases 仍为 []
+            // 但 cases.len()=0 会让重建前后一致，行为也可接受——为安全起见，
+            // 仍然以「cases 是数组且 seq 是数字」双门控判定损坏。
+            if raw_cases == nil || !seq_is_num {
+                bad = true
+            }
+        }
+        if bad {
+            // 备份坏文件：<n> 优先用文件里的 seq（即使非数字也允许为字串后缀），
+            // 不可得时用固定名 cases.corrupt.json（覆盖上一次备份）
+            let backup_name = "cases.corrupt.json"
+            if raw_seq != nil {
+                backup_name = "cases.corrupt-" + "" + raw_seq + ".json"
+            }
+            // 改名失败也不阻塞启动（至少不丢数据——原文件不会被覆盖）
+            let _ = fs.rename("cases.json", backup_name)
+            // 内存回到空态：cases=[], seq=0
+            cases = []
+            seq = 0
+            hint = "发现损坏的守护数据，已备份为 " + backup_name + " 并重新开始"
+            hint_suffix = ""
+        } else {
+            // 校验通过：正常载入
+            cases = parsed_cases
+            seq = parsed_seq
+            hint = "已载入 " + "" + cases.len() + " 个聚会守护"
+            // #13 第 4 条：列表较长时提示用筛选/搜索
+            if cases.len() > 20 {
+                hint_suffix = "，列表较长，建议用筛选或搜索"
+            }
+        }
+    } else {
+        // 首次启动：无文件，按空态走
+        if cases.len() > 20 {
+            hint_suffix = "，列表较长，建议用筛选或搜索"
         }
     }
     rebuild_lines()
     ui.case_list.render()
-    ui.hint.set_text("已载入 " + "" + cases.len() + " 个聚会守护")
+    ui.hint.set_text(hint + hint_suffix)
 }
 
+// #13：写入失败可见。fs.write 在出错时返回错误值（非 nil/非 true），save() 把这个
+//   信号向上层返回：调用点根据返回值决定是否覆盖"成功"提示为失败提示，避免 silently
+//   告诉用户「已保存」但实际没落盘——同样是不丢用户数据的兜底。
 fn save(){
-    fs.write("cases.json", {cases: cases, seq: seq}.to_json())
+    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
+    if r == nil { return true }   // 旧 runtime 不返回错误，按成功处理（不破坏兼容）
+    if r == true { return true }
+    return false
 }
 
 // 解析"作用目标"：选中优先，否则最新一条并明示
@@ -351,13 +430,28 @@ fn add_case(){
         return
     }
     seq = seq + 1
+    // #13 第 3 条：id 撞库守卫。load() 后异常场景下 cases 有内容而 seq == 0，
+    //   上面 seq+1 得 1，会与已有 id=1 撞。这里取 max(seq, 已有最大 id) + 1，
+    //   保证新 id 一定大于任何已有 id。
+    let max_existing_id = 0
+    for i in cases.len() {
+        let cid = cases[i]["id"]
+        if cid > max_existing_id { max_existing_id = cid }
+    }
+    if seq <= max_existing_id {
+        seq = max_existing_id + 1
+    }
     cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": ""})
     selected_id = seq  // 新建后自动选中，体验闭环
     ui.msg_input.set_text("")
     rebuild_lines()
-    save()
+    let ok = save()
     ui.case_list.render()
-    ui.hint.set_text("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，点卡片可展开详情")
+    if ok == false {
+        ui.hint.set_text("保存失败：守护数据可能未落盘（已建守护 #" + "" + seq + "，分诊命中：" + level + "）")
+    } else {
+        ui.hint.set_text("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，点卡片可展开详情")
+    }
 }
 
 fn confirm_case(){
@@ -383,11 +477,15 @@ fn confirm_case(){
             }
             cases[i]["status"] = "Confirmed"
             rebuild_lines()
-            save()
+            let ok = save()
             ui.case_list.render()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
-            ui.hint.set_text("已确认 #" + "" + t["id"] + " → Confirmed（组织者拍板，读回一致）" + tag)
+            if ok == false {
+                ui.hint.set_text("保存失败：守护数据可能未落盘（#已被改为 Confirmed in-memory；#" + "" + t["id"] + "）" + tag)
+            } else {
+                ui.hint.set_text("已确认 #" + "" + t["id"] + " → Confirmed（组织者拍板，读回一致）" + tag)
+            }
             return
         }
     }
@@ -410,11 +508,15 @@ fn reschedule_case(){
             }
             cases[i]["status"] = "Proposing"
             rebuild_lines()
-            save()
+            let ok = save()
             ui.case_list.render()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
-            ui.hint.set_text("改口：#" + "" + t["id"] + " 回到 Proposing，重新收敛（旧确认作废）" + tag)
+            if ok == false {
+                ui.hint.set_text("保存失败：守护数据可能未落盘（#已回到 Proposing in-memory；#" + "" + t["id"] + "）" + tag)
+            } else {
+                ui.hint.set_text("改口：#" + "" + t["id"] + " 回到 Proposing，重新收敛（旧确认作废）" + tag)
+            }
             return
         }
     }
@@ -444,11 +546,15 @@ fn cancel_case(){
                 undo_win_open = "yes"
                 undo_show_flag2 = "yes"    // #11：让 on_render 渲染可点的「撤销取消」
                 rebuild_lines()
-                save()
+                let ok = save()
                 ui.case_list.render()
                 let tag = ""
                 if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
-                ui.hint.set_text("已取消 #" + "" + target + "（5 秒内可点「撤销取消」）" + tag)
+                if ok == false {
+                    ui.hint.set_text("保存失败：守护数据可能未落盘（#已取消 in-memory；#" + "" + target + "，5 秒内可尝试撤销）" + tag)
+                } else {
+                    ui.hint.set_text("已取消 #" + "" + target + "（5 秒内可点「撤销取消」）" + tag)
+                }
                 // 5 秒后撤销窗口到期：自动清掉 hint 文案里的"可撤销"暗示
                 // === #9 修：守卫 undo_win_open —— 若用户已撤销则不再覆盖 ===
                 start_timeout(5.0, || {
@@ -519,9 +625,15 @@ fn undo_cancel(){
     undo_show_flag2 = "no"   // #11：撤下可点的撤销按钮
     cancel_pending_flag = "no"
     rebuild_lines()
-    save()
+    let ok = save()
     ui.case_list.render()
-    if restored_id != "0" && restored_id != "" {
+    if ok == false {
+        if restored_id != "0" && restored_id != "" {
+            ui.hint.set_text("保存失败：守护数据可能未落盘（#已撤销取消 in-memory；#" + restored_id + " 恢复到 " + prev + "）")
+        } else {
+            ui.hint.set_text("保存失败：守护数据可能未落盘（已撤销取消 in-memory）")
+        }
+    } else if restored_id != "0" && restored_id != "" {
         ui.hint.set_text("已撤销取消 #" + restored_id + " → 恢复到 " + prev)
     } else {
         ui.hint.set_text("已撤销取消")
