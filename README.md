@@ -14,8 +14,10 @@
 ```
 粘贴群消息 → 规则分诊（时间词 × 聚会/约定语气）→ 守护诞生（待拍板）
   → 抽时间槽（周六-上午）→ 抽活动/地点（骑车/深圳湾，抽不到就留空，绝不编造）
-  → 冲突检测：同日同时段已有安排？→ 冲突卡列出双方，让人裁决
+  → 冲突检测：同日同时段已有安排？→ 提示列出双方，让人裁决
+  → 参与人：报名的人记在这里（逗号分隔、上限 10 人；抽不到就写「未填写」，不编造）
   → 组织者点「确认这条守护」→ Confirmed，回执草稿四行就位
+  → 改时间：5 个常见时段轮换（周六-上午→下午→晚上→周日-上午→下午），**改完自动重算冲突**
   → 改口回 Proposing（回执刷新）· 取消两段式确认 + 5 秒撤销
 ```
 
@@ -24,7 +26,8 @@
 1. **不编造**：抽不到的时间/活动/地点一律留空显示「未抽取到」，不猜、不填。
 2. **用户始终主动**：分诊不确定时给澄清卡 +「仍然建守护」入口，不替用户做决定。
 3. **危险操作留退路**：取消/清空是两段式确认，且 5 秒内可撤销。
-4. **数据在用户手里**：可导出（屏显 JSON 供复制）、可一键清空、损坏自动备份。
+4. **矛盾交人裁决**：检测到同时段冲突只提示不自作主张；改一个时段即可自动解冲突。
+5. **数据在用户手里**：可导出（屏显 JSON 供复制）、可一键清空、损坏自动备份。
 
 失败不掩盖：无 AI 服务→明确降级继续可用 · 分诊未命中→澄清卡说明原因 ·
 损坏数据→备份后重启不丢 · 重复确认→「已确认，未重复」。
@@ -43,7 +46,7 @@ export OCTOSENSE_APP_HUB=<构建产物目录>
 python3 <OctoScript-App-Design-Flow>/tools/octo run app/qianxian/bundle --port 8141
 ```
 
-- **怎么用**：见 **[evidence/demo-script.md](evidence/demo-script.md)**（19 步三线：主线 / 冲突检测 / 危险操作与数据控制）。
+- **怎么用**：见 **[evidence/demo-script.md](evidence/demo-script.md)**（21 步三线：主线 / 冲突检测 / 危险操作与数据控制；每步输入都经真机验证）。
 - **复现与版本锁定**：见 **[run.md](run.md)**。
 - **门检**：`python3 $OCTO check app/qianxian/bundle` → 目标 `— PASSED`（仅 unsigned warning）。
 
@@ -55,7 +58,8 @@ app/guardian/            场外链路证明（同一套设计在真实 Matrix + 
                          G1–G5 六套冒烟 70+ 断言全绿）
 app/miniapp-qianxian/    旧 Rinx spike（已归档，被 app/qianxian 取代）
 evidence/                验收与证据：regression / edge-cases / demo-script /
-                         qianxian review 包 + 7 问作答
+                         ux-specs（规范对照）/ splash-constraints（运行时约束手册）/
+                         submission-readiness（提交就绪度）/ qianxian review 包 + 7 问作答
 PRIVACY.md               隐私政策（无网络 + 本机存储 + 用户可导出/清空）
 task.md                  任务说明与 12 条验收条件
 blueprint-gpt.md         设计蓝图（v0.7.1 冻结，四轮对抗评审）
