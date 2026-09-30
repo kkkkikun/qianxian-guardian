@@ -1,75 +1,73 @@
-# 牵线 · 聚会筹办守护（Agentic Event Case Guardian）
+# 牵线 · 聚会筹办守护（qianxian）
 
 > **一条群消息，长成一个被照顾到收尾的完整活动。**
 > 本作品是**活动生命周期守护**（Case 状态机），不是聊天增强——聊天只是意图的入口和结果的回执通道。
 
-- **主场景**：日历（时间收敛、冲突检测、待定 vs 已确认）
-- **联动**：即时消息 · Rinx（入口与回执）、天气（决策依据，Open-Meteo）
-- **比赛**：GOSIM Agentic App 黑客松 2026
+- **主场景**：日历（时间收敛、**冲突检测**、待定 vs 已确认）
+- **提交形态**：OctoSense **script-app**（`app/qianxian/bundle/`，`hub check — PASSED`）
+- **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）
 
 ## 它做什么
 
-群里一句"周六上午去深圳湾骑车，大概两小时？"之后：
+群里一句「周六上午去深圳湾骑车，大概两小时？」之后：
 
 ```
-群消息 → 规则分诊 → Octos 解析（严格 JSON）→ 防编造校验 → Case 诞生
-  → 提案发回群里（M1，无需授权） → 组织者回复「同意」（仅组织者有效）
-  → 执行：plans 历史（旧 Superseded / 新 Active）→ DB 读回断言 PASS
-  → M2 回执回群 → 后续：改口重收敛 / T-24h 提醒 / AA 台账 → 账目清零归档
+粘贴群消息 → 规则分诊（时间词 × 聚会/约定语气）→ 守护诞生（待拍板）
+  → 抽时间槽（周六-上午）→ 抽活动/地点（骑车/深圳湾，抽不到就留空，绝不编造）
+  → 冲突检测：同日同时段已有安排？→ 冲突卡列出双方，让人裁决
+  → 组织者点「确认这条守护」→ Confirmed，回执草稿四行就位
+  → 改口回 Proposing（回执刷新）· 取消两段式确认 + 5 秒撤销
 ```
 
 **四条最高法则**：
-1. SQLite Case 状态是唯一事实源；Octos 会话只是一次性推理上下文
-2. Agent 负责理解与规划（严格 JSON，无工具）；Guardian 负责确定性执行与验证
-3. 一次状态迁移 = 一个可追踪事务（revision + proposal_id + event_id + txn_id + 审计）
-4. 本地动作事务回滚；外部副作用 Outbox + txn 对账（不伪造成功）
 
-失败不掩盖：agent 不可用→规则兜底、地点歧义→澄清卡、越权确认→拒绝、提案过期→作废、
-重复确认→"已确认未重复"、外发失败→UNKNOWN 对账、注入尝试→拦截+审计。
+1. **不编造**：抽不到的时间/活动/地点一律留空显示「未抽取到」，不猜、不填。
+2. **用户始终主动**：分诊不确定时给澄清卡 +「仍然建守护」入口，不替用户做决定。
+3. **危险操作留退路**：取消/清空是两段式确认，且 5 秒内可撤销。
+4. **数据在用户手里**：可导出（屏显 JSON 供复制）、可一键清空、损坏自动备份。
+
+失败不掩盖：无 AI 服务→明确降级继续可用 · 分诊未命中→澄清卡说明原因 ·
+损坏数据→备份后重启不丢 · 重复确认→「已确认，未重复」。
+
+## 无 AI 也完整可用
+
+本应用**不依赖任何模型服务**：分诊、时间槽抽取、冲突检测、状态机全部是确定性规则。
+AI 只是可选增强——宿主提供 `octos.turn.start` 时才出现「AI 解析（可选）」按钮；
+本运行环境无该服务时**明确降级**并继续可用（见 `evidence/ux-specs.md` 4.8 记档的平台限制）。
 
 ## 快速开始
 
-见 **[run.md](run.md)**（版本锁定、启动命令、双账号复现步骤）。
-确定性冒烟（无需外部服务即可验证核心链路）：
-
 ```sh
-cd app/guardian
-python3 smoke_g4b.py   # 主链缝合 9/9
-python3 smoke_g5.py    # 注入拦截 + 崩溃补偿 9/9
+# 启动（需要 card-host；构建链见 run.md）
+export OCTOSENSE_APP_HUB=<构建产物目录>
+python3 <OctoScript-App-Design-Flow>/tools/octo run app/qianxian/bundle --port 8141
 ```
 
-## 架构一览
-
-```
-Rinx（宿主，零修改）── 群聊（双账号 + bot）＋ 活动簿网页卡
-        │ Matrix Client-Server API（bot sync）
-Guardian（本仓库，OUP 客户端）
-  ingress 幂等 → 分诊/关联 → 规则引擎 → octos serve（短会话）
-  → 严格 JSON 校验 → 白名单动作 → 本地事务 / Outbox 对账
-  → SQLite（唯一事实源：cases/plans/proposals/ledger/scheduled_tasks/case_events/outbox/audit）
-```
-
-完整设计（状态机、防编造校验链、消息三级权限、隐私三规则、四轮对抗评审记录）：
-**[blueprint-gpt.md](blueprint-gpt.md)** v0.7.1。
+- **怎么用**：见 **[evidence/demo-script.md](evidence/demo-script.md)**（19 步三线：主线 / 冲突检测 / 危险操作与数据控制）。
+- **复现与版本锁定**：见 **[run.md](run.md)**。
+- **门检**：`python3 $OCTO check app/qianxian/bundle` → 目标 `— PASSED`（仅 unsigned warning）。
 
 ## 目录
 
 ```
-app/guardian/          guardian 守护进程（场外链路证明，G1–G5 冒烟证据）
-  guardian/            核心模块（db/triage/dispatcher/cases/oup/outbox_sender/parser/activity_book）
-  schema.sql           唯一事实源 schema
-  smoke_g1..g5.py      六套确定性冒烟（70+ 断言）
-app/qianxian/          script-app 主提交物（A 路线，hub check PASSED）
-  bundle/              THE SUBMISSION（manifest/listing/main.splash/icon/截图）
-  build/               hub scan review 包 + 7 问作答（gitignore，副本见 evidence/qianxian/）
-app/miniapp-qianxian/  旧 Rinx spike（已归档，被 app/qianxian 取代）
-evidence/              验收记录与全量回归留档（含 qianxian review 包副本）
-PRIVACY.md             隐私政策（对齐 hosts 无网络 + 本机存储）
-task.md                任务说明与验收条件
-blueprint-gpt.md       设计蓝图（v0.7.1 冻结）
-run.md                 复现步骤（含 script-app 复现节）
-GOAL.md                执行总纲（内环任务书）
+app/qianxian/bundle/     THE SUBMISSION：manifest/listing/main.splash/icon/截图
+app/guardian/            场外链路证明（同一套设计在真实 Matrix + 真实 LLM 通道跑通，
+                         G1–G5 六套冒烟 70+ 断言全绿）
+app/miniapp-qianxian/    旧 Rinx spike（已归档，被 app/qianxian 取代）
+evidence/                验收与证据：regression / edge-cases / demo-script /
+                         qianxian review 包 + 7 问作答
+PRIVACY.md               隐私政策（无网络 + 本机存储 + 用户可导出/清空）
+task.md                  任务说明与 12 条验收条件
+blueprint-gpt.md         设计蓝图（v0.7.1 冻结，四轮对抗评审）
+run.md                   复现步骤 / 版本锁定
+GOAL.md changes.md       执行总纲与变更记录
 ```
+
+## 设计依据
+
+交互与可用性规范（含第一方系统应用逐条对照）见
+**[evidence/ux-specs.md](evidence/ux-specs.md)**；完整状态机与防编造校验链见
+**[blueprint-gpt.md](blueprint-gpt.md)** v0.7.1。
 
 ## 许可证
 
