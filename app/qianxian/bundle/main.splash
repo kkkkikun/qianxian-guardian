@@ -599,6 +599,19 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         // 空态分流（照 ai-providers:242-248 三分支）：本来没有 vs 筛选后没有，文案必须不同
         // 分支 A：本来就没有任何守护 —— 引导用户建第一条
         if cases.len() == 0 {
+            // === #11 新增：首用引导卡 —— 只用 seq==0 判断（seq 只在 add_case 成功后 +1）。
+            //   只要用户成功建过一条守护（seq>0），这张卡就永远消失；
+            //   即使用户后来删了所有守护（cases.len()==0），也不再回到首用引导，
+            //   只显示原本的"还没有聚会守护"通用空态。
+            //   写在 on_render 闭包里（#8/#10 实证：根组件属性不随状态重算）。
+            if seq == 0 {
+                Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
+                    Label{text: "第一次用？三步起一条守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                    Label{text: "① 粘贴群里那条聚会消息" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "② 点「建守护」，牵线分诊后生成提案" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "③ 组织者点同意，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
+                }
+            }
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
                 Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
                 Label{text: "粘贴一条群消息开始（例如：周六上午去深圳湾骑车）。点建守护后，行可点选。" draw_text.color: secondary draw_text.text_style.font_size: 13}
@@ -706,20 +719,36 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         }
     }}
     action_row := View{width: Fill height: Fit flow: Right spacing: 8
-        ButtonFlat{text: "同意选中" height: 32 padding: Inset{left: 14 right: 14} on_click: || confirm_case()
+        // === #11 动词化文案：同意选中 → 确认这条守护（绿=主行动 #7 状态色） ===
+        ButtonFlat{text: "确认这条守护" height: 32 padding: Inset{left: 14 right: 14} on_click: || confirm_case()
             draw_bg +: {border_radius: 16.0 color: #x34c759 color_hover: #x30b350 color_down: #x2a9e47 border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        ButtonFlat{text: "改口" height: 32 padding: Inset{left: 14 right: 14} on_click: || reschedule_case()
+        // === #11 动词化文案：改口 → 重新收敛（橙=警示 #7 状态色） ===
+        ButtonFlat{text: "重新收敛" height: 32 padding: Inset{left: 14 right: 14} on_click: || reschedule_case()
             draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xf08a00 color_down: #xd67d00 border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        // #8：取消按钮态 —— 第一次点变成"确认取消？"，5 秒内再点才执行
-        ButtonFlat{text: (if cancel_pending_id == 0 { "取消" } else { "确认取消（5s）" }) height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
-            draw_bg +: {border_radius: 16.0 color: #xff3b30 color_hover: #xe6352b color_down: #xcc2f26 border_size: 0.0}
-            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+        // === #11 动词化文案 + 取消按钮降权 ===
+        // 默认态（cancel_pending_id==0）：浅底 #xf2f2f7 + 红字 #xff3b30 —— 视觉弱化，与主行动拉开层级
+        // 待确认态（cancel_pending_id!=0）：实心红 #xff3b30 底 + 白字 —— 危险在生效瞬间才高亮
+        if cancel_pending_id == 0 {
+            ButtonFlat{text: "取消守护" height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
+                draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
+        } else {
+            ButtonFlat{text: "确认取消（5s）" height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
+                draw_bg +: {border_radius: 16.0 color: #xff3b30 color_hover: #xe6352b color_down: #xcc2f26 border_size: 0.0}
+                draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+        }
         // #9：撤销按钮已移到 case_list on_render 内的 undo_bar，根组件不再放 if 块
         // （#8 外环复验：根组件属性不随状态重算，必须放闭包里）
     }
-    ButtonFlat{text: "试用 AI 解析（可选增强）" height: 36 padding: Inset{left: 14 right: 14} on_click: || ai_parse()
-        draw_bg +: {border_radius: 18.0 color: #x5856d6 color_hover: #x4e4dc2 color_down: #x4443ab border_size: 0.0}
-        draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+    // === #11 操作行 vs AI行 语义分组：拆成第二行（可选增强），与主行动拉开层级 ===
+    ai_row := View{width: Fill height: Fit flow: Right spacing: 8
+        // === #11 AI 按钮弱化：去掉"试用"+"(可选增强)" → "AI 解析（可选）"；
+        //   视觉从实心紫底白字降为浅底 + accent 字（与主行 #x007aff 同系，深色）——
+        //   与新增的"取消守护"降权是同一思路：让默认态不抢眼 ===
+        ButtonFlat{text: "AI 解析（可选）" height: 32 padding: Inset{left: 14 right: 14} on_click: || ai_parse()
+            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+            draw_text +: {color: accent color_hover: accent color_down: accent}}
+    }
 }
