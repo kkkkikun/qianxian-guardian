@@ -11,6 +11,13 @@ let case_selected = []      // 每条 case 的选中标记字符串（"yes"/"no"
 let case_badge_text = []    // 每条 case 的徽章文字字符串
 let case_receipt = []       // 每条 case 的回执四行（字符串数组，无回执为空数组 []）
 let case_place_lines = []   // 每条 case 的地点字符串（供 on_render 读，避免闭包读对象字段）
+// === #17b 新增：时间槽抽取 + 冲突检测（扁平字符串数组，供 on_render 只读） ===
+// slot_day/slot_part 两者都抽到才有冲突检测意义；任一抽不到就留空，
+// 即「宁可空着不猜」（防编造）。conflict 是 "yes"/"no"。
+let case_slot_day = []      // 每条 case 的「星期几」字符串（"周一"…/"周日"/""）
+let case_slot_part = []     // 每条 case 的「时段」字符串（"上午"/"中午"/"下午"/"晚上"/""）
+let case_conflict = []      // 每条 case 的冲突标记（"yes"/"no"）
+let case_conflict_lines = []// 每条 case 的冲突卡内容字符串数组（双方拼成单个字符串，防陷阱 A）
 // === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
 let case_expanded = []      // 点卡片 = 选中 + 切换该条的展开/折叠
 let seq = 0
@@ -153,6 +160,10 @@ fn rebuild_lines(){
     case_activity_lines.clear()
     case_place_full.clear()
     case_status_text.clear()
+    case_slot_day.clear()
+    case_slot_part.clear()
+    case_conflict.clear()
+    case_conflict_lines.clear()
     // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
     // （点同一张卡：折叠；点别的卡：保留各自展开态，保留用户的"展开阅读"行为）
     for i in cases.len() {
@@ -177,6 +188,46 @@ fn rebuild_lines(){
         if pl == "" { pl = "（未抽取到）" }
         case_place_full.push(pl)
         case_status_text.push(status_badge_text(st))
+
+        // === #17b 新增：扁平「星期几 / 时段 / 冲突标记」三字段（供 on_render 只读） ===
+        // 对象字段访问在闭包里不稳，硬约束 #4/#5；预置到 push 字面量 + 重建时落到扁平数组。
+        let sd = "" + cases[i]["slot_day"]
+        let sp = "" + cases[i]["slot_part"]
+        let cf_lab = "" + cases[i]["conflict"]
+        case_slot_day.push(sd)
+        case_slot_part.push(sp)
+        case_conflict.push(cf_lab)
+        // 冲突卡内容：双方拼成单个字符串（陷阱 A：不要嵌套数组）。
+        // 没有冲突时留空数组（on_render 不渲染）。
+        if cf_lab == "yes" {
+            let slot_label = sd + "-" + sp
+            let other_id = ""
+            let other_slot = ""
+            // 在 cases 里找出冲突的对方（非 Cancelled 且同 slot），用 i_outer 避免内层 j 复用陷阱
+            for ci in cases.len() {
+                if ci == i { continue }
+                if cases[ci]["status"] == "Cancelled" { continue }
+                let osd = "" + cases[ci]["slot_day"]
+                let osp = "" + cases[ci]["slot_part"]
+                if osd == "" || osp == "" { continue }
+                if osd == sd && osp == sp {
+                    other_id = "" + cases[ci]["id"]
+                    other_slot = osd + "-" + osp
+                    break
+                }
+            }
+            let head = "⚠ 时间冲突：#" + id_str + " · " + act + " 也占「" + slot_label + "」时段"
+            let tail = "要改期还是取消？冲突双方：\n  - #" + id_str + " · " + act + " · " + slot_label
+            if other_id != "" {
+                tail = tail + "\n  - #" + other_id + " · " + ("" + cases[i]["activity"]) + " · " + other_slot
+            }
+            let arr_c = []
+            arr_c.push(head)
+            arr_c.push(tail)
+            case_conflict_lines.push(arr_c)
+        } else {
+            case_conflict_lines.push([])
+        }
 
         // === #9 新增：保持现有 case_expanded 长度与 cases 同步 ===
         if i >= case_expanded.len() {
@@ -457,6 +508,27 @@ fn guess_place(text){
     return ""
 }
 
+// === #17b 新增：抽取「星期几」=== 命中「周一/周二/.../周日」或「今天/明天/后天」（按序列映射）。
+// 抽不到留 ""，不编造。
+fn guess_slot_day(text){
+    let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    for d in days {
+        if text.search(d) >= 0 { return d }
+    }
+    // 「今天/明天/后天」是相对时间，本 runtime 无时钟 API，无 anchor「今天」返回，
+    // 所以也留空——宁可空着不猜。
+    return ""
+}
+
+// === #17b 新增：抽取「时段」=== 命中「上午/中午/下午/晚上」之一即返回；抽不到留 ""。
+fn guess_slot_part(text){
+    let parts = ["上午", "中午", "下午", "晚上"]
+    for p in parts {
+        if text.search(p) >= 0 { return p }
+    }
+    return ""
+}
+
 fn add_case(){
     // 建守护算"非取消按钮" → 放弃任何待确认 + 关掉撤销窗口
     clear_cancel_pending("")
@@ -483,7 +555,25 @@ fn add_case(){
     if seq <= max_existing_id {
         seq = max_existing_id + 1
     }
-    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": ""})
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no"})
+    // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
+    // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
+    // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
+    let new_day = "" + cases[cases.len() - 1]["slot_day"]
+    let new_part = "" + cases[cases.len() - 1]["slot_part"]
+    if new_day != "" && new_part != "" {
+        for ci in cases.len() - 1 {
+            if cases[ci]["status"] == "Cancelled" { continue }
+            let od = "" + cases[ci]["slot_day"]
+            let op = "" + cases[ci]["slot_part"]
+            if od == "" || op == "" { continue }
+            if od == new_day && op == new_part {
+                cases[cases.len() - 1]["conflict"] = "yes"
+                cases[ci]["conflict"] = "yes"
+                break
+            }
+        }
+    }
     selected_id = seq  // 新建后自动选中，体验闭环
     ui.msg_input.set_text("")
     rebuild_lines()
@@ -1067,6 +1157,11 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 Label{width: Fill text: prefix + exp_prefix + case_lines[j] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
                                 Badge{BadgeText{text: case_badge_text[j] draw_text.color: status_badge_fg(case_statuses[j])}
                                     draw_bg +: {color: status_badge_bg(case_statuses[j])}}
+                                // === #17b：折叠态冲突红点（8×8，徽章旁；RoundedView 显式 width+height 防陷阱 B）===
+                                if case_conflict[j] == "yes" {
+                                    RoundedView{width: 8 height: 8
+                                        show_bg: true draw_bg.color: #xff3b30 draw_bg.border_radius: 4.0}
+                                }
                             }
                             // === #15：折叠态三行（标题+徽章 / 活动·地点 / 原文截断24字+…）
                             //   第二行末尾追加「· 共 N 字」（N = case_text_lines[j].len() 真实计算）。
@@ -1098,6 +1193,15 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                             if expanded == "yes" {
                                 // 展开与摘要之间留一道细线（用次级色细 View 模拟）
                                 View{width: Fill height: 1 draw_bg.color: #xefeff4}
+                                // === #17b：展开态顶部红底冲突卡（RoundedView 显式 width/height 防陷阱 B；
+                                //   两个并列 Label 不要三层嵌套防陷阱 C；不用 \n 换行防陷阱 D）===
+                                if case_conflict[j] == "yes" {
+                                    RoundedView{width: Fill height: Fit padding: Inset{left: 12 right: 12 top: 10 bottom: 10}
+                                        show_bg: true draw_bg.color: #xff3b30 draw_bg.border_radius: 12.0
+                                        Label{width: Fill text: case_conflict_lines[j][0] draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
+                                        Label{width: Fill text: case_conflict_lines[j][1] draw_text.color: #xffffff draw_text.text_style.font_size: 12}
+                                    }
+                                }
                                 // 状态
                                 View{width: Fill height: Fit flow: Down spacing: 2
                                     SectionLabel{text: "状态"}
