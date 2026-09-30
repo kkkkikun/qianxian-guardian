@@ -66,3 +66,17 @@
 | 制造冲突 | 周六上午也要去吃饭 |
 | 无冲突对照 | 星期六晚上去吃烧烤 |
 | 分诊未命中（澄清卡） | 今天天气不错 |
+
+## 录制前置：本机一条命令起应用
+
+```sh
+cd /home/kikun/MyProject/Agentic-octos/my-entry/app/qianxian
+export OCTOSENSE_APP_HUB=/home/kikun/MyProject/Agentic-octos/.build-hub-926/OctoSense-App-Hub
+python3 /home/kikun/MyProject/Agentic-octos/octosense-ws/OctoScript-App-Design-Flow/tools/octo \
+  run bundle --port 8141
+```
+
+- 需要**有图形会话**的机器（窗口真实显示，才能系统截图）。
+- 走完线 1–3 后截两张图；`curl -s 127.0.0.1:8141/quit` 退出。
+- 截图落在 `bundle/screenshots/01-main.png` 后，请把该文件交给外环重 `stamp`+`check`
+  （改动文件会改 digest，必须重跑门检）。
