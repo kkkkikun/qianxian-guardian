@@ -408,6 +408,101 @@ fn target_id(){
 }
 
 // === #8 保留：清除取消二次确认态（任何非「取消」按钮/动作都放弃确认） ===
+// === #22 重启：改时间（5 个常见槽位轮换） ===
+//   手册约束：C4 对象字段动态赋值不可靠 → **重建整个 cases 数组**再整体替换；
+//   C7 布尔返回不可靠 → 字符串标记；C6 闭包不捕获循环变量 → 用 selected_id。
+let cycle_save_result = "ok"
+fn cycle_slot(id_str){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再改时间")
+        return
+    }
+    let cur = -1
+    for ci in cases.len() {
+        if "" + cases[ci]["id"] == id_str { cur = ci }
+    }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
+    }
+    if cases[cur]["status"] == "Cancelled" {
+        ui.hint.set_text("该守护已取消，改时间无效（#" + id_str + "）")
+        return
+    }
+    // 5 个常见槽位序列（确定性，无日期计算——本 runtime 无时钟 API）
+    let sd = "" + cases[cur]["slot_day"]
+    let sp = "" + cases[cur]["slot_part"]
+    let nd = "周六"
+    let np = "上午"
+    if sd == "周六" && sp == "上午" { nd = "周六"  np = "下午" }
+    if sd == "周六" && sp == "下午" { nd = "周六"  np = "晚上" }
+    if sd == "周六" && sp == "晚上" { nd = "周日"  np = "上午" }
+    if sd == "周日" && sp == "上午" { nd = "周日"  np = "下午" }
+    if sd == "周日" && sp == "下午" { nd = "周六"  np = "上午" }
+    // C4：重建整个数组（逐个 push 新对象，key 带引号）
+    let new_cases = []
+    for ri in cases.len() {
+        if ri == cur {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": nd, "slot_part": np,
+                "conflict": cases[ri]["conflict"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"]})
+        } else {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": cases[ri]["slot_day"], "slot_part": cases[ri]["slot_part"],
+                "conflict": cases[ri]["conflict"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"]})
+        }
+    }
+    cases = new_cases
+    // 重算冲突：先全置 no，再同槽互标 yes
+    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" { cases[a1]["conflict"] = "no" } }
+    for a2 in cases.len() {
+        if cases[a2]["status"] == "Cancelled" { continue }
+        let d2 = "" + cases[a2]["slot_day"]
+        let p2 = "" + cases[a2]["slot_part"]
+        if d2 == "" || p2 == "" { continue }
+        for a3 in cases.len() {
+            if a3 == a2 { continue }
+            if cases[a3]["status"] == "Cancelled" { continue }
+            let d3 = "" + cases[a3]["slot_day"]
+            let p3 = "" + cases[a3]["slot_part"]
+            if d3 == "" || p3 == "" { continue }
+            if d3 == d2 && p3 == p2 {
+                cases[a2]["conflict"] = "yes"
+                cases[a3]["conflict"] = "yes"
+            }
+        }
+    }
+    let my_conflict = "" + cases[cur]["conflict"]
+    rebuild_lines()
+    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
+    cycle_save_result = "ok"
+    if r != nil {
+        let m = "" + r
+        if m != "" { cycle_save_result = "fail" }
+    }
+    ui.case_list.render()
+    let label_new = nd + "-" + np
+    if cycle_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（保存失败，仅在内存）")
+    } else if my_conflict == "yes" {
+        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（与另一条同时段，仍冲突）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（已无冲突）")
+    }
+}
+
 fn clear_cancel_pending(hint_text){
     cancel_pending_id = 0
     cancel_prev_status = ""
@@ -1299,10 +1394,21 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 Label{width: Fill text: case_conflict_lines[j] + " ｜ " + case_conflict_party[j] draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
                             }
                         }
-                        // 状态
+                        // 状态（深度 6，已验证可渲染 —— 硬约束手册 A1）
                         View{width: Fill height: Fit flow: Down spacing: 2
                             SectionLabel{text: "状态"}
                             BodyLine{text: case_status_text[j]}
+                        }
+                        // 时间 + 改时间按钮：与「状态」**严格同层**（深度 6），
+                        // 按钮直接作为该 View 的子节点，不再多包一层（手册 A1/A2）。
+                        let _slot_now = "" + case_slot_day[j] + "-" + case_slot_part[j]
+                        if _slot_now == "-" { _slot_now = "未抽取" }
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "时间"}
+                            BodyLine{text: "时段：" + _slot_now}
+                            ButtonFlat{text: "改时间（5 槽轮换）" height: 28 padding: Inset{left: 12 right: 12} on_click: || cycle_slot("" + selected_id)
+                                draw_bg +: {border_radius: 14.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
+                                draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
                         }
                         // 活动
                         View{width: Fill height: Fit flow: Down spacing: 2
