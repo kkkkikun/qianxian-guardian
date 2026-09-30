@@ -17,6 +17,9 @@ let case_place_lines = []   // 每条 case 的地点字符串（供 on_render �
 let case_slot_day = []      // 每条 case 的「星期几」字符串（"周一"…/"周日"/""）
 let case_slot_part = []     // 每条 case 的「时段」字符串（"上午"/"中午"/"下午"/"晚上"/""）
 let case_conflict = []      // 每条 case 的冲突标记（"yes"/"no"）
+// === #22 新增：组合展示串「周六-上午」（给展开态时间行 + 改时间按钮用）
+//   扁平字符串数组供 on_render 只读，避免在闭包里拼 slots。
+let case_slot_label = []    // 每条 case 的「星期-时段」字符串（如"周六-上午"），抽不到时空串
 let case_conflict_lines = []
 let case_conflict_party = []   // 冲突双方整行（扁平字符串，单独存避免 split/嵌套）// 每条 case 的冲突卡内容字符串数组（双方拼成单个字符串，防陷阱 A）
 // === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
@@ -177,6 +180,7 @@ fn rebuild_lines(){
     case_conflict.clear()
     case_conflict_lines.clear()
     case_conflict_party.clear()
+    case_slot_label.clear()   // #22 同步清空「星期-时段」展示串
     // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
     // （点同一张卡：折叠；点别的卡：保留各自展开态，保留用户的"展开阅读"行为）
     for i in cases.len() {
@@ -214,6 +218,12 @@ fn rebuild_lines(){
         case_slot_day.push(sd)
         case_slot_part.push(sp)
         case_conflict.push(cf_lab)
+        // === #22 新增：组合展示串「星期-时段」（供展开态时间行 + 改时间按钮读）
+        //   抽不到任一就留空串，避免渲染端拼 nil。
+        let s_lab = sd
+        if s_lab != "" && sp != "" { s_lab = sd + "-" + sp }
+        else if sp != "" { s_lab = sp }
+        case_slot_label.push(s_lab)
         // 冲突卡内容：双方拼成单个字符串（陷阱 A：不要嵌套数组）。
         // 没有冲突时留空数组（on_render 不渲染）。
         if cf_lab == "yes" {
@@ -471,6 +481,138 @@ fn toggle_case(id){
 // === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
 fn on_tap_card(id){
     toggle_case(id)
+}
+
+// === #22 新增：改时间 = 5 个常见槽位轮换 ===
+//   序列固定：周六-上午 → 周六-下午 → 周六-晚上 → 周日-上午 → 周日-下午 → 回周六-上午
+//   当前 slot_day/slot_part 不在序列里（例如用户原文抽到"周一"），从序列第 0 项起算。
+//   **必须重建整个 cases 数组再整体替换**（对象字段动态赋值不可靠，硬约束 #11）。
+//   重算 conflict → rebuild_lines → save → render → hint 明示新时段 + 冲突状态。
+fn cycle_slot(id){
+    if id == 0 {
+        ui.hint.set_text("先选中一条守护再改时间")
+        return
+    }
+    // 5 个常见槽位（按黑板 #22 给定的顺序）
+    let seq_days = ["周六", "周六", "周六", "周日", "周日"]
+    let seq_parts = ["上午", "下午", "晚上", "上午", "下午"]
+    let seq_len = 5
+    // 找到目标 case 的下标
+    let target_i = -1
+    for i in cases.len() {
+        if cases[i]["id"] == id { target_i = i; break }
+    }
+    if target_i < 0 {
+        ui.hint.set_text("找不到 #" + "" + id + "，可能已被删除")
+        return
+    }
+    // 读当前 slot_day/slot_part
+    let cur_d = "" + cases[target_i]["slot_day"]
+    let cur_p = "" + cases[target_i]["slot_part"]
+    // 找当前槽位在序列里的下标；不在则从 0 起
+    let cur_idx = -1
+    for k in seq_len {
+        if seq_days[k] == cur_d && seq_parts[k] == cur_p {
+            cur_idx = k
+            break
+        }
+    }
+    let next_idx = 0
+    if cur_idx >= 0 {
+        next_idx = cur_idx + 1
+        if next_idx >= seq_len { next_idx = 0 }
+    }
+    let new_d = seq_days[next_idx]
+    let new_p = seq_parts[next_idx]
+    // === 关键：重建整个 cases 数组（硬约束 #11 — 对象字段动态赋值不可靠） ===
+    let new_cases = []
+    for i in cases.len() {
+        let new_id = cases[i]["id"]
+        let new_text = "" + cases[i]["text"]
+        let new_activity = "" + cases[i]["activity"]
+        let new_place = "" + cases[i]["place"]
+        let new_status = "" + cases[i]["status"]
+        let new_ra = "" + cases[i]["receipt_activity"]
+        let new_rp = "" + cases[i]["receipt_place"]
+        let new_rt = "" + cases[i]["receipt_text"]
+        let new_rd = "" + cases[i]["receipt_done"]
+        // 目标 case 写新 slot，其他保持
+        let new_sd = "" + cases[i]["slot_day"]
+        let new_sp = "" + cases[i]["slot_part"]
+        let new_cf = "" + cases[i]["conflict"]
+        if i == target_i {
+            new_sd = new_d
+            new_sp = new_p
+            new_cf = "no"   // 重算前先置 no，rebuild_lines 内会按新 slot 重判
+        }
+        new_cases.push({
+            "id": new_id,
+            "text": new_text,
+            "activity": new_activity,
+            "place": new_place,
+            "status": new_status,
+            "receipt_activity": new_ra,
+            "receipt_place": new_rp,
+            "receipt_text": new_rt,
+            "receipt_done": new_rd,
+            "slot_day": new_sd,
+            "slot_part": new_sp,
+            "conflict": new_cf
+        })
+    }
+    cases = new_cases
+    // === 重算 conflict（沿用 #17b 同一逻辑；走整体新数组重建，不做原地字段改写） ===
+    //   任一方 slot 抽不到就不参与配对（同 #17b 契约「宁可空着不猜」）。
+    let new_conflict_marks = []
+    for i in cases.len() {
+        let cf_i = "no"
+        let sd_i = "" + cases[i]["slot_day"]
+        let sp_i = "" + cases[i]["slot_part"]
+        let st_i = "" + cases[i]["status"]
+        if sd_i != "" && sp_i != "" && st_i != "Cancelled" {
+            for ci in cases.len() {
+                if ci == i { continue }
+                if ("" + cases[ci]["status"]) == "Cancelled" { continue }
+                let sd_c = "" + cases[ci]["slot_day"]
+                let sp_c = "" + cases[ci]["slot_part"]
+                if sd_c == "" || sp_c == "" { continue }
+                if sd_c == sd_i && sp_c == sp_i {
+                    cf_i = "yes"
+                    break
+                }
+            }
+        }
+        new_conflict_marks.push(cf_i)
+    }
+    // 重建最终数组：把新的 conflict 标记灌回去（仍然走整体替换）
+    let final_cases = []
+    for j in cases.len() {
+        final_cases.push({
+            "id": cases[j]["id"],
+            "text": "" + cases[j]["text"],
+            "activity": "" + cases[j]["activity"],
+            "place": "" + cases[j]["place"],
+            "status": "" + cases[j]["status"],
+            "receipt_activity": "" + cases[j]["receipt_activity"],
+            "receipt_place": "" + cases[j]["receipt_place"],
+            "receipt_text": "" + cases[j]["receipt_text"],
+            "receipt_done": "" + cases[j]["receipt_done"],
+            "slot_day": "" + cases[j]["slot_day"],
+            "slot_part": "" + cases[j]["slot_part"],
+            "conflict": new_conflict_marks[j]
+        })
+    }
+    cases = final_cases
+    // save + rebuild + render
+    save()
+    rebuild_lines()
+    ui.case_list.render()
+    // hint 明示新时段 + 是否仍有冲突
+    let new_slot = new_d + "-" + new_p
+    let cf_now = "" + cases[target_i]["conflict"]
+    let conflict_msg = "无冲突"
+    if cf_now == "yes" { conflict_msg = "仍冲突" }
+    ui.hint.set_text("#" + "" + id + " 时间已改到「" + new_slot + "」（" + conflict_msg + "）")
 }
 
 // === #10 新增：切换筛选标签（GestureView on_tap 回调入口） ===
@@ -1313,6 +1455,22 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                         View{width: Fill height: Fit flow: Down spacing: 2
                             SectionLabel{text: "地点"}
                             BodyLine{text: case_place_full[j]}
+                        }
+                        // === #22 新增：时间 + 改时间按钮（与「状态/活动/地点/原文」同层）
+                        //   只读扁平字符串 case_slot_label[j]（硬约束 #4/#5/#11）。
+                        //   ButtonFlat 橙色（同 #11 改口配色，警示语义：调整时间非主操作）。
+                        //   on_click 闭包不捕获循环变量 j，改用 "" + selected_id（硬约束 #12）。
+                        //   节点深度 ≤6（与 状态/活动/地点/原文 同级；不在 View{...Down spacing 2} 里再嵌嵌套）。
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "时间"}
+                            View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                                let _slot_disp = "" + case_slot_label[j]
+                                if _slot_disp == "" { _slot_disp = "（未抽取到）" }
+                                BodyLine{width: Fill text: "时间：" + _slot_disp}
+                                ButtonFlat{text: "改时间" height: 28 padding: Inset{left: 12 right: 12} on_click: || cycle_slot("" + selected_id)
+                                    draw_bg +: {border_radius: 14.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
+                                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+                            }
                         }
                         // 原文（已在摘要显示过，这里做"完整原文"占位，便于区分）
                         View{width: Fill height: Fit flow: Down spacing: 2
