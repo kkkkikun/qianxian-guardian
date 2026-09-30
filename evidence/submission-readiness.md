@@ -51,3 +51,18 @@
 | ③ 完整复现 | 按 `run.md` C 段起 card-host | ✅ `snap:200`，正常交互与退出 |
 
 **结论**：评审拿到公仓后，无论是否构建工具链，都有可执行的下一步。
+
+## 附录：文档命令实测（2026-10-01，第二轮）
+
+按上轮教训「给评审的命令不实测就不能写」，把 README 与 run.md 里的命令逐条实跑：
+
+| 命令 | 结果 |
+|---|---|
+| `python3 $OCTO check bundle` | ✅ `qianxian 0.1.0 — PASSED` |
+| `python3 $OCTO doctor` | ✅ hub / card-host / cargo / template 全部 `[ok]` |
+| `python3 $OCTO run bundle --port 8141 --detach --hidden` | ✅ 起得来，`/snap` 200，可 `/quit` |
+| `python3 smoke_g4b.py`（guardian 场外证明） | ✅ **9/9 PASS** |
+| 只 clone App-Hub 直接 `cargo build` | ❌ 失败（缺兄弟仓）→ README 已补 `setup-native.py` 前置 |
+
+> 第一轮实测已修掉 run.md 的占位符与 README ② 路径的构建前置；
+> 本轮确认剩余命令全部可用。
