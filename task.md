@@ -150,3 +150,11 @@
 **Q4 本地 Palpo + bot 演示 —— ✅ 与官方实践一致**：官方 `rinx-miniapps.md` 记载核验即用 "Palpo 隔离测试账号"（双账号、隐藏窗口、未加密私聊）；`palpo-and-octos-deploy/` 是官方维护的 Docker 编排；hagency 模式 = per-agent Matrix 账号。→ 本地 Palpo + 测试账号 + bot 账号与官方口径一致；演示时按官方要求标注"练习数据"。
 
 **结论：四问缩为一问** —— ★"课堂包锁定的 Rinx 版本是否包含 9/27 的 host-services broker？若否，能否使用更新的 Rinx main 提交原生小程序形态？"（此问答案决定轨 2 script-app 是否可行；轨 1 独立 guardian 不受影响继续施工。）
+
+**更新（2026-09-30，A 路线已定）**：Q2 答案为 **YES**——本地 `a72e4b00` 经 `gh api pulls/28`
+确认为 PR #28 本体 merge（含 ADR 0007 broker）。但官方 Design-Flow 中文 README（9-27 状态页）
+明确：商店 script-app 在 card-host/各 OctoSense Shell 均无 `octos.*`/`model` 服务
+（`no service answers`），仅 Rinx mini-app host 提供。因此定 **A 路线**：
+提交物为 `app/qianxian/`（官方 script-app 形态，无 AI 完整可用，`octos.turn.start`
+仅可选增强且有降级），Python guardian 降级为场外链路证明。`hub check — PASSED` +
+`hub scan` 7 问作答见 `evidence/qianxian/`。
