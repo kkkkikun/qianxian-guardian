@@ -10,7 +10,7 @@
   "listing": {
     "age_rating": "all",
     "category": "productivity",
-    "description": "牵线是聚会筹办守护：把群里一句聚会意向认领为守护（Case），组织时间收敛，给出有来源的方案；只有组织者能确认；每个动作执行后读回核验；改口、取消都会跟进。无 AI 也完整可用（本地规则分诊+状态机）；有设备 AI 服务时可做可选的消息解析增强。",
+    "description": "牵线是聚会筹办守护：把群里一句聚会意向变成一条守护，抽时间槽与活动地点，检测同时段冲突并交人裁决；组织者确认后生成回执草稿与提醒计划；改时间、改口、取消都有退路。抽不到就留空，不编造。无 AI 也完整可用（本地规则分诊+状态机）；有设备 AI 服务时可做可选的解析增强。",
     "icon": "assets/icon.svg",
     "keywords": [
       "聚会",
@@ -47,7 +47,7 @@
     },
     "id": "qianxian",
     "integrity": {
-      "bundle_blake3": "c3ae1df0285272762fc58a324c736ecd7635c7b674e3ac93bb6505531bad1bcf",
+      "bundle_blake3": "8c41c25292d06b70d027b826d211cfe0a9dc56c7300c59deb4a3971c065a31d0",
       "signature": null
     },
     "name": "牵线",
