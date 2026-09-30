@@ -9,23 +9,21 @@ let case_text_lines = []    // 每条 case 的原文字符串
 let case_statuses = []      // 每条 case 的状态字符串（"Proposing"/"Confirmed"/"Cancelled"）
 let case_selected = []      // 每条 case 的选中标记字符串（"yes"/"no"）
 let case_badge_text = []    // 每条 case 的徽章文字字符串
-let case_badge_bg = []      // 每条 case 的徽章底色字符串
-let case_badge_fg = []      // 每条 case 的徽章文字色字符串
-let case_bar_color = []     // 每条 case 的高亮条颜色字符串
 let case_receipt = []       // 每条 case 的回执四行（字符串数组，无回执为空数组 []）
 let seq = 0
 let selected_id = 0  // 选中态：0 表示无选中
 
 // 状态色：行首徽章文字色与底色（Proposing 灰 / Confirmed 绿 / Cancelled 红）
+// 注：颜色必须是颜色字面量（#x…），不能返回字符串——draw_bg.color 期望 Vec4f
 fn status_badge_bg(st){
-    if st == "Confirmed" { return "#xe6f7ec" }
-    if st == "Cancelled" { return "#xfdecea" }
-    return "#xefeff4"  // Proposing / 兜底灰
+    if st == "Confirmed" { return #xe6f7ec }
+    if st == "Cancelled" { return #xfdecea }
+    return #xefeff4  // Proposing / 兜底灰
 }
 fn status_badge_fg(st){
-    if st == "Confirmed" { return "#x1f8a3a" }
-    if st == "Cancelled" { return "#xff3b30" }
-    return "#x6b6b73"  // Proposing / 兜底灰
+    if st == "Confirmed" { return #x1f8a3a }
+    if st == "Cancelled" { return #xff3b30 }
+    return #x6b6b73  // Proposing / 兜底灰
 }
 fn status_badge_text(st){
     if st == "Confirmed" { return "已确认" }
@@ -34,9 +32,9 @@ fn status_badge_text(st){
     return "" + st
 }
 fn status_bar_color(st){
-    if st == "Confirmed" { return "#x34c759" }
-    if st == "Cancelled" { return "#xff3b30" }
-    return "#xb0b0b8"  // Proposing / 兜底
+    if st == "Confirmed" { return #x34c759 }
+    if st == "Cancelled" { return #xff3b30 }
+    return #xb0b0b8  // Proposing / 兜底
 }
 
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
@@ -48,9 +46,6 @@ fn rebuild_lines(){
     case_statuses.clear()
     case_selected.clear()
     case_badge_text.clear()
-    case_badge_bg.clear()
-    case_badge_fg.clear()
-    case_bar_color.clear()
     case_receipt.clear()
     for i in cases.len() {
         let id_str = "" + cases[i]["id"]
@@ -61,9 +56,6 @@ fn rebuild_lines(){
         let st = "" + cases[i]["status"]
         case_statuses.push(st)
         case_badge_text.push(status_badge_text(st))
-        case_badge_bg.push(status_badge_bg(st))
-        case_badge_fg.push(status_badge_fg(st))
-        case_bar_color.push(status_bar_color(st))
         let title = "" + cases[i]["activity"]
         case_lines.push("#" + id_str + " · " + title)
         case_text_lines.push("" + cases[i]["text"])
@@ -316,18 +308,21 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             for i in case_lines.len() {
                 let cur_id = case_ids[i]
                 // 高亮条：选中态左侧 4pt 色条（保留 ▶ 兼顾读屏）
-                let hi_color = case_bar_color[i]
+                let hi_color = status_bar_color(case_statuses[i])
                 let hi_w = 4
                 if case_selected[i] != "yes" { hi_w = 0 }
-                Card{on_tap: || select_case(cur_id)
-                    View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.0}
+                // 注：on_tap 只属 GestureView（RoundedView/Card 没有此属性），
+                // 照第一方 news:319 的 GestureView 包 Card 写法
+                GestureView{width: Fill height: Fit on_tap: |x, y| select_case(cur_id)
+                    Card{
+                        View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.0}
                         View{width: hi_w height: 56 draw_bg.color: hi_color}
                         View{width: Fill height: Fit flow: Down spacing: 6
                             View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                                 // 标题：选中时前缀 ▶
                                 Label{width: Fill text: (if case_selected[i] == "yes" { "▶ " } else { "  " }) + case_lines[i] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                                Badge{BadgeText{text: case_badge_text[i] draw_text.color: case_badge_fg[i]}
-                                    draw_bg +: {color: case_badge_bg[i]}}
+                                Badge{BadgeText{text: case_badge_text[i] draw_text.color: status_badge_fg(case_statuses[i])}
+                                    draw_bg +: {color: status_badge_bg(case_statuses[i])}}
                             }
                             TextLine{text: case_text_lines[i]}
                             // 回执四行：仅 Confirmed 渲染（rebuild_lines 已按状态填好数组）
@@ -341,6 +336,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                             }
                         }
                     }
+                }
                 }
             }
             // 非空分支兜底：留 1px 占位（ai-providers:241 注释范式）
