@@ -38,12 +38,27 @@
 AI 只是可选增强——宿主提供 `octos.turn.start` 时才出现「AI 解析（可选）」按钮；
 本运行环境无该服务时**明确降级**并继续可用（见 `evidence/ux-specs.md` 4.8 记档的平台限制）。
 
-## 快速开始
+## 怎么审这个作品（三条路，从零门槛到完整复现）
 
+**① 零门槛：直接读源码**（不需要任何构建）
+本应用是纯解释执行的脚本，核心逻辑都在一个文件里：
+`app/qianxian/bundle/main.splash`（约 1600 行，Splash/OctoScript 方言；函数名即语义：add_case / confirm_case / cycle_slot / add_person / rebuild_lines …）。
+配套阅读：[evidence/demo-script.md](evidence/demo-script.md)（21 步操作）、
+[evidence/regression-20261001.md](evidence/regression-20261001.md)（14 项真机验证）。
+
+**② 门禁核验**（需要上游 `hub` 工具）
 ```sh
-# 启动（需要 card-host；构建链见 run.md）
-export OCTOSENSE_APP_HUB=<构建产物目录>
-python3 <OctoScript-App-Design-Flow>/tools/octo run app/qianxian/bundle --port 8141
+git clone https://github.com/OctoSense-org/OctoSense-App-Hub.git
+cd OctoSense-App-Hub && cargo build --release -p octosense-app-hub --bin hub
+./target/release/hub check <你的-clone>/my-entry/app/qianxian/bundle --allow-unsigned
+# 期望：qianxian 0.1.0 — PASSED（仅 unsigned warning）
+```
+
+**③ 完整复现**（需 card-host 运行时；见 [run.md](run.md)）
+```sh
+cd my-entry/app/qianxian
+export OCTOSENSE_APP_HUB=../../../.build-hub-926/OctoSense-App-Hub   # 或按 run.md B 段自建
+python3 ../../../octosense-ws/OctoScript-App-Design-Flow/tools/octo run bundle --port 8141
 ```
 
 - **怎么用**：见 **[evidence/demo-script.md](evidence/demo-script.md)**（21 步三线：主线 / 冲突检测 / 危险操作与数据控制；每步输入都经真机验证）。
