@@ -51,7 +51,7 @@
 - **交付状态**：P0-A 主链 ✅ / P0-B 可信性 ✅ / **P0-C 独立复现 ✅**。
   - **公开仓库结构已整理并本地提交（`703afb1` + `1e114b6`，历史脱敏重写后；原 `91120c5`/`d259d66`）**：Apache 2.0 LICENSE、README（架构/快速开始/目录）、.gitignore（config.json/test-accounts/*.db/tokens 全部忽略，已验证无凭据入库）、整理后全套冒烟复验 6 套全绿。
   - **A 路线 script-app（`app/qianxian/`，2026-09-30）**：`hub check — PASSED`（仅 unsigned warning，
-    digest `91d69ba5`）+ `hub scan` 7 问作答（`evidence/qianxian/`）；真机 card-host（自建 9-26 构建链）
+    digest `fdcae9bb`）+ `hub scan` 7 问作答（`evidence/qianxian/`）；真机 card-host（自建 9-26 构建链）
     `/snap` 11 控件验证；publisher 真值 ✅（Aurora-X/foxmail/公仓 PRIVACY 链接）；
     剩余占位：真截图（llvmpipe 无头抓帧超时，待有头重截）重 stamp。
   - 剩余操作项：① ~~建仓推送~~ ✅ 已推送 https://github.com/kkkkikun/qianxian-guardian
