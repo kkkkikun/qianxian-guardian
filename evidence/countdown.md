@@ -5,13 +5,15 @@
 
 ## 机器可验已完成（无需再动）
 
-- [x] `hub check — PASSED`（digest `dcabff8d`，仅 unsigned warning）
+- [x] `hub check — PASSED`（仅 unsigned warning）。
+      **当前 digest / commit 以核验命令为准**（避免文档过期）：
+      `python3 $OCTO check app/qianxian/bundle` 与 `git rev-parse --short HEAD`
 - [x] `hub scan` 7 问作答（`evidence/qianxian/review.json` + `review-answers.md`）
 - [x] **三张关键截图**：`bundle/screenshots/{01-main,02-expanded,03-conflict}.png`
       （412×892；01 折叠态 / 02 展开态 / 03 冲突失败态）——本环境无图形会话，
       抓帧超时，故按**真实控件树渲染**，来源已在 review 答复中如实标注
 - [x] card-host 真跑：14 项功能全量回归（`evidence/regression-20261001.md`）
-- [x] 公仓推送（`master` = `c7b8078`，submit issue #1，digest 已对齐）
+- [x] 公仓推送（submit issue #1 已开；**commit 与 digest 在核验时同步刷新**）
 - [x] 官方 issue **#13 已发**（队名 + 仓库地址）
 - [x] 历史脱敏（真密码 0 残留）+ config.example 占位
 - [x] PRIVACY / listing 真值（Aurora-X / foxmail / 公仓链接 200）
