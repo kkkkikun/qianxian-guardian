@@ -519,6 +519,7 @@ fn guess_place(text){
 //   或「今天/明天/后天」（按序列映射）。
 // 抽不到留 ""，不编造。
 fn guess_slot_day(text){
+    // 注：search 是子串匹配，故「星期一/星期天」也能命中「周一」/「周日」。
     let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     for d in days {
         if text.search(d) >= 0 { return d }
