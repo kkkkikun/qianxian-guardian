@@ -31,7 +31,8 @@
     "release_notes": "初版：群消息建守护、组织者确认、改口重收敛、取消保留历史，全部本地规则可用。",
     "schema": 1,
     "screenshots": [
-      "screenshots/01-main.png"
+      "screenshots/01-main.png",
+      "screenshots/02-expanded.png"
     ],
     "subtitle": "群里说好的聚会，盯到人人到场"
   },
@@ -47,7 +48,7 @@
     },
     "id": "qianxian",
     "integrity": {
-      "bundle_blake3": "18fdc35353589dc1e9913f51b4dea22049955c3f0b2b08c3dae0d13b4b380af5",
+      "bundle_blake3": "c6dbd2f47f10f84e0b5171a10853c2237d8425f5768270507f460924ea1e906f",
       "signature": null
     },
     "name": "牵线",

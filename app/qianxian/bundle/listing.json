@@ -3,10 +3,21 @@
   "subtitle": "群里说好的聚会，盯到人人到场",
   "description": "牵线是聚会筹办守护：把群里一句聚会意向变成一条守护，抽时间槽与活动地点，检测同时段冲突并交人裁决；组织者确认后生成回执草稿与提醒计划；改时间、改口、取消都有退路。抽不到就留空，不编造。无 AI 也完整可用（本地规则分诊+状态机）；有设备 AI 服务时可做可选的解析增强。",
   "category": "productivity",
-  "keywords": ["聚会", "活动", "守护", "日历", "组织"],
-  "screenshots": ["screenshots/01-main.png"],
+  "keywords": [
+    "聚会",
+    "活动",
+    "守护",
+    "日历",
+    "组织"
+  ],
+  "screenshots": [
+    "screenshots/01-main.png",
+    "screenshots/02-expanded.png"
+  ],
   "icon": "assets/icon.svg",
-  "platforms": ["linux"],
+  "platforms": [
+    "linux"
+  ],
   "publisher": {
     "name": "Aurora-X",
     "support": "kkkkikun@foxmail.com",
