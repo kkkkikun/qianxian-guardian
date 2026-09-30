@@ -39,3 +39,15 @@
 - **危险操作留退路**：两段式确认 + 5 秒撤销 + 数据可导出/清空。
 - **可复现证据链**：`evidence/` 下回归、边界、review 包（7 问作答）、demo 脚本、规范对照齐备。
 - **平台限制如实记档**：`evidence/ux-specs.md` 4.8 说明读屏/暗色/动态字体/无头抓帧为何不可做。
+
+## 附录：评审路径实测（2026-10-01）
+
+按 README「三条审阅路径」实跑验证：
+
+| 路径 | 验证方式 | 结果 |
+|---|---|---|
+| ① 零门槛读源码 | 直接打开 `app/qianxian/bundle/main.splash` | ✅ 1609 行，函数名即语义 |
+| ② 门禁核验 | `git clone https://github.com/kkkkikun/qianxian-guardian.git` → 用上游 `hub` 跑 `check` | ✅ `qianxian 0.1.0 — PASSED`（仅 unsigned warning），digest `8c41c252` 与公仓一致 |
+| ③ 完整复现 | 按 `run.md` C 段起 card-host | ✅ `snap:200`，正常交互与退出 |
+
+**结论**：评审拿到公仓后，无论是否构建工具链，都有可执行的下一步。
