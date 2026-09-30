@@ -29,6 +29,12 @@ let selected_id = 0  // 选中态：0 表示无选中
 let cancel_pending_id = 0           // 第一次点取消时的目标 id（0 = 无待确认）
 let cancel_prev_status = ""         // 取消前该条的状态（用于撤销恢复）
 let cancel_pending_deadline = 0     // 取消二次确认的截止时刻（ms 级 epoch，由 start_timeout 推进）
+// === #25 新增：撤销目标限定（解决 #24 自审 S8 + 外环复核 #25 实证 bug）===
+// 原 undo_cancel 遍历所有 cases 把 status=="Cancelled" 的全恢复，导致
+//「取消 #1 → 取消 #2 → 撤销」把 #1 也连带恢复，违反"撤销只针对刚发生的操作"。
+// 修法 = 记录本次取消的那一条 id（cancelled_last_id，0 表示无），撤销时只恢复 id
+// 与其相等的那一条，其余 Cancelled 维持原状；恢复成功后 cancelled_last_id=0。
+let cancelled_last_id = 0           // 最近一次被取消的那条 id（0 = 无；撤销成功 / 放弃 / 5s 到期后归零）
 
 // === #9 新增：撤销窗口标记 —— 防止 5 秒定时器在用户已撤销之后再次覆盖 hint 文案 ===
 // 撤销窗口打开 = 撤销按钮可用；一旦撤销成功或窗口到期，必须把它关掉，
@@ -599,6 +605,8 @@ fn clear_cancel_pending(hint_text){
     cancel_pending_id = 0
     cancel_prev_status = ""
     cancel_pending_deadline = 0
+    // === #25：撤销窗口也跟着归零，避免"换操作"后旧撤销目标还能被恢复 ===
+    cancelled_last_id = 0
     if hint_text != "" {
         ui.hint.set_text(hint_text)
     }
@@ -958,6 +966,9 @@ fn cancel_case(){
                 cancel_pending_id = 0
                 cancel_pending_deadline = 0
                 cancel_pending_flag = "no"  // #11：确认态按钮撤下
+                // === #25：记录本次被取消的那条 id；undo_cancel 据此只恢复这一条，
+                //   不会把更早被取消的别的条连带恢复（#24 自审 S8 实证 bug）
+                cancelled_last_id = target
                 // === #9：撤销窗口打开 —— 现在起 5 秒内可点「撤销取消」 ===
                 undo_win_open = "yes"
                 undo_show_flag2 = "yes"    // #11：让 on_render 渲染可点的「撤销取消」
@@ -978,6 +989,9 @@ fn cancel_case(){
                         undo_show_flag2 = "no"          // #11：撤下撤销按钮
                     undo_win_open = "no"
                         cancel_prev_status = ""
+                        // === #25：撤销窗口到期，撤销目标也归零；
+                        //   之后任何 undo_cancel 都找不到目标（C4 重建 + 全局数字标记）
+                        cancelled_last_id = 0
                         rebuild_lines()
                         ui.case_list.render()
                         ui.hint.set_text("取消 #" + "" + target + " 已生效（撤销窗口已过）")
@@ -1019,23 +1033,36 @@ fn cancel_case(){
     }
 }
 
-// === #8 保留 + #9 修：撤销刚发生的取消（5 秒窗口内） ===
+// === #8 保留 + #9 修 + #25 修：撤销刚发生的取消（5 秒窗口内，仅恢复刚取消的那一条） ===
 fn undo_cancel(){
-    if cancel_prev_status == "" || undo_win_open == "no" {
+    if cancel_prev_status == "" || undo_win_open == "no" || cancelled_last_id == 0 {
         ui.hint.set_text("没有可撤销的取消（5 秒窗口已过或未取消过）")
         return
     }
     let restored_id = "0"
+    let target_id_str = "" + cancelled_last_id
+    // === #25：只恢复 id==cancelled_last_id 的那一条，其余 Cancelled 不动 ===
     for i in cases.len() {
-        if cases[i]["status"] == "Cancelled" {
-            cases[i]["status"] = cancel_prev_status
-            restored_id = "" + cases[i]["id"]
+        if ("" + cases[i]["id"]) == target_id_str {
+            if cases[i]["status"] == "Cancelled" {
+                cases[i]["status"] = cancel_prev_status
+                // === #18：恢复状态后让回执重新快照（之前清掉的字段保留空，
+                //   下次确认/重建时由 rebuild_lines 兜底拉新值） ===
+                restored_id = "" + cases[i]["id"]
+            } else {
+                // 防御性分支：id 命中但状态已经不是 Cancelled（极端时序错位），
+                // 也提示用户并清掉撤销目标，避免悬空
+                restored_id = "0"
+            }
+            break   // #25：id 唯一，找到即可跳出（C4 重写法：不重建数组，只改一条）
         }
     }
     cancel_pending_id = 0
     cancel_pending_deadline = 0
     let prev = cancel_prev_status
     cancel_prev_status = ""
+    // === #25：撤销成功后归零，避免后续 undo_cancel 重复恢复同一目标 ===
+    cancelled_last_id = 0
     // === #9 关键：关撤销窗口 + 阻止 5s 定时器覆盖当前 hint ===
     undo_win_open = "no"
     undo_show_flag2 = "no"   // #11：撤下可点的撤销按钮
@@ -1050,9 +1077,9 @@ fn undo_cancel(){
             ui.hint.set_text("保存失败：守护数据可能未落盘（已撤销取消 in-memory）")
         }
     } else if restored_id != "0" && restored_id != "" {
-        ui.hint.set_text("已撤销取消 #" + restored_id + " → 恢复到 " + prev)
+        ui.hint.set_text("已撤销取消 #" + restored_id + " → 恢复到 " + prev + "（仅本次，其他已取消条目维持）")
     } else {
-        ui.hint.set_text("已撤销取消")
+        ui.hint.set_text("已撤销取消（但目标条目已不在 Cancelled 状态，未改动）")
     }
 }
 
