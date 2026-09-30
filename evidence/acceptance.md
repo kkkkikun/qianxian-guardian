@@ -30,8 +30,8 @@ A 路线补充（2026-09-30，script-app `app/qianxian/`）：`hub check — PAS
 |---|---|
 | 可运行的原型 + 启动说明 | ✅ guardian 全链可运行；run.md 启动说明 |
 | 固定版本公开源码 + Apache 2.0 | ✅ 已推送（https://github.com/kkkkikun/qianxian-guardian，`master`；LICENSE 在仓；历史已脱敏） |
-| 2-3 分钟演示视频 | ⏳ 待录（演示脚本 10 步在蓝图） |
-| 两张关键截图 | ⏳ 待录（活动簿 Confirmed 页 + 失败态页） |
+| 2-3 分钟演示视频 | ⏳ 待录（脚本见 evidence/demo-script.md，10 步双线+口播稿） |
+| 两张关键截图 | ⏳ 待截（script-app Confirmed 态 + AI 降级/注入失败态；占位图待换，见 demo-script.md） |
 | 简短需求说明 | ✅ task.md |
 | 数据来源与限制 | ✅ task.md 输入表 + run.md 限制节 |
 | 至少一次操作 + 可核对结果 + 一个失败态 | ✅ 全链冒烟 + 注入/对账失败态 |
@@ -42,4 +42,5 @@ A 路线补充（2026-09-30，script-app `app/qianxian/`）：`hub check — PAS
 **P0-A（主链）/ P0-B（可信性）全部通过并有自动化证据；A 路线 script-app 门已过
 （`hub check PASSED` + scan 7 问，证据见 `evidence/qianxian/`）；P0-C 独立复现：
 仓库结构就绪（本地 commits 至 `1ff7e44` 起，Apache 2.0 LICENSE + .gitignore + README +
-PRIVACY），待用户推送公开仓库（publisher 真值 + 真截图回填后）由队外用户执行。**
+PRIVACY），已推送至 https://github.com/kkkkikun/qianxian-guardian（`master`，submit issue #1），
+待真截图回填 + 队外用户执行。**
