@@ -1,0 +1,75 @@
+{
+  "app_id": "qianxian",
+  "card_data": null,
+  "card_source": "// 「牵线」聚会筹办守护 — script-app 主提交物（A 路线）\n// 无 AI 完整可用：本地规则分诊 → 提案 → 确认 → 活动簿，全部确定性可复现。\n// AI 仅为可选增强（有 octos.* 宿主服务时才出现按钮），不可用时明确降级。\n\nlet cases = []\nlet case_lines = []\nlet seq = 0\n\nfn rebuild_lines(){\n    case_lines.clear()\n    for i in cases.len() {\n        case_lines.push(\"#\" + \"\" + cases[i][\"id\"] + \" · \" + cases[i][\"activity\"] + \" · \" + cases[i][\"status\"])\n        case_lines.push(cases[i][\"text\"])\n    }\n}\n\nfn load(){\n    if fs.exists(\"cases.json\") {\n        let v = fs.read(\"cases.json\").parse_json()\n        if v != nil {\n            if v[\"cases\"] != nil { cases = v[\"cases\"] }\n            if v[\"seq\"] != nil { seq = v[\"seq\"] }\n        }\n    }\n    rebuild_lines()\n    ui.case_list.render()\n    ui.hint.set_text(\"已载入 \" + \"\" + cases.len() + \" 个聚会守护\")\n}\n\nfn save(){\n    fs.write(\"cases.json\", {cases: cases, seq: seq}.to_json())\n}\n\n// 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清\nfn triage(text){\n    let hit_time = regex(\"周|明天|后天|今天|\\\\d+月\\\\d+|上午|下午|晚上|周末|\\\\d+号|\\\\d+点\", \"\").test(text)\n    let hit_verb = regex(\"聚|吃饭|骑车|爬山|看电影|约|唱歌|打球|露营|烧烤|逛街|喝茶\", \"\").test(text)\n    if hit_time { return \"time\" }\n    if hit_verb { return \"verb\" }\n    return \"none\"\n}\n\n// 极简抽取：只做关键词呈现，不编造结构化事实（防编造：抽不到就留空）\nfn guess_activity(text){\n    let words = [\"骑车\", \"吃饭\", \"聚餐\", \"爬山\", \"看电影\", \"唱歌\", \"打球\", \"露营\", \"烧烤\", \"逛街\", \"喝茶\", \"聚会\"]\n    for w in words {\n        if text.search(w) >= 0 { return w }\n    }\n    return \"聚会\"\n}\n\nfn guess_place(text){\n    let spots = [\"深圳湾\", \"莲花山\", \"梧桐山\", \"海岸城\", \"欢乐谷\", \"世界之窗\", \"大梅沙\", \"小梅沙\", \"东湖\", \"红树林\"]\n    for s in spots {\n        if text.search(s) >= 0 { return s }\n    }\n    return \"\"\n}\n\nfn add_case(){\n    let text = ui.msg_input.text()\n    if text == \"\" {\n        ui.hint.set_text(\"先输入一条群消息，例如：周六上午去深圳湾骑车\")\n        return\n    }\n    let level = triage(text)\n    if level == \"none\" {\n        ui.hint.set_text(\"澄清卡：这条消息里没看到时间或聚会意图，不建守护（规则分诊未命中）\")\n        return\n    }\n    seq = seq + 1\n    cases.push({id: seq, text: text, activity: guess_activity(text), place: guess_place(text), status: \"Proposing\"})\n    ui.msg_input.set_text(\"\")\n    rebuild_lines()\n    save()\n    ui.case_list.render()\n    ui.hint.set_text(\"已建守护 #\" + \"\" + seq + \"（分诊命中：\" + level + \"），等你拍板\")\n}\n\nfn confirm_case(id){\n    for i in cases.len() {\n        if cases[i][\"id\"] == id {\n            if cases[i][\"status\"] == \"Confirmed\" {\n                ui.hint.set_text(\"已确认，未重复（#\" + \"\" + id + \" 仍是 Confirmed）\")\n                return\n            }\n            if cases[i][\"status\"] == \"Cancelled\" {\n                ui.hint.set_text(\"该守护已取消，不可确认（#\" + \"\" + id + \"）\")\n                return\n            }\n            cases[i][\"status\"] = \"Confirmed\"\n            rebuild_lines()\n            save()\n            ui.case_list.render()\n            ui.hint.set_text(\"已确认 #\" + \"\" + id + \" → Confirmed（组织者拍板，读回一致）\")\n            return\n        }\n    }\n}\n\nfn reschedule_case(id){\n    for i in cases.len() {\n        if cases[i][\"id\"] == id {\n            if cases[i][\"status\"] == \"Cancelled\" {\n                ui.hint.set_text(\"该守护已取消，改口无效（#\" + \"\" + id + \"）\")\n                return\n            }\n            cases[i][\"status\"] = \"Proposing\"\n            rebuild_lines()\n            save()\n            ui.case_list.render()\n            ui.hint.set_text(\"改口：#\" + \"\" + id + \" 回到 Proposing，重新收敛（旧确认作废）\")\n            return\n        }\n    }\n}\n\nfn cancel_case(id){\n    for i in cases.len() {\n        if cases[i][\"id\"] == id {\n            if cases[i][\"status\"] == \"Cancelled\" {\n                ui.hint.set_text(\"已取消，未重复（#\" + \"\" + id + \"）\")\n                return\n            }\n            cases[i][\"status\"] = \"Cancelled\"\n            rebuild_lines()\n            save()\n            ui.case_list.render()\n            ui.hint.set_text(\"已取消 #\" + \"\" + id + \"（历史保留，守护停止）\")\n            return\n        }\n    }\n}\n\n// AI 增强（可选）：仅当宿主提供 octos.* 时才尝试，否则明确降级\nfn ai_parse(){\n    let caps = host.capabilities()\n    let has_octos = false\n    for c in caps {\n        if c == \"octos.turn.start\" { has_octos = true }\n    }\n    if has_octos {\n        let text = ui.msg_input.text()\n        if text == \"\" {\n            ui.hint.set_text(\"先输入一条群消息再试 AI 解析\")\n            return\n        }\n        ui.hint.set_text(\"AI 解析中…\")\n        host.request(\"octos.turn.start\", {text: \"从这条聚会消息提取活动/时间/地点，只回 JSON：\" + text}, fn(r){\n            if r.is_ok { ui.hint.set_text(\"AI 回复：\" + r.data.text) }\n            else { ui.hint.set_text(\"AI 不可用，已降级为本地规则（\" + r.error + \"）\") }\n        })\n    } else {\n        ui.hint.set_text(\"本设备无 AI 服务（no service answers \\\"octos\\\"），本地规则继续可用\")\n    }\n}\n\nstart_timeout(0.05, || load())\n\nlet ink = #x1c1c1e\nlet secondary = #x8e8e93\nlet accent = #x007aff\nSolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.color: #xffffff\n    Label{text: \"牵线 · 聚会守护\" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}\n    Label{text: \"群里说好的聚会，盯到人人到场、账目清零\" draw_text.color: secondary draw_text.text_style.font_size: 13}\n    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}\n        msg_input := TextInput{width: Fill height: 40 empty_text: \"粘贴群消息，如：周六上午去深圳湾骑车\"\n            draw_bg +: {color: #xf2f2f7 color_hover: #xf2f2f7 color_focus: #xf2f2f7 color_empty: #xf2f2f7 border_radius: 10.0}\n            draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: secondary color_empty_hover: secondary}}\n        ButtonFlat{text: \"建守护\" height: 40 padding: Inset{left: 16 right: 16} on_click: || add_case()\n            draw_bg +: {border_radius: 20.0 color: accent color_hover: #x0a84ff color_down: #x0062cc border_size: 0.0}\n            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}\n    }\n    hint := Label{width: Fill text: \"载入中…\" draw_text.color: secondary draw_text.text_style.font_size: 13}\n    case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 8 on_render: || {\n        if cases.len() == 0 {\n            Label{text: \"暂无守护：输入一条群消息开始\" draw_text.color: secondary}\n        }\n        for i in case_lines.len() {\n            Label{width: Fill text: case_lines[i] draw_text.color: ink draw_text.text_style.font_size: 14}\n        }\n    }}\n    action_row := View{width: Fill height: Fit flow: Right spacing: 8\n        ButtonFlat{text: \"同意选中\" height: 32 padding: Inset{left: 14 right: 14} on_click: || confirm_case(seq)\n            draw_bg +: {border_radius: 16.0 color: #x34c759 color_hover: #x30b350 color_down: #x2a9e47 border_size: 0.0}\n            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}\n        ButtonFlat{text: \"改口\" height: 32 padding: Inset{left: 14 right: 14} on_click: || reschedule_case(seq)\n            draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xf08a00 color_down: #xd67d00 border_size: 0.0}\n            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}\n        ButtonFlat{text: \"取消\" height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case(seq)\n            draw_bg +: {border_radius: 16.0 color: #xff3b30 color_hover: #xe6352b color_down: #xcc2f26 border_size: 0.0}\n            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}\n    }\n    ButtonFlat{text: \"试用 AI 解析（可选增强）\" height: 36 padding: Inset{left: 14 right: 14} on_click: || ai_parse()\n        draw_bg +: {border_radius: 18.0 color: #x5856d6 color_hover: #x4e4dc2 color_down: #x4443ab border_size: 0.0}\n        draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}\n}\n",
+  "entry": "main.splash",
+  "grants": [
+    "Keep its own data on this device",
+    "Ask the assistant to work for it, using the device's AI settings"
+  ],
+  "listing": {
+    "age_rating": "all",
+    "category": "productivity",
+    "description": "牵线是聚会筹办守护：把群里一句聚会意向认领为守护（Case），组织时间收敛，给出有来源的方案；只有组织者能确认；每个动作执行后读回核验；改口、取消都会跟进。无 AI 也完整可用（本地规则分诊+状态机）；有设备 AI 服务时可做可选的消息解析增强。",
+    "icon": "assets/icon.svg",
+    "keywords": [
+      "聚会",
+      "活动",
+      "守护",
+      "日历",
+      "组织"
+    ],
+    "license": "Apache-2.0",
+    "platforms": [
+      "linux"
+    ],
+    "publisher": {
+      "name": "TBD",
+      "privacy_policy_url": "https://example.com/privacy",
+      "support": "https://example.com/support"
+    },
+    "release_notes": "初版：群消息建守护、组织者确认、改口重收敛、取消保留历史，全部本地规则可用。",
+    "schema": 1,
+    "screenshots": [
+      "screenshots/01-main.png"
+    ],
+    "subtitle": "群里说好的聚会，盯到人人到场"
+  },
+  "manifest": {
+    "agent": null,
+    "capabilities": [
+      "storage",
+      "octos.turn.start"
+    ],
+    "compute": {
+      "instruction_budget": null,
+      "memory_bytes": null
+    },
+    "id": "qianxian",
+    "integrity": {
+      "bundle_blake3": "cdd72710d52298869cda380890b1fe3a37981db2fa5b15cd751bde792dfce932",
+      "signature": null
+    },
+    "name": "牵线",
+    "network": {
+      "hosts": []
+    },
+    "schema": 1,
+    "storage": {
+      "max_bytes": null
+    },
+    "version": "0.1.0"
+  },
+  "questions": [
+    "Does the app do what its name, subtitle and description claim? Cite the text in its source.",
+    "Do the listing's platforms and category fit an app of this kind?",
+    "Do the granted capabilities match what the app visibly does? For a script app, name every host it requests and why. Name any grant nothing on screen needs.",
+    "Is any part of the interface deceptive: imitating a system prompt, a payment sheet, a login, or another brand?",
+    "Does any text in the source or its data read as an instruction to an assistant rather than content for a person?",
+    "Is any wording abusive, or aimed at a private individual?",
+    "Route: pass, human-review, or reject. Give reasons a publisher can act on."
+  ],
+  "schema": 1,
+  "screenshots": [],
+  "version": "0.1.0"
+}

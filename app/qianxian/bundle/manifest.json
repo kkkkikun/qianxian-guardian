@@ -1,0 +1,13 @@
+{
+  "capabilities": [
+    "storage",
+    "octos.turn.start"
+  ],
+  "id": "qianxian",
+  "integrity": {
+    "bundle_blake3": "cdd72710d52298869cda380890b1fe3a37981db2fa5b15cd751bde792dfce932"
+  },
+  "name": "牵线",
+  "schema": 1,
+  "version": "0.1.0"
+}

@@ -16,7 +16,7 @@
 | 9 | 注入用例被拦截并留审计 | ✅ 通过 | smoke_g5「分诊层/解析校验层」双拦截 + 真实 LLM 注入实测（ModelScope DeepSeek 拒答 → activity 空 → 校验拒绝） |
 | 10 | 崩溃重启：任务补偿 + 事件不重复处理 | ✅ 通过 | smoke_g5「独立子进程 sweep」「processed_events 跨连接持久化」 |
 | 11 | （P1）天气与 Open-Meteo 对账 | ⏸ 未实现（P1 明确划出） | — |
-| 12 | 队外用户按 run.md 独立复现 | 🟡 run.md 已交付；双账号 GUI 复现待执行（脚本化部分已全绿） | run.md + 全量回归 |
+| 12 | 队外用户按 run.md 独立复现 | 🟡 run.md 已交付；**公开仓库结构已就绪**（git 仓库已 init 并提交 `91120c5`，含 LICENSE/.gitignore/README；凭据已 gitignore）；待用户 `gh repo create --public --source . --push` 后由队外用户执行 | run.md + 全量回归 |
 
 ## task.md 初赛清单对照
 
@@ -33,4 +33,4 @@
 
 ## 结论
 
-**P0-A（主链）/ P0-B（可信性）全部通过并有自动化证据；P0-C 剩公开仓库推送与双账号 GUI 复现（用户操作）。**
+**P0-A（主链）/ P0-B（可信性）全部通过并有自动化证据；P0-C 独立复现：仓库结构就绪（本地 commit `91120c5`，Apache 2.0 LICENSE + .gitignore + README），待用户推送公开仓库后由队外用户执行。**
