@@ -24,7 +24,9 @@ let cancel_pending_deadline = 0     // 取消二次确认的截止时刻（ms �
 // === #9 新增：撤销窗口标记 —— 防止 5 秒定时器在用户已撤销之后再次覆盖 hint 文案 ===
 // 撤销窗口打开 = 撤销按钮可用；一旦撤销成功或窗口到期，必须把它关掉，
 // 否则 5s 后那个 start_timeout 回调会把"已撤销 #N"的提示覆盖掉。
-let undo_win_open = "no"            // "yes"/"no"
+let undo_win_open = "no"
+let cancel_pending_flag = "no"          // 取消待确认标记（供 on_render 渲染确认态按钮）
+let undo_show_flag2 = "no"             // 撤销条可见标记（供 on_render 渲染撤销按钮）            // "yes"/"no"
 
 // === #10 新增：筛选状态 + 计数（扁平字符串，不读 cases[i][...]） ===
 // current_filter 是当前选中的筛选标签："all" / "Proposing" / "Confirmed" / "Cancelled"
@@ -388,8 +390,10 @@ fn cancel_case(){
                 cases[i]["status"] = "Cancelled"
                 cancel_pending_id = 0
                 cancel_pending_deadline = 0
+                cancel_pending_flag = "no"  // #11：确认态按钮撤下
                 // === #9：撤销窗口打开 —— 现在起 5 秒内可点「撤销取消」 ===
                 undo_win_open = "yes"
+                undo_show_flag2 = "yes"    // #11：让 on_render 渲染可点的「撤销取消」
                 rebuild_lines()
                 save()
                 ui.case_list.render()
@@ -400,7 +404,8 @@ fn cancel_case(){
                 // === #9 修：守卫 undo_win_open —— 若用户已撤销则不再覆盖 ===
                 start_timeout(5.0, || {
                     if undo_win_open == "yes" {
-                        undo_win_open = "no"
+                        undo_show_flag2 = "no"          // #11：撤下撤销按钮
+                    undo_win_open = "no"
                         cancel_prev_status = ""
                         rebuild_lines()
                         ui.case_list.render()
@@ -419,6 +424,7 @@ fn cancel_case(){
             cancel_pending_id = target
             cancel_prev_status = "" + cases[i]["status"]
             cancel_pending_deadline = 1
+            cancel_pending_flag = "yes"   // #11：让 on_render 渲染「确认取消（5s）」变体
             rebuild_lines()
             ui.case_list.render()
             let tag = ""
@@ -430,6 +436,8 @@ fn cancel_case(){
                     cancel_pending_id = 0
                     cancel_pending_deadline = 0
                     cancel_prev_status = ""
+                    cancel_pending_flag = "no"
+                    undo_show_flag2 = "no"
                     rebuild_lines()
                     ui.case_list.render()
                     ui.hint.set_text("已放弃取消 #" + "" + target + "（5 秒内未再点取消）")
@@ -459,6 +467,8 @@ fn undo_cancel(){
     cancel_prev_status = ""
     // === #9 关键：关撤销窗口 + 阻止 5s 定时器覆盖当前 hint ===
     undo_win_open = "no"
+    undo_show_flag2 = "no"   // #11：撤下可点的撤销按钮
+    cancel_pending_flag = "no"
     rebuild_lines()
     save()
     ui.case_list.render()
@@ -473,6 +483,9 @@ fn undo_cancel(){
 fn ai_parse(){
     clear_cancel_pending("")
     undo_win_open = "no"
+    undo_show_flag2 = "no"
+    cancel_pending_flag = "no"
+    ui.case_list.render()
     let caps = host.capabilities()
     let has_octos = false
     for c in caps {
@@ -529,6 +542,16 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     }
     hint := Label{width: Fill text: "载入中…" draw_text.color: secondary draw_text.text_style.font_size: 13}
     case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
+        // === #11 外环修：取消确认态变体（根组件 if 不随状态重算，必须放闭包内）===
+        if cancel_pending_flag == "yes" {
+            View{width: Fill height: Fit flow: Right align: Align{y: 0.5}
+                ButtonFlat{text: "确认取消（5s）" height: 32 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
+                    draw_bg +: {border_radius: 16.0 color: #xff3b30 color_hover: #xe6352b color_down: #xcc2f26 border_size: 0.0}
+                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+            }
+        } else {
+            View{width: Fill height: 1}
+        }
         // === #10 新增：筛选标签栏 + 计数（必须放 on_render 内：根组件属性不随状态重算，#8 实证） ===
         // 照第一方 news:301-306 写法：if t.id == tab {TabButtonActive{}} else {TabButton{}}
         // 计数照 ai-providers:45 "N models" 写法。Tab 是 GestureView on_tap 触发 set_filter。
