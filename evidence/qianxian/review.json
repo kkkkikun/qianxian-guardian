@@ -25,7 +25,7 @@
     ],
     "publisher": {
       "name": "Aurora-X",
-      "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/main/PRIVACY.md",
+      "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md",
       "support": "kkkkikun@foxmail.com"
     },
     "release_notes": "初版：群消息建守护、组织者确认、改口重收敛、取消保留历史，全部本地规则可用。",
@@ -47,7 +47,7 @@
     },
     "id": "qianxian",
     "integrity": {
-      "bundle_blake3": "91d69ba5ccaf49337ba88dc486776c72c672d356d56dc5b44bf873c006ada3df",
+      "bundle_blake3": "fdcae9bbec4354777d98c02d4ff80d869706d221520b9f600213734335bee16d",
       "signature": null
     },
     "name": "牵线",
