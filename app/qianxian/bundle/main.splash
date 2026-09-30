@@ -1283,6 +1283,54 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                             }
                             TextLine{text: _act_full + " · " + _pl_disp + " · 共 " + "" + _text_len + " 字"}
                             TextLine{text: _shown_text}
+                            if expanded == "yes" {
+                        // 展开与摘要之间留一道细线（用次级色细 View 模拟）
+                        View{width: Fill height: 1 draw_bg.color: #xefeff4}
+                        // === #17b：展开态顶部红底冲突卡（RoundedView 显式 width/height 防陷阱 B；
+                        //   两个并列 Label 不要三层嵌套防陷阱 C；不用 \n 换行防陷阱 D）===
+                        if case_conflict[j] == "yes" {
+
+                            // 冲突卡：两行分别存在两个扁平字符串数组里
+                            // （陷阱 A：不用嵌套数组；陷阱 D：不指望 \n 换行）
+                            // 冲突卡：一个 Label 一张卡（#17b 外环复验：RoundedView 内
+                            // 第二个子 Label 静默不渲染，故两行各自一张卡）。
+                            RoundedView{width: Fill height: Fit padding: Inset{left: 12 right: 12 top: 10 bottom: 10}
+                                show_bg: true draw_bg.color: #xff3b30 draw_bg.border_radius: 12.0
+                                Label{width: Fill text: case_conflict_lines[j] + " ｜ " + case_conflict_party[j] draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
+                            }
+                        }
+                        // 状态
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "状态"}
+                            BodyLine{text: case_status_text[j]}
+                        }
+                        // 活动
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "活动"}
+                            BodyLine{text: case_activity_lines[j]}
+                        }
+                        // 地点
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "地点"}
+                            BodyLine{text: case_place_full[j]}
+                        }
+                        // 原文（已在摘要显示过，这里做"完整原文"占位，便于区分）
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "原文"}
+                            MetaLine{text: case_text_lines[j]}
+                        }
+                        // 回执四行：仅 Confirmed 渲染（用 case_receipt[j].len() 守护）
+                        if case_receipt[j].len() > 0 {
+                            View{width: Fill height: Fit flow: Down spacing: 2
+                                SectionLabel{text: "回执"}
+                                for _ri in case_receipt[i].len() {   // #17b 外环修：原用 j，遮蔽外层 case 索引
+                                    ReceiptLine{text: "  ↳ " + case_receipt[i][_ri]}
+                                }
+                            }
+                        }
+                        // 展开态兜底：1px 占位（防上帧残留）
+                        View{width: Fill height: 1}
+                    }
                             // 冲突摘要放在**折叠态**（此区域已验证可渲染；展开态深层节点会被
                             // 本 runtime 静默丢弃——见黑板 #21）。用 case_conflict_lines[j]
                             // （含"与谁冲突+时段+要改期还是取消"完整信息）。
@@ -1290,54 +1338,6 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 TextLine{text: case_conflict_lines[j]}
                             }
                             // === #9：展开态内联详情块（状态/活动/地点/原文 + 回执四行） ===
-                            if expanded == "yes" {
-                                // 展开与摘要之间留一道细线（用次级色细 View 模拟）
-                                View{width: Fill height: 1 draw_bg.color: #xefeff4}
-                                // === #17b：展开态顶部红底冲突卡（RoundedView 显式 width/height 防陷阱 B；
-                                //   两个并列 Label 不要三层嵌套防陷阱 C；不用 \n 换行防陷阱 D）===
-                                if case_conflict[j] == "yes" {
-
-                                    // 冲突卡：两行分别存在两个扁平字符串数组里
-                                    // （陷阱 A：不用嵌套数组；陷阱 D：不指望 \n 换行）
-                                    // 冲突卡：一个 Label 一张卡（#17b 外环复验：RoundedView 内
-                                    // 第二个子 Label 静默不渲染，故两行各自一张卡）。
-                                    RoundedView{width: Fill height: Fit padding: Inset{left: 12 right: 12 top: 10 bottom: 10}
-                                        show_bg: true draw_bg.color: #xff3b30 draw_bg.border_radius: 12.0
-                                        Label{width: Fill text: case_conflict_lines[j] + " ｜ " + case_conflict_party[j] draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
-                                    }
-                                }
-                                // 状态
-                                View{width: Fill height: Fit flow: Down spacing: 2
-                                    SectionLabel{text: "状态"}
-                                    BodyLine{text: case_status_text[j]}
-                                }
-                                // 活动
-                                View{width: Fill height: Fit flow: Down spacing: 2
-                                    SectionLabel{text: "活动"}
-                                    BodyLine{text: case_activity_lines[j]}
-                                }
-                                // 地点
-                                View{width: Fill height: Fit flow: Down spacing: 2
-                                    SectionLabel{text: "地点"}
-                                    BodyLine{text: case_place_full[j]}
-                                }
-                                // 原文（已在摘要显示过，这里做"完整原文"占位，便于区分）
-                                View{width: Fill height: Fit flow: Down spacing: 2
-                                    SectionLabel{text: "原文"}
-                                    MetaLine{text: case_text_lines[j]}
-                                }
-                                // 回执四行：仅 Confirmed 渲染（用 case_receipt[j].len() 守护）
-                                if case_receipt[j].len() > 0 {
-                                    View{width: Fill height: Fit flow: Down spacing: 2
-                                        SectionLabel{text: "回执"}
-                                        for _ri in case_receipt[i].len() {   // #17b 外环修：原用 j，遮蔽外层 case 索引
-                                            ReceiptLine{text: "  ↳ " + case_receipt[i][_ri]}
-                                        }
-                                    }
-                                }
-                                // 展开态兜底：1px 占位（防上帧残留）
-                                View{width: Fill height: 1}
-                            }
                         }
                     }
                 }
