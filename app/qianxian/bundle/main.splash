@@ -1498,19 +1498,16 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                         View{width: Fill height: Fit flow: Down spacing: 2
                             SectionLabel{text: "参与人"}
                             BodyLine{text: "" + case_people_line[j]}
-                            View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                                people_input := TextInput{width: Fill height: 28 empty_text: "输入姓名，逗号分隔" on_change: |txt| add_person("" + selected_id, txt)}
-                                ButtonFlat{text: "添加" height: 28 padding: Inset{left: 12 right: 12} on_click: || add_person("" + selected_id, ui.people_input.text())
-                                    draw_bg +: {border_radius: 14.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
-                                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+                            View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                                people_input := TextInput{width: Fill height: 26 empty_text: "姓名，逗号分隔" on_change: |txt| add_person("" + selected_id, txt)}
+                                ButtonFlat{text: "添加" height: 26 padding: Inset{left: 10 right: 10} on_click: || add_person("" + selected_id, ui.people_input.text())
+                                    draw_bg +: {border_radius: 13.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
+                                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
                             }
                         }
                         View{width: Fill height: Fit flow: Down spacing: 2
                             SectionLabel{text: "时间"}
                             BodyLine{text: "时段：" + _slot_now}
-                            ButtonFlat{text: "改时间（5 槽轮换）" height: 28 padding: Inset{left: 12 right: 12} on_click: || cycle_slot("" + selected_id)
-                                draw_bg +: {border_radius: 14.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
-                                draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
                         }
                         // 活动
                         View{width: Fill height: Fit flow: Down spacing: 2
@@ -1556,6 +1553,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         }
     }}
     action_row := View{width: Fill height: Fit flow: Right spacing: 8
+
         // === #11 动词化文案：同意选中 → 确认这条守护（绿=主行动 #7 状态色） ===
         ButtonFlat{text: "确认这条守护" height: 32 padding: Inset{left: 14 right: 14} on_click: || confirm_case()
             draw_bg +: {border_radius: 16.0 color: #x34c759 color_hover: #x30b350 color_down: #x2a9e47 border_size: 0.0}
@@ -1574,16 +1572,20 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         // （#8 外环复验：根组件属性不随状态重算，必须放闭包里）
     }
     // === #11 操作行 vs AI行 语义分组：拆成第二行（可选增强），与主行动拉开层级 ===
-    ai_row := View{width: Fill height: Fit flow: Right spacing: 8
+    ai_row := View{width: Fill height: Fit flow: Right spacing: 6
+        // 「改时间」放第二行：底部第一行已有 4 个按钮（A3：同层过多会挤压/丢弃）
+        ButtonFlat{text: "改时间（5 槽）" height: 32 padding: Inset{left: 10 right: 10} on_click: || cycle_slot("" + selected_id)
+            draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
+            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
         // === #11 AI 按钮弱化：去掉"试用"+"(可选增强)" → "AI 解析（可选）"；
         //   视觉从实心紫底白字降为浅底 + accent 字（与主行 #x007aff 同系，深色）——
         //   与新增的"取消守护"降权是同一思路：让默认态不抢眼 ===
-        ButtonFlat{text: "AI 解析（可选）" height: 32 padding: Inset{left: 14 right: 14} on_click: || ai_parse()
+        ButtonFlat{text: "AI 解析" height: 32 padding: Inset{left: 10 right: 10} on_click: || ai_parse()
             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
             draw_text +: {color: accent color_hover: accent color_down: accent}}
         // === #14：导出数据按钮（cases.json 原文屏显到 hint） ===
         // 屏显而非系统分享——本 runtime 无法调起分享/jail 外写文件（PRIVACY.md 承诺不出网）。
-        ButtonFlat{text: "导出数据" height: 32 padding: Inset{left: 14 right: 14} on_click: || export_data()
+        ButtonFlat{text: "导出数据" height: 32 padding: Inset{left: 10 right: 10} on_click: || export_data()
             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
             draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
         // === #14：清空全部按钮（两段式确认，复用 cancel_pending_flag 机制） ===
@@ -1592,7 +1594,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         // 但本条要求"放根组件静态位置"——故采用"单一按钮 + on_click 内按 clear_pending_flag
         // 分支切两段行为"的方案，文案/状态切换走 ui.hint.set_text，与 cancel_case 同源）。
         // 视觉：次级灰底 + 警示红字，与"取消守护"同色系但不抢眼。
-        ButtonFlat{text: "清空全部" height: 32 padding: Inset{left: 14 right: 14} on_click: || clear_all_data()
+        ButtonFlat{text: "清空全部" height: 32 padding: Inset{left: 10 right: 10} on_click: || clear_all_data()
             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
             draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
     }
