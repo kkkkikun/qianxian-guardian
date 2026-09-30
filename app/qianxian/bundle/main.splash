@@ -26,6 +26,16 @@ let cancel_pending_deadline = 0     // 取消二次确认的截止时刻（ms �
 // 否则 5s 后那个 start_timeout 回调会把"已撤销 #N"的提示覆盖掉。
 let undo_win_open = "no"            // "yes"/"no"
 
+// === #10 新增：筛选状态 + 计数（扁平字符串，不读 cases[i][...]） ===
+// current_filter 是当前选中的筛选标签："all" / "Proposing" / "Confirmed" / "Cancelled"
+// filtered_idxs 是按当前筛选过滤后的下标整数数组（驱动 on_render 列表，避免字符串→int 回转）
+// filter_count_str 是右侧"共 N 条"的展示字符串（数字必须字符串化，#4/#5 实证）
+// filter_total_str 是总条数（用于筛选空文案："共 X 条守护，筛选后 0 条"）
+let current_filter = "all"
+let filtered_idxs = []
+let filter_count_str = "0"
+let filter_total_str = "0"
+
 // === #9 新增：扁平字段——避免 on_render 闭包读 cases[i][...]（#4/#5/#7/#8 实证坑） ===
 // 卡片内联展开后，"活动/地点/原文/状态" 这些原来只在详情层用的字段也要按行铺平，
 // 否则 on_render 闭包要去摸对象字段，触发实证过的类型/作用域问题。
@@ -60,6 +70,24 @@ fn status_bar_color(st){
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
 // 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
 fn rebuild_lines(){
+    // === #10 新增：筛选下标数组 + 计数串在这里重建（filter 逻辑放函数上下文，不进 on_render） ===
+    filtered_idxs.clear()
+    filter_total_str = "" + cases.len()
+    let cf = "" + current_filter
+    let matched = 0
+    for i in cases.len() {
+        let st = "" + cases[i]["status"]
+        let keep = false
+        if cf == "all" { keep = true }
+        else if cf == "Proposing" && st == "Proposing" { keep = true }
+        else if cf == "Confirmed" && st == "Confirmed" { keep = true }
+        else if cf == "Cancelled" && st == "Cancelled" { keep = true }
+        if keep {
+            filtered_idxs.push(i)
+            matched = matched + 1
+        }
+    }
+    filter_count_str = "" + matched
     case_ids.clear()
     case_lines.clear()
     case_text_lines.clear()
@@ -213,6 +241,22 @@ fn toggle_case(id){
 // === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
 fn on_tap_card(id){
     toggle_case(id)
+}
+
+// === #10 新增：切换筛选标签（GestureView on_tap 回调入口） ===
+// 入口参数 ft 是目标筛选值字符串："all"/"Proposing"/"Confirmed"/"Cancelled"
+// 逻辑放函数上下文（不放在 on_render 内），重建扁平字符串数组后驱动渲染
+fn set_filter(ft){
+    let prev = "" + current_filter
+    current_filter = "" + ft
+    rebuild_lines()
+    ui.case_list.render()
+    // hint 反馈：切了哪个标签 + 当前命中条数
+    let label_all = "全部"
+    if ft == "Proposing" { label_all = "待拍板" }
+    if ft == "Confirmed" { label_all = "已确认" }
+    if ft == "Cancelled" { label_all = "已取消" }
+    ui.hint.set_text("筛选：" + label_all + " · 共 " + filter_count_str + " 条 / 总 " + filter_total_str + " 条")
 }
 
 // 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清
@@ -485,13 +529,89 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     }
     hint := Label{width: Fill text: "载入中…" draw_text.color: secondary draw_text.text_style.font_size: 13}
     case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
-        // 空态：两行教下一步（对齐 ai-providers:242-248）
+        // === #10 新增：筛选标签栏 + 计数（必须放 on_render 内：根组件属性不随状态重算，#8 实证） ===
+        // 照第一方 news:301-306 写法：if t.id == tab {TabButtonActive{}} else {TabButton{}}
+        // 计数照 ai-providers:45 "N models" 写法。Tab 是 GestureView on_tap 触发 set_filter。
+        let cf_now = "" + current_filter
+        View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+            // 标签 1：全部
+            GestureView{on_tap: |x, y| set_filter("all") height: 32
+                if cf_now == "all" {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
+                        Label{text: "全部" draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
+                    }
+                } else {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        Label{text: "全部" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    }
+                }
+            }
+            // 标签 2：待拍板
+            GestureView{on_tap: |x, y| set_filter("Proposing") height: 32
+                if cf_now == "Proposing" {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
+                        Label{text: "待拍板" draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
+                    }
+                } else {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        Label{text: "待拍板" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    }
+                }
+            }
+            // 标签 3：已确认
+            GestureView{on_tap: |x, y| set_filter("Confirmed") height: 32
+                if cf_now == "Confirmed" {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
+                        Label{text: "已确认" draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
+                    }
+                } else {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        Label{text: "已确认" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    }
+                }
+            }
+            // 标签 4：已取消
+            GestureView{on_tap: |x, y| set_filter("Cancelled") height: 32
+                if cf_now == "Cancelled" {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
+                        Label{text: "已取消" draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
+                    }
+                } else {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        Label{text: "已取消" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    }
+                }
+            }
+            // 计数标签（照 ai-providers:45 "N models" 写法，靠右）
+            // total = 0 时也显示"共 0 条"，不编造
+            Label{width: Fill text: "共 " + filter_count_str + " / " + filter_total_str + " 条"
+                draw_text.color: secondary draw_text.text_style.font_size: 12}
+        }
+
+        // 空态分流（照 ai-providers:242-248 三分支）：本来没有 vs 筛选后没有，文案必须不同
+        // 分支 A：本来就没有任何守护 —— 引导用户建第一条
         if cases.len() == 0 {
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
                 Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
                 Label{text: "粘贴一条群消息开始（例如：周六上午去深圳湾骑车）。点建守护后，行可点选。" draw_text.color: secondary draw_text.text_style.font_size: 13}
             }
             // 空分支兜底：永远留 1px 占位，防上帧残留（ai-providers:241 注释范式）
+            View{width: Fill height: 1}
+        // 分支 B：有守护但当前筛选下 0 条 —— 引导用户换筛选或建新条
+        } else if filtered_idxs.len() == 0 {
+            Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
+                Label{text: "这个筛选下还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                Label{text: "换个标签看看，或粘贴一条群消息开始（当前筛选：" + (if cf_now == "all" { "全部" } else if cf_now == "Proposing" { "待拍板" } else if cf_now == "Confirmed" { "已确认" } else { "已取消" }) + "）。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+            }
+            // 筛选空分支兜底：同样留 1px 占位
             View{width: Fill height: 1}
         } else {
             // === #9 新增：撤销条放在 on_render 内的 undo_bar View 中（根组件 if 不重算，#8 外环修） ===
@@ -508,13 +628,18 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                 }
             }
 
-            for i in case_lines.len() {
-                let cur_id = case_ids[i]
-                let expanded = case_expanded[i]
+            // === #10 改造：列表循环改走 filtered_idxs，按当前筛选渲染 ===
+            // on_render 闭包只读字符串数组（filtered_idxs[i] 是整数，作为 case_* 数组下标），
+            // 筛选本身在 rebuild_lines() 函数上下文里完成（可读 cases[i]["status"]），
+            // 这里不做判断、不读 cases[i][…]，完全合规 #4/#5/#7/#8 硬约束。
+            for i in filtered_idxs.len() {
+                let j = filtered_idxs[i]
+                let cur_id = case_ids[j]
+                let expanded = case_expanded[j]
                 // 高亮条：选中态左侧 4pt 色条（保留 ▶ 兼顾读屏）
-                let hi_color = status_bar_color(case_statuses[i])
+                let hi_color = status_bar_color(case_statuses[j])
                 let hi_w = 4
-                if case_selected[i] != "yes" { hi_w = 0 }
+                if case_selected[j] != "yes" { hi_w = 0 }
                 // 注：on_tap 只属 GestureView（RoundedView/Card 没有此属性），
                 // 照第一方 news:319 的 GestureView 包 Card 写法；
                 // #9：点卡片 = 选中 + 切换展开（取代 #8 open_detail）
@@ -526,15 +651,15 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                             View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                                 // 标题：选中时前缀 ▶，展开时前缀 ▾（给折叠/展开一个视觉差）
                                 let prefix = "  "
-                                if case_selected[i] == "yes" { prefix = "▶ " }
+                                if case_selected[j] == "yes" { prefix = "▶ " }
                                 let exp_prefix = "  "
                                 if expanded == "yes" { exp_prefix = "▾ " }
-                                Label{width: Fill text: prefix + exp_prefix + case_lines[i] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                                Badge{BadgeText{text: case_badge_text[i] draw_text.color: status_badge_fg(case_statuses[i])}
-                                    draw_bg +: {color: status_badge_bg(case_statuses[i])}}
+                                Label{width: Fill text: prefix + exp_prefix + case_lines[j] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                                Badge{BadgeText{text: case_badge_text[j] draw_text.color: status_badge_fg(case_statuses[j])}
+                                    draw_bg +: {color: status_badge_bg(case_statuses[j])}}
                             }
                             // === #9：卡片摘要折叠态只保留原文一行（活动在标题里） ===
-                            TextLine{text: case_text_lines[i]}
+                            TextLine{text: case_text_lines[j]}
                             // === #9：展开态内联详情块（状态/活动/地点/原文 + 回执四行） ===
                             if expanded == "yes" {
                                 // 展开与摘要之间留一道细线（用次级色细 View 模拟）
@@ -542,25 +667,25 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 // 状态
                                 View{width: Fill height: Fit flow: Down spacing: 2
                                     SectionLabel{text: "状态"}
-                                    BodyLine{text: case_status_text[i]}
+                                    BodyLine{text: case_status_text[j]}
                                 }
                                 // 活动
                                 View{width: Fill height: Fit flow: Down spacing: 2
                                     SectionLabel{text: "活动"}
-                                    BodyLine{text: case_activity_lines[i]}
+                                    BodyLine{text: case_activity_lines[j]}
                                 }
                                 // 地点
                                 View{width: Fill height: Fit flow: Down spacing: 2
                                     SectionLabel{text: "地点"}
-                                    BodyLine{text: case_place_full[i]}
+                                    BodyLine{text: case_place_full[j]}
                                 }
                                 // 原文（已在摘要显示过，这里做"完整原文"占位，便于区分）
                                 View{width: Fill height: Fit flow: Down spacing: 2
                                     SectionLabel{text: "原文"}
-                                    MetaLine{text: case_text_lines[i]}
+                                    MetaLine{text: case_text_lines[j]}
                                 }
-                                // 回执四行：仅 Confirmed 渲染（用 case_receipt[i].len() 守护）
-                                if case_receipt[i].len() > 0 {
+                                // 回执四行：仅 Confirmed 渲染（用 case_receipt[j].len() 守护）
+                                if case_receipt[j].len() > 0 {
                                     View{width: Fill height: Fit flow: Down spacing: 2
                                         SectionLabel{text: "回执"}
                                         for j in case_receipt[i].len() {
