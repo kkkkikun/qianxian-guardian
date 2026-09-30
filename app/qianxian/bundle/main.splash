@@ -17,7 +17,8 @@ let case_place_lines = []   // 每条 case 的地点字符串（供 on_render �
 let case_slot_day = []      // 每条 case 的「星期几」字符串（"周一"…/"周日"/""）
 let case_slot_part = []     // 每条 case 的「时段」字符串（"上午"/"中午"/"下午"/"晚上"/""）
 let case_conflict = []      // 每条 case 的冲突标记（"yes"/"no"）
-let case_conflict_lines = []// 每条 case 的冲突卡内容字符串数组（双方拼成单个字符串，防陷阱 A）
+let case_conflict_lines = []
+let case_conflict_party = []   // 冲突双方整行（扁平字符串，单独存避免 split/嵌套）// 每条 case 的冲突卡内容字符串数组（双方拼成单个字符串，防陷阱 A）
 // === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
 let case_expanded = []      // 点卡片 = 选中 + 切换该条的展开/折叠
 let seq = 0
@@ -164,6 +165,7 @@ fn rebuild_lines(){
     case_slot_part.clear()
     case_conflict.clear()
     case_conflict_lines.clear()
+    case_conflict_party.clear()
     // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
     // （点同一张卡：折叠；点别的卡：保留各自展开态，保留用户的"展开阅读"行为）
     for i in cases.len() {
@@ -203,6 +205,7 @@ fn rebuild_lines(){
             let slot_label = sd + "-" + sp
             let other_id = ""
             let other_slot = ""
+            let other_act = ""
             // 在 cases 里找出冲突的对方（非 Cancelled 且同 slot），用 i_outer 避免内层 j 复用陷阱
             for ci in cases.len() {
                 if ci == i { continue }
@@ -213,20 +216,24 @@ fn rebuild_lines(){
                 if osd == sd && osp == sp {
                     other_id = "" + cases[ci]["id"]
                     other_slot = osd + "-" + osp
+                    other_act = "" + cases[ci]["activity"]
+                    if other_act == "" { other_act = "（未抽取到）" }
                     break
                 }
             }
+            // 冲突卡：两行拼成**单个字符串**（陷阱 A：数组不可嵌套；
+            // 陷阱 D：\n 在 Label 里不换行，故渲染端用两个 Label 拆开显示）。
             let head = "⚠ 时间冲突：#" + id_str + " · " + act + " 也占「" + slot_label + "」时段"
-            let tail = "要改期还是取消？冲突双方：\n  - #" + id_str + " · " + act + " · " + slot_label
+            let party = "要改期还是取消？冲突双方：#" + id_str + " · " + act + " · " + slot_label
             if other_id != "" {
-                tail = tail + "\n  - #" + other_id + " · " + ("" + cases[i]["activity"]) + " · " + other_slot
+                // #17b 外环修：原来错用 cases[i]（自己），应为冲突对方 cases[ci]
+                party = party + "  ｜ #" + other_id + " · " + other_act + " · " + other_slot
             }
-            let arr_c = []
-            arr_c.push(head)
-            arr_c.push(tail)
-            case_conflict_lines.push(arr_c)
+            case_conflict_lines.push(head)
+            case_conflict_party.push(party)
         } else {
-            case_conflict_lines.push([])
+            case_conflict_lines.push("")
+            case_conflict_party.push("")
         }
 
         // === #9 新增：保持现有 case_expanded 长度与 cases 同步 ===
@@ -1196,10 +1203,14 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 // === #17b：展开态顶部红底冲突卡（RoundedView 显式 width/height 防陷阱 B；
                                 //   两个并列 Label 不要三层嵌套防陷阱 C；不用 \n 换行防陷阱 D）===
                                 if case_conflict[j] == "yes" {
+
+                                    // 冲突卡：两行分别存在两个扁平字符串数组里
+                                    // （陷阱 A：不用嵌套数组；陷阱 D：不指望 \n 换行）
+                                    // 冲突卡：一个 Label 一张卡（#17b 外环复验：RoundedView 内
+                                    // 第二个子 Label 静默不渲染，故两行各自一张卡）。
                                     RoundedView{width: Fill height: Fit padding: Inset{left: 12 right: 12 top: 10 bottom: 10}
                                         show_bg: true draw_bg.color: #xff3b30 draw_bg.border_radius: 12.0
-                                        Label{width: Fill text: case_conflict_lines[j][0] draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
-                                        Label{width: Fill text: case_conflict_lines[j][1] draw_text.color: #xffffff draw_text.text_style.font_size: 12}
+                                        Label{width: Fill text: case_conflict_lines[j] + " ｜ " + case_conflict_party[j] draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
                                     }
                                 }
                                 // 状态
@@ -1226,8 +1237,8 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                 if case_receipt[j].len() > 0 {
                                     View{width: Fill height: Fit flow: Down spacing: 2
                                         SectionLabel{text: "回执"}
-                                        for j in case_receipt[i].len() {
-                                            ReceiptLine{text: "  ↳ " + case_receipt[i][j]}
+                                        for _ri in case_receipt[i].len() {   // #17b 外环修：原用 j，遮蔽外层 case 索引
+                                            ReceiptLine{text: "  ↳ " + case_receipt[i][_ri]}
                                         }
                                     }
                                 }
