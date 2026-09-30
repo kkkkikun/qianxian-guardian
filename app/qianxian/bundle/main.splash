@@ -256,8 +256,11 @@ fn load(){
             if raw_seq != nil {
                 backup_name = "cases.corrupt-" + "" + raw_seq + ".json"
             }
-            // 改名失败也不阻塞启动（至少不丢数据——原文件不会被覆盖）
-            let _ = fs.rename("cases.json", backup_name)
+            // 注：Splash 的 fs 无 rename（只有 exists/read/read_bytes/write/
+            // append/list/mkdir/remove，见 SCRIPT-API §Storage）。改用
+            // 「把原文写进备份文件」实现等效效果：不删原文件，内容不丢。
+            let original_text = fs.read("cases.json")
+            let _ = fs.write(backup_name, original_text)
             // 内存回到空态：cases=[], seq=0
             cases = []
             seq = 0
@@ -287,11 +290,18 @@ fn load(){
 // #13：写入失败可见。fs.write 在出错时返回错误值（非 nil/非 true），save() 把这个
 //   信号向上层返回：调用点根据返回值决定是否覆盖"成功"提示为失败提示，避免 silently
 //   告诉用户「已保存」但实际没落盘——同样是不丢用户数据的兜底。
+// 用**字符串标记**返回成败，不用布尔：#13 外环复验发现该 runtime 下
+// 函数返回的 true/false 在调用点 `ok == false` 比较中不可靠（写入明明成功
+// 却走进失败分支）。字符串比较已在多处验证可靠。
+let save_result = "ok"
 fn save(){
     let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
-    if r == nil { return true }   // 旧 runtime 不返回错误，按成功处理（不破坏兼容）
-    if r == true { return true }
-    return false
+    // SCRIPT-API §Storage：fs.write 成功返回 nil；失败返回一个错误值。
+    if r == nil { save_result = "ok" }
+    else {
+        let msg = "" + r
+        if msg == "" { save_result = "ok" } else { save_result = "fail" }
+    }
 }
 
 // 解析"作用目标"：选中优先，否则最新一条并明示
@@ -445,9 +455,9 @@ fn add_case(){
     selected_id = seq  // 新建后自动选中，体验闭环
     ui.msg_input.set_text("")
     rebuild_lines()
-    let ok = save()
+    save()   // 结果写入全局 save_result
     ui.case_list.render()
-    if ok == false {
+    if save_result == "fail" {
         ui.hint.set_text("保存失败：守护数据可能未落盘（已建守护 #" + "" + seq + "，分诊命中：" + level + "）")
     } else {
         ui.hint.set_text("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，点卡片可展开详情")
@@ -477,11 +487,11 @@ fn confirm_case(){
             }
             cases[i]["status"] = "Confirmed"
             rebuild_lines()
-            let ok = save()
+            save()   // 结果写入全局 save_result
             ui.case_list.render()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
-            if ok == false {
+            if save_result == "fail" {
                 ui.hint.set_text("保存失败：守护数据可能未落盘（#已被改为 Confirmed in-memory；#" + "" + t["id"] + "）" + tag)
             } else {
                 ui.hint.set_text("已确认 #" + "" + t["id"] + " → Confirmed（组织者拍板，读回一致）" + tag)
@@ -508,11 +518,11 @@ fn reschedule_case(){
             }
             cases[i]["status"] = "Proposing"
             rebuild_lines()
-            let ok = save()
+            save()   // 结果写入全局 save_result
             ui.case_list.render()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
-            if ok == false {
+            if save_result == "fail" {
                 ui.hint.set_text("保存失败：守护数据可能未落盘（#已回到 Proposing in-memory；#" + "" + t["id"] + "）" + tag)
             } else {
                 ui.hint.set_text("改口：#" + "" + t["id"] + " 回到 Proposing，重新收敛（旧确认作废）" + tag)
@@ -546,11 +556,11 @@ fn cancel_case(){
                 undo_win_open = "yes"
                 undo_show_flag2 = "yes"    // #11：让 on_render 渲染可点的「撤销取消」
                 rebuild_lines()
-                let ok = save()
+                save()   // 结果写入全局 save_result
                 ui.case_list.render()
                 let tag = ""
                 if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
-                if ok == false {
+                if save_result == "fail" {
                     ui.hint.set_text("保存失败：守护数据可能未落盘（#已取消 in-memory；#" + "" + target + "，5 秒内可尝试撤销）" + tag)
                 } else {
                     ui.hint.set_text("已取消 #" + "" + target + "（5 秒内可点「撤销取消」）" + tag)
@@ -625,9 +635,9 @@ fn undo_cancel(){
     undo_show_flag2 = "no"   // #11：撤下可点的撤销按钮
     cancel_pending_flag = "no"
     rebuild_lines()
-    let ok = save()
+    save()   // 结果写入全局 save_result
     ui.case_list.render()
-    if ok == false {
+    if save_result == "fail" {
         if restored_id != "0" && restored_id != "" {
             ui.hint.set_text("保存失败：守护数据可能未落盘（#已撤销取消 in-memory；#" + restored_id + " 恢复到 " + prev + "）")
         } else {
