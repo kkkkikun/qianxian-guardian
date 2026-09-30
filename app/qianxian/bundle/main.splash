@@ -1330,7 +1330,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         let q_now = "" + current_query
         View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
             // 搜索框本体（占满剩余宽度）
-            TextInput{width: Fill height: 32 empty_text: "搜活动或地点，如：深圳湾"
+            TextInput{width: Fill height: 44 empty_text: "搜活动或地点，如：深圳湾"
                 text: q_now
                 on_change: |t| set_query("" + t)}
             // 清空按钮：有词才显示（用 q_now 字面量作可见性条件，闭包内可读全局字符串）

@@ -64,8 +64,8 @@
 
 | # | 不满足项 | 原因 | 建议落地（仅规划，非本次任务） |
 |---|---|---|---|
-| A | 触控目标 < 44pt（#6） | splash 编辑器不支持像素级度量；当前以代码常量定义 `height`；改大后行高密集、视觉拥挤 | 主按钮 `height: 44`、次按钮 `height: 36`、行内按钮 `height: 30`（最小 30pt + `padding: Inset{...}` 撑大命中区），仅改 main.splash 常量 |
-| B | 行内按钮命中区 26pt（#6 同源） | 同 A，且行内空间紧张 | 改 `RoundedView` + `GestureView` 形态，左右各加 6pt 透明命中区 |
+| A | 触控目标 < 44pt（#6） | **已修复**：#29 全部升到 44pt 并真机实测通过 |按钮 `height: 44`、次按钮 `height: 36`、行内按钮 `height: 30`（最小 30pt + `padding: Inset{...}` 撑大命中区），仅改 main.splash 常量 |
+| B | 行内按钮命中区 26pt（#6 同源） | **已修复**：随 A 一并升到 44pt |
 | C | 对比度未实测（#7） | splash 编辑器无 WCAG 工具 | 外环复验用 WebAIM Contrast Checker：<https://webaim.org/resources/contrastchecker/> （未验证）；至少测 `ink/secondary/accent/danger` 四色 vs `#xffffff` 与 `#xf2f2f7` |
 | D | 动态字体响应未验证（#9） | 取决于 SCRIPT-API 主题层是否暴露 `theme.font_user_scale` | 外环先查上游 `OctoScript-App-Design-Flow/docs/SCRIPT-API.md` 中 theme 段；若未暴露则需平台侧加 |
 | E | 多选态缺失（#10） | 作品为单条守护/单条编辑模型，无批处理需求 | 若后续加"批量结算"或"批量归档"，需补 `case_selected` 数组（v1 §5.1 留口已存在）+ 工具条组件 |
