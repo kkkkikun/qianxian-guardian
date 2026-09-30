@@ -131,3 +131,119 @@
    - 真机度量、动画时长、精确对比度（见"三、本环境做不到的项"）。
 
 — 完 —
+
+---
+
+## 四、外环补充：第一方系统应用一手参照（2026-09-30 补，内环够不着）
+
+> 内环 #6 声明本地参照仓不可见（沙箱路径限制）。外环在宿主工作区复核成功，
+> 以下为**逐字核对的一手实现**，行号可复现。核验方式：`gh api`/本地读源文件。
+> 复现根目录：`Agentic-octos/repos/OctoSense-System-Apps/`（快照 2026-09-27）。
+> 官方来源：[OctoScript-App-Design-Flow/docs/QUICKSTART.md](https://github.com/OctoSense-org/OctoScript-App-Design-Flow/blob/main/docs/QUICKSTART.md)（系统应用是官方指定的模仿样本）。
+
+### 4.1 主题色板（第一方四应用统一）
+
+`apps/ai-providers/bundle/main.splash:174-177`：
+
+| 常量 | 值 | 语义 | 牵线现状 |
+|---|---|---|---|
+| `ink` | `#x1c1c1e` | 主文本 | ✅ 同值 |
+| `faint` | `#x8e8e93` | 次文本/占位 | ✅ 同值（我们叫 `secondary`） |
+| `accent` | `#x007aff` | 信息/主行动 | ✅ 同值（我们叫 `accent`） |
+| `danger` | `#xff3b30` | 危险/取消 | ✅ 同值（内联在取消按钮） |
+
+**结论：牵线配色已与第一方完全对齐**，不需要引入新色。这是重要的"别过度设计"边界。
+
+### 4.2 组件工厂模式（可直接抄）
+
+`apps/ai-providers/bundle/main.splash:199-208` 定义、`各应用复用`：
+
+```
+let Section = Label{text: "" draw_text.color: faint draw_text.text_style: theme.font_bold{font_size: 11}}
+let Card = RoundedView{width: Fill height: Fit flow: Down spacing: 8 padding: Inset{left: 12 right: 12 top: 12 bottom: 12}
+    show_bg: true draw_bg.color: #xffffff draw_bg.border_radius: 14.0}
+let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 3 bottom: 3} show_bg: true draw_bg.color: #xe8f0fe draw_bg.border_radius: 7.0}
+let BadgeText = Label{text: "" draw_text.color: accent draw_text.text_style: theme.font_bold{font_size: 11}}
+```
+
+- **`show_bg: true` 是必填项**：`RoundedView/View` 不写它不绘制背景（我们 #4 曾踩过，
+  当时改用 `draw_bg +: {...}` 也画不出，已回退纯 Label）。
+- 组件在文件顶层 `let X = Widget{...}` 定义，用时 `X{text: "…" on_click: …}` 实例化——
+  与 SCRIPT-API「Reuse a style, bind it once and instantiate it」一致（✓ run 标注）。
+- **Badge 是状态标签的官方形态**（圆角胶囊 + 浅蓝底 + accent 文字），
+  比我们在行首拼 `· Confirmed` 文字更接近"状态用徽章而非正文"。
+
+### 4.3 空态：两行教下一步（对齐 #1 的规范条目）
+
+`apps/ai-providers/bundle/main.splash:242-248`：
+
+```
+if providers.len() == 0 {
+    Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
+        Label{… text: "No models yet" … theme.font_bold{font_size: 16}}
+        Label{… text: "Add a model so the assistant can answer, or import the ones saved on another device." font_size: 13}
+    }
+}
+// 过滤后为空是另一条文案，不复用空态：
+if providers.len() > 0 && shown.len() == 0 {
+    Label{width: Fill text: "No saved model matches the filter." …}
+}
+```
+
+两条可直接落地到牵线的规范：
+1. **标题（粗体 16）+ 解释（常规 13）两行结构**，解释句说"做什么会改变什么"；
+2. **"本来就没有" 与 "筛选后没有" 必须用不同文案**——牵线目前只有一种空态，
+   若后续加过滤（只看已确认）必须区分。
+
+### 4.4 详情页切换：`set_visible` 而非重建
+
+`apps/news/bundle/main.splash:214/226/335`：
+
+```
+ui.reader_pane.set_visible(true)     // 进详情
+ui.reader_pane.set_visible(false)    // 返回
+reader_pane := View{visible: false … new_batch: true show_bg: true draw_bg.color: #xffffff}
+```
+
+- 详情用**同一棵树里的 `visible` 切换**，`new_batch: true` 让首次进入重建内容。
+- 牵线的"守护详情（回执四行）"目前是内联展开；若要做得更清晰，可照此做独立详情层。
+
+### 4.5 列表行的点击语义
+
+`apps/news/bundle/main.splash:319`：`GestureView{… on_tap: |x, y| open_story(r)}`
+
+- 第一方用 `on_tap: |x, y| fn`（两参），我们在 `select_case(cases[i]["id"])` 上
+  用 `||` 无参形式——**需实测**：`on_tap` 是否支持无参闭包（我们尚未真机验证过点行选中）。
+
+### 4.6 一处"看起来像 bug"的官方注释（值得抄）
+
+`apps/ai-providers/bundle/main.splash:241`：
+
+```
+// Always one child: a render that yields none keeps the last rows.
+View{width: Fill height: 1}
+```
+
+`on_render` 若本次不产出任何子节点，**上一帧的行会残留**——所以永远放一个 1px 的空 `View`
+占位。牵线当前 `case_list` 的空分支产出 `Label{text: "暂无守护…"}`，天然非空，暂时安全；
+但若将来加"筛选后为空且不产 Label"，必须补这个 `View{width: Fill height: 1}`。
+
+### 4.7 触控目标：第一方实际值（回答 #6 的 #6 条）
+
+| 位置 | 第一方值 | 牵线现状 | 判定 |
+|---|---|---|---|
+| 主按钮 | `TextInput{height: 40}`（`main.splash:189` 附近的输入行） | 40 | 一致，**不建议单方面改动**（跟随第一方） |
+| 列表行内 `IconButton` | 见 `apps/news` 刷新按钮 | — | — |
+
+**改判**：内环 #6 建议"主按钮升 44"缺乏一手依据；第一方自己就用 40。
+本环境无真机也无法验证点击手感——**维持 40/32 不动**，把"触控目标"列入真机验证清单，
+避免为了追 HIG 数字而与第一方不一致。
+
+## 五、外环对内环 #6 的采认
+
+- 产出 `evidence/ux-specs.md`（18 KB，14 条规范三列 + 本环境限制表）**采认**：
+  结构可用、行号可核、诚实标注未验证 URL（内环沙箱无联网工具，属实）。
+- 网络 URL 逐条核对：**本环境同样无联网能力**（`web_search` 缺 API key、
+  SOCKS 代理 10808 拒绝），故 HIG/M3 数字保持"未验证"标注是**正确处理**，
+  不伪造已核对。10/4 前若有浏览器可由人工抽检 2-3 条。
+- 纠偏一处：触控目标 40→44 的建议**不采纳**（见 4.7，第一方一手实现为 40）。
