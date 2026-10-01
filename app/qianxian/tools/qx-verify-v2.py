@@ -185,15 +185,20 @@ rec(5, "进入详情模式（返回列表按钮可见）", is_detail_mode(ws), f
 
 # R06：详情内 8 项信息
 det_labels = [t for t, r in labels(ws)]
-has_status = any(k in " ".join(det_labels) for k in ("Proposing", "Confirmed", "Cancelled"))
+has_status = any("状态：" in t for t in det_labels)
 has_slot = any(k in " ".join(det_labels) for k in ("周六", "时间"))
 has_activity = any("吃饭" in t for t in det_labels)
 has_place = any(k in " ".join(det_labels) for k in ("地点", "地方"))
 has_people = any(k in " ".join(det_labels) for k in ("参与人", "人"))
-has_raw = any("周六上午" in t for t in det_labels)
+has_raw = any("原文：" in t for t in det_labels)
 has_aa = any("AA" in t or "均摊" in t or "¥" in t for t in det_labels)
 visible_8 = sum([has_status, has_slot, has_activity, has_place, has_people, has_raw, has_aa, True])
 rec(6, f"详情 8 项信息可见（{visible_8}/8）", visible_8 >= 6, f"status={has_status} slot={has_slot} act={has_activity} place={has_place} people={has_people} raw={has_raw} aa={has_aa}")
+
+# R07 准备：先选中目标卡（点标题进详情，按 #35 修正；详情模式已在 R05 进入）
+ws = click_title(ws, 2) or ws
+R("enter-detail-2-pre-confirm", ws)
+det_labels = [t for t, r in labels(ws)]
 
 # R07：确认（在详情内）
 ws = click_text(ws, "确认这条守护", "Button") or ws
@@ -201,31 +206,29 @@ R("confirm-in-detail", ws)
 has_confirmed = any("Confirmed" in t or "已确认" in t for t, r in labels(ws))
 rec(7, "详情内确认生效", has_confirmed, f"confirmed-visible={has_confirmed}")
 
-# R08：回执四行（详情内直看）
+# R08：当前详情卡存在 + 回执四行（确认后重抓树）
+det_labels = [t for t, r in labels(ws)]
 rec_lines = [t for t in det_labels if "↳" in t]
-rec(8, f"回执行可见（{len(rec_lines)}/4）", len(rec_lines) >= 1, f"lines={rec_lines[:4]}")
+rec(8, f"详情卡 ↳ 回执四行（{len(rec_lines)}/4）", len(rec_lines) >= 1, f"lines={rec_lines[:4]}")
 
 # R09：返回列表
 ws = click_text(ws, "返回列表", "Button") or ws
 R("back-to-list", ws)
 rec(9, "返回列表生效", is_list_mode(ws), f"list-mode={is_list_mode(ws)}")
 
-# R10：折叠态 3 行（列表模式）
-folded = [t for t, r in labels(ws) if "▶" in t and "#" in t]
+# R10：折叠态 3 行（列表模式；按 #N · 标题匹配 — 标题即折叠行）
+folded = [t for t, r in labels(ws) if any(t.startswith(f"#{k} ·") for k in (1, 2, 3, 5, 6))]
 rec(10, f"折叠态可见（{len(folded)} 卡）", len(folded) >= 2, f"folded={len(folded)}")
 
 # R11：边滚边看（A5 方法论：滚动 → /snap → 再滚动）
-# 通过 GET /scroll 触发滚动（card-host 既有 API）；若无该端点则跳过
-try:
-    get("/scroll?dy=200")
-    time.sleep(1.0)
-    ws_after_scroll = snap()["s"]
-    R("after-scroll", ws_after_scroll)
-    # 滚动后 W 应不变或仅物化新节点；折叠卡可见数不应骤降
-    folded_after = [t for t, r in labels(ws_after_scroll) if "▶" in t and "#" in t]
-    rec(11, f"滚动后物化稳定（卡 {len(folded_after)}）", len(folded_after) >= 1, f"scroll-api=ok folded-after={len(folded_after)}")
-except Exception as e:
-    rec(11, "滚动 API 可用", False, f"/scroll 端点不可用: {e}")
+# 通过 GET /m?k=scroll 触发滚动（card-host 既有 API）；/scroll 端点不存在
+get("/m?k=scroll&x=200&y=450&dx=0&dy=-120")
+time.sleep(1.0)
+ws_after_scroll = snap()["s"]
+R("after-scroll", ws_after_scroll)
+# 滚动后 W 应不变或仅物化新节点；折叠卡可见数不应骤降
+folded_after = [t for t, r in labels(ws_after_scroll) if any(t.startswith(f"#{k} ·") for k in (1, 2, 3, 5, 6))]
+rec(11, f"滚动后物化稳定（卡 {len(folded_after)}）", len(folded_after) >= 1, f"scroll-api=ok folded-after={len(folded_after)}")
 
 # R12：搜索
 si = find(ws, "搜活动或地点", "TextInput")
@@ -247,8 +250,18 @@ if si:
 else:
     rec(12, "搜索框可见", False, "无搜索 TextInput")
 
-# R13：清空全部两段式
+# R13：清空全部两段式（A5：先开「怎么用？」说明卡；找不到按钮先滚动）
 ws_now = snap()["s"]
+help_btn = find(ws_now, "怎么用？", "Button")
+if not help_btn:
+    # A5：虚拟化列表下，按钮可能未物化；先滚动触发再抓
+    get("/m?k=scroll&x=200&y=450&dx=0&dy=-120")
+    time.sleep(1.0)
+    ws_now = snap()["s"]
+    help_btn = find(ws_now, "怎么用？", "Button")
+if help_btn:
+    ws_now = click_text(ws_now, "怎么用？", "Button") or ws_now
+    R("after-help-open", ws_now)
 cb = find(ws_now, "清空全部", "Button")
 if cb:
     ws = click_text(ws_now, "清空全部", "Button") or ws_now
