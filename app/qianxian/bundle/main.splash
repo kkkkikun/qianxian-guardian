@@ -27,6 +27,7 @@ let case_bill_total_str = []
 let case_bill_split_text = []
 let bill_save_result = "ok"           // C7 字符串标记：保存失败可见
 let ui_mode = "list"                   // #31f 外环修：列表/详情模式切换（flag+render 既有模式）
+let ai_pending = "no"                  // #32：AI 回合进行中（回调可能不触发，start_timeout 兜底降级）
 let people_draft = ""                  // #31f：参与人输入草稿（on_render 内输入行走草稿，免具名绑定）
 let bill_draft = ""                    // #31f：AA总额输入草稿
 fn set_people_draft(s){
@@ -1304,26 +1305,36 @@ fn undo_cancel(){
 
 // AI 增强（可选）：仅当宿主提供 octos.* 时才尝试，否则明确降级
 fn ai_parse(){
-    clear_cancel_pending("")
-    undo_win_open = "no"
-    undo_show_flag2 = "no"
-    cancel_pending_flag = "no"
-    ui.case_list.render()
-    let caps = host.capabilities()
-    let has_octos = false
-    for c in caps {
-        if c == "octos.turn.start" { has_octos = true }
+    // === #32 外环修：agentic 收口——超时兜底 + 重复点防护 + 回复入输入框（LLM 不碰状态机） ===
+    if ai_pending == "yes" {
+        ui.hint.set_text("AI 仍在解析中，请稍候（8 秒无响应会自动降级）")
+        return
     }
+    let has_octos = host.has("octos.turn.start")
     if has_octos {
         let text = ui.msg_input.text()
         if text == "" {
             ui.hint.set_text("先输入一条群消息再试 AI 解析")
             return
         }
-        ui.hint.set_text("AI 解析中…")
+        ai_pending = "yes"
+        ui.hint.set_text("AI 解析中…（约 8 秒，无响应自动降级本地规则）")
+        // 8 秒兜底：回调不触发（#26 审查⑥）也能回到可用态；机制同 undo 5s 窗口
+        start_timeout(8.0, || {
+            if ai_pending == "yes" {
+                ai_pending = "no"
+                ui.hint.set_text("AI 无响应（8 秒），已降级本地规则——直接点「建守护」即可")
+            }
+        })
         host.request("octos.turn.start", {text: "从这条聚会消息提取活动/时间/地点，只回 JSON：" + text}, fn(r){
-            if r.is_ok { ui.hint.set_text("AI 回复：" + r.data.text) }
-            else { ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）") }
+            ai_pending = "no"
+            if r.is_ok {
+                // AI 回复写入输入框供人过目（不自动建卡——本地规则仍是唯一事实源）
+                ui.msg_input.set_text("" + r.data.text)
+                ui.hint.set_text("AI 已整理到输入框，请过目后点「建守护」")
+            } else {
+                ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
+            }
         })
     } else {
         ui.hint.set_text("本设备无 AI 服务（no service answers \"octos\"），本地规则继续可用")
