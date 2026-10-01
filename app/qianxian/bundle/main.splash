@@ -26,6 +26,15 @@ let case_conflict_party = []   // 冲突双方整行（扁平字符串，单独�
 let case_bill_total_str = []
 let case_bill_split_text = []
 let bill_save_result = "ok"           // C7 字符串标记：保存失败可见
+let ui_mode = "list"                   // #31f 外环修：列表/详情模式切换（flag+render 既有模式）
+let people_draft = ""                  // #31f：参与人输入草稿（on_render 内输入行走草稿，免具名绑定）
+let bill_draft = ""                    // #31f：AA总额输入草稿
+fn set_people_draft(s){
+    people_draft = s
+}
+fn set_bill_draft(s){
+    bill_draft = s
+}
 // === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
 let case_expanded = []      // 点卡片 = 选中 + 切换该条的展开/折叠
 
@@ -365,6 +374,8 @@ fn rebuild_lines(){
     while case_expanded.len() > cases.len() {
         case_expanded.pop()
     }
+    // #31f：详情面板已并入 case_list on_render（ui_mode 分支，随 render 自动刷新），
+    //   不再需要命令式 update_detail_panel（其 set_text 依赖树外静态区，已证不可靠）。
 }
 
 // #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
@@ -567,7 +578,7 @@ fn add_person(id_str, raw){
         if m != "" { people_save_result = "fail" }
     }
     ui.case_list.render()
-    ui.people_input.set_text("")
+    people_draft = ""
     if people_save_result == "fail" {
         ui.hint.set_text("已加 " + "" + added.len() + " 人（保存失败，仅在内存）")
     } else {
@@ -628,7 +639,7 @@ fn update_bill_total(id_str, raw){
         if m != "" { bill_save_result = "fail" }
     }
     ui.case_list.render()
-    ui.bill_input.set_text("")
+    bill_draft = ""
     if bill_save_result == "fail" {
         ui.hint.set_text("#" + id_str + " AA 总额已记（保存失败，仅在内存）")
     } else if trimmed == "" {
@@ -801,7 +812,18 @@ fn toggle_howto(){
     ui.case_list.render()
 }
 
-// === #9 改造：点卡片 = 选中 + 切换该条的展开/折叠（取代 #8 的 open_detail） ===
+// === #31 新增：详情面板八项命令式刷新（hint 模式翻版）
+//   根组件详情面板是「首次定型静态区」，不靠 on_render 重渲染（E1 实证：根属性不随状态重算）。
+//   所以走：rebuild_lines() 末尾统一调用本函数，按 selected_id 找 j，从扁平数组
+//   取值逐个 ui.detail_x.set_text(...)；无选中时统一显示「点选上方卡片查看详情」。
+//   手册 B5（Label 内 \n 不换行） → 回执用固定 4 个 Label，不用换行符。
+//   手册 A2（同父只渲染第一个同类子节点） → 每个详情 Label 都是各自一行的纯叶子。
+//   手册 C9（嵌套 if 条件赋值变空） → 单层 if 归一化，绝不链式。
+#31f：update_detail_panel 已删（面板并入 on_render，见 case_list ui_mode 分支）
+
+// === #31 改造：点卡片 = 选中（详情面板就由选中驱动，卡内不再有长内容——
+//   截断问题整体绕开；on_tap 设 selected_id 并进详情模式（#31f））
+//   保留 #9 toggle_case 名称以减少跨片 diff（仅删分支，不删函数）。
 fn toggle_case(id){
     if id == 0 {
         ui.hint.set_text("先选中一条守护再展开/折叠")
@@ -840,7 +862,26 @@ fn toggle_case(id){
 
 // === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
 fn on_tap_card(id){
-    toggle_case(id)
+    // #31f：选中即进详情模式（列表/详情互斥渲染，无高度竞争）
+    if id == 0 {
+        ui.hint.set_text("先建一条守护")
+        return
+    }
+    if cancel_pending_id != 0 && cancel_pending_id != id {
+        clear_cancel_pending("")
+    }
+    selected_id = id
+    ui_mode = "detail"
+    rebuild_lines()
+    ui.case_list.render()
+    ui.hint.set_text("已选中 #" + "" + id + "，详情见下方；「返回列表」回到全部守护")
+}
+
+// === #31f：返回列表模式 ===
+fn back_to_list(){
+    ui_mode = "list"
+    ui.case_list.render()
+    ui.hint.set_text("已返回列表；点卡片看单条详情")
 }
 
 // === #10 新增：切换筛选标签（GestureView on_tap 回调入口） ===
@@ -1455,6 +1496,50 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     }
     hint := Label{width: Fill text: "载入中…" draw_text.color: secondary draw_text.text_style.font_size: 13}
     case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
+        // === #31f：详情模式分支（列表/详情互斥，同一 ScrollY 内无高度竞争）===
+        if ui_mode == "detail" {
+            let sel = -1
+            for si in case_ids.len() {
+                if case_ids[si] == ("" + selected_id) { sel = si; break }
+            }
+            if sel < 0 {
+                Card{Label{width: Fill text: "还没有选中的守护——返回列表点选一条" draw_text.color: secondary}}
+            } else {
+                Card{
+                    let slot_now = case_slot_day[sel] + "-" + case_slot_part[sel]
+                    if slot_now == "-" { slot_now = "未抽取" }
+                    BodyLine{text: "状态：" + case_status_text[sel] + " ｜ 时间：" + slot_now}
+                    BodyLine{text: "参与人：" + case_people_line[sel] + " ｜ AA：" + case_bill_split_text[sel]}
+                    BodyLine{text: "活动：" + case_activity_lines[sel] + " ｜ 地点：" + case_place_full[sel]}
+                    // #31g：原文行删（回执与折叠摘要已含）；返回列表上移——详情卡总高必须
+                    //   ≤ case_list 盒高（~480px），超出部分零布局（#31 实测机制）。
+                    ButtonFlat{text: "← 返回列表" height: 44 on_click: || back_to_list()
+                        draw_bg +: {border_radius: 13.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                        draw_text +: {color: accent color_hover: accent color_down: accent}}
+                    if case_receipt[sel].len() > 0 {
+                        for _ri in case_receipt[sel].len() {
+                            ReceiptLine{text: "  ↳ " + case_receipt[sel][_ri]}
+                        }
+                    }
+                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                        TextInput{width: Fill height: 44 empty_text: "加参与人（逗号分隔）"
+                            on_change: |txt| set_people_draft("" + txt)}
+                        ButtonFlat{text: "添加" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_person("" + selected_id, people_draft)
+                            draw_bg +: {border_radius: 13.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                    }
+                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                        TextInput{width: Fill height: 44 empty_text: "记 AA 总额，如300（选填）"
+                            on_change: |txt| set_bill_draft("" + txt)}
+                        ButtonFlat{text: "记一笔" height: 44 padding: Inset{left: 10 right: 10} on_click: || update_bill_total("" + selected_id, bill_draft)
+                            draw_bg +: {border_radius: 13.0 color: #x34c759 color_hover: #x2ba84a color_down: #x278f40 border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                    }
+                }
+            }
+            // 详情模式兜底占位（#5 空分支范式）
+            View{width: Fill height: 1}
+        } else {
         // === #12 新增：搜索框（放在筛选栏之上、确认取消变体之上；
         //   根组件 if 只在首次求值定型，所以搜索框必须放在 on_render 闭包内；
         //   闭包内只读 current_query 字符串，不读 cases[i][...]） ===
@@ -1704,96 +1789,13 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                             }
                             TextLine{text: _act_full + " · " + _pl_disp + " · 共 " + "" + _text_len + " 字"}
                             TextLine{text: _shown_text}
-                            if expanded == "yes" {
-                        // 展开与摘要之间留一道细线（用次级色细 View 模拟）
-                        View{width: Fill height: 1 draw_bg.color: #xefeff4}
-                        // === #17b：展开态顶部红底冲突卡（RoundedView 显式 width/height 防陷阱 B；
-                        //   两个并列 Label 不要三层嵌套防陷阱 C；不用 \n 换行防陷阱 D）===
-                        if case_conflict[j] == "yes" {
-
-                            // 冲突卡：两行分别存在两个扁平字符串数组里
-                            // （陷阱 A：不用嵌套数组；陷阱 D：不指望 \n 换行）
-                            // 冲突卡：一个 Label 一张卡（#17b 外环复验：RoundedView 内
-                            // 第二个子 Label 静默不渲染，故两行各自一张卡）。
-                            RoundedView{width: Fill height: Fit padding: Inset{left: 12 right: 12 top: 10 bottom: 10}
-                                show_bg: true draw_bg.color: #xff3b30 draw_bg.border_radius: 12.0
-                                Label{width: Fill text: case_conflict_lines[j] + " ｜ " + case_conflict_party[j] draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
-                            }
-                        }
-                        // 状态（深度 6，已验证可渲染 —— 硬约束手册 A1）
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "状态"}
-                            BodyLine{text: case_status_text[j]}
-                        }
-                        // 时间 + 改时间按钮：与「状态」**严格同层**（深度 6），
-                        // 按钮直接作为该 View 的子节点，不再多包一层（手册 A1/A2）。
-                        let _slot_now = "" + case_slot_day[j] + "-" + case_slot_part[j]
-                        if _slot_now == "-" { _slot_now = "未抽取" }
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "参与人"}
-                            BodyLine{text: "" + case_people_line[j]}
-                            View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                                people_input := TextInput{width: Fill height: 44 empty_text: "姓名，逗号分隔" on_change: |txt| add_person("" + selected_id, txt)}
-                                ButtonFlat{text: "添加" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_person("" + selected_id, ui.people_input.text())
-                                    draw_bg +: {border_radius: 13.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
-                                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
-                            }
-                        }
-                        // === #30 新增：AA 总额输入行（与「参与人」输入行同级、同布局风格）
-                        //   C6：on_click 闭包只引 selected_id，不引 j
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "AA总额"}
-                            View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                                bill_input := TextInput{width: Fill height: 44 empty_text: "AA总额，如300（选填）"}
-                                ButtonFlat{text: "记一笔" height: 44 padding: Inset{left: 10 right: 10} on_click: || update_bill_total("" + selected_id, ui.bill_input.text())
-                                    draw_bg +: {border_radius: 13.0 color: #x34c759 color_hover: #x2ba84a color_down: #x278f40 border_size: 0.0}
-                                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
-                            }
-                        }
-                        // === #30 新增：均摊展示行（照「时间」SectionLabel+BodyLine 现成样式）
-                        //   未填时 case_bill_split_text[j] 由 bill_display 正向守卫兜底为「未记账」
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "均摊"}
-                            BodyLine{text: "均摊：" + case_bill_split_text[j]}
-                        }
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "时间"}
-                            BodyLine{text: "时段：" + _slot_now}
-                        }
-                        // 活动
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "活动"}
-                            BodyLine{text: case_activity_lines[j]}
-                        }
-                        // 地点
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "地点"}
-                            BodyLine{text: case_place_full[j]}
-                        }
-                        // 原文（已在摘要显示过，这里做"完整原文"占位，便于区分）
-                        View{width: Fill height: Fit flow: Down spacing: 2
-                            SectionLabel{text: "原文"}
-                            MetaLine{text: case_text_lines[j]}
-                        }
-                        // 回执四行：仅 Confirmed 渲染（用 case_receipt[j].len() 守护）
-                        if case_receipt[j].len() > 0 {
-                            View{width: Fill height: Fit flow: Down spacing: 2
-                                SectionLabel{text: "回执"}
-                                for _ri in case_receipt[i].len() {   // #17b 外环修：原用 j，遮蔽外层 case 索引
-                                    ReceiptLine{text: "  ↳ " + case_receipt[i][_ri]}
-                                }
-                            }
-                        }
-                        // 展开态兜底：1px 占位（防上帧残留）
-                        View{width: Fill height: 1}
-                    }
-                            // 冲突摘要放在**折叠态**（此区域已验证可渲染；展开态深层节点会被
-                            // 本 runtime 静默丢弃——见黑板 #21）。用 case_conflict_lines[j]
-                            // （含"与谁冲突+时段+要改期还是取消"完整信息）。
+                            // === #31 改造：卡内不再有展开态（截断问题整体绕开）；
+                            //   完整详情见根组件「详情面板」（rebuild_lines 末尾 update_detail_panel 刷新）。
+                            //   这里只保留折叠态三行（标题+徽章 / 活动·地点 / 原文截断24字+…）。
+                            // 折叠态冲突摘要（移到此处，因为展开态已删 — 见 #31 留出的折叠态唯一一处冲突可见位置）
                             if case_conflict[j] == "yes" {
                                 TextLine{text: case_conflict_lines[j]}
                             }
-                            // === #9：展开态内联详情块（状态/活动/地点/原文 + 回执四行） ===
                         }
                     }
                 }
@@ -1802,7 +1804,9 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             // 非空分支兜底：留 1px 占位（ai-providers:241 注释范式）
             View{width: Fill height: 1}
         }
+        }
     }}
+    // #31f：根静态详情面板已删除——面板并入 case_list on_render 的 ui_mode="detail" 分支
     action_row := View{width: Fill height: Fit flow: Right spacing: 8
 
         // === #11 动词化文案：同意选中 → 确认这条守护（绿=主行动 #7 状态色） ===
