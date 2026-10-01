@@ -277,7 +277,11 @@ fn rebuild_lines(){
         // === #30 新增：AA 均摊两列（扁平字符串，on_render 只读） ===
         let bt = "" + cases[i]["bill_total"]
         case_bill_total_str.push(bt)
-        let np_count = count_people(ppl == "未填写" ? "" : ppl)
+        // #30b 外环修：splash 无三目运算符（真机 rebuild_lines 全 trap: unknown named arg），
+        //   改单层 if 归一化（C9 边界内：循环内单层 if 赋值已实证安全，探针 v8 P4/P5）。
+        let ppl_arg = ppl
+        if ppl == "未填写" { ppl_arg = "" }
+        let np_count = count_people(ppl_arg)
         case_bill_split_text.push(bill_display(bt, np_count))
 
         // === #17b 新增：扁平「星期几 / 时段 / 冲突标记」三字段（供 on_render 只读） ===
