@@ -119,3 +119,23 @@ ACK(done): F-1/F-2 终跑与文档
 - [x] S2-2 Rinx turn.start（partial→证据落 `evidence/rinx-turnstart-20261002.md`；401 上游留痕）
 - [x] S3 截图（三张按 #36 后 bundle 重生成；像素截图三路径证据留痕）
 - [x] 收尾（全量终跑全绿；git 提交推送见 F-3）
+
+## 终态总账（F-4，03:3x）
+
+- commit：**`550268d`**（master，已推送公仓；a9ee173 → 550268d，20 文件 +738/-118）
+- digest：`25acbcda`（hub check PASSED）
+- 绿账：qx-verify-v2 **14/14 ×3 轮**；guardian g4a/g4b/g5 9/9×3 + smoke_g6 **12/12**；
+  smoke_g3_real **3/3**（真实 LLM）；三张截图按 #36 后 bundle 重生成
+- 留痕账：Rinx turn.start 最后一跳 401（上游配对协议，`evidence/rinx-turnstart-20261002.md`）；
+  像素截图三路径证据（/g 404、grab timeout、X11 黑屏）
+- 环境遗留（晨起可复用）：palpo@8128 + gosim-pg 容器 + octos serve@50080 +
+  Rinx(8147, 已登录 rinx_test_a) 全部在跑；card-host 实例已 quit
+
+### 留给人白天的清单（按截止排序，10-4 23:59 初赛）
+
+1. **演示视频 2–3 分钟**（人录）：`evidence/demo-script.md` 21 步脚本就绪；
+   注意第 8/18/19/20 步现在**真实可执行**（#36 修复），录前按脚本预演一遍
+2. **官方 issue #5 留言**（人发）：草稿 `evidence/official-issue-drafts.md`
+3. 名单锁定（10-4 当天，人）
+4. 队外复现（验收 #12，按 run.md；PG 容器重建后 run.md 一次性准备步骤已验证有效）
+5. （可选）S3-3 纯视觉打磨与 Rinx 401 上游跟进，均非初赛阻塞
