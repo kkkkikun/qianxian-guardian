@@ -20,8 +20,63 @@ let case_conflict = []      // 每条 case 的冲突标记（"yes"/"no"）
 let case_people_line = []            // 每条 case 的参与人字符串（"未填写" 或 "小明、小红"）
 let case_conflict_lines = []
 let case_conflict_party = []   // 冲突双方整行（扁平字符串，单独存避免 split/嵌套）// 每条 case 的冲突卡内容字符串数组（双方拼成单个字符串，防陷阱 A）
+// === #30 新增：AA 收账（均摊）— 每条 case 两条扁平字符串 ===
+// bill_total_str  = "300" / "300.5" / ""（原样存用户输入，展示前再转 f64）
+// bill_split_text = 已用 bill_display 算好的「约 ¥X.XX/人」或「未记账」（on_render 只读）
+let case_bill_total_str = []
+let case_bill_split_text = []
+let bill_save_result = "ok"           // C7 字符串标记：保存失败可见
 // === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
 let case_expanded = []      // 点卡片 = 选中 + 切换该条的展开/折叠
+
+// === #30 新增：AA 收账均摊（参考 evidence/probe30-float-paradigm.md 真机范式） ===
+// 总额存原样字符串，展示前再 to_f64；人数复用 people 字段逗号计数。
+//   0/负数/空/垃圾 → 由 bill_display 的 total_f > 0 正向守卫统一兜底为「未记账」。
+//   不用 \n 换行（手册 B5）；不用嵌套数组（手册 C2/陷阱 A）。
+fn cut2(x){
+    let s = "" + x
+    let cs = s.to_chars()
+    let n = cs.len()
+    let dot = -1
+    for i in n {
+        if cs[i] == 46 { dot = i }
+    }
+    let take = n
+    if dot >= 0 {
+        take = dot + 3
+        if take > n { take = n }
+    }
+    let out = ""
+    for i in take {
+        if cs[i] == 46 { out = out + "." } else { out = out + ("" + (cs[i] - 48)) }
+    }
+    if dot < 0 { out = out + ".00" }
+    if dot >= 0 {
+        if (n - dot) == 2 { out = out + "0" }
+    }
+    return out
+}
+fn bill_display(total_str, n_f){
+    let bt = "" + total_str
+    let total_f = bt.to_f64()
+    let out = "未记账"
+    if total_f > 0 {
+        if n_f > 0 {
+            out = "约 ¥" + cut2(total_f / n_f) + "/人"
+        }
+    }
+    return out
+}
+fn count_people(people_str){
+    let s = "" + people_str
+    let n = 0
+    if s == "" { return 0 }
+    for nm in s.split(",") {
+        if nm.trim() != "" { n = n + 1 }
+    }
+    return n
+}
+
 let seq = 0
 let selected_id = 0  // 选中态：0 表示无选中
 
@@ -185,6 +240,8 @@ fn rebuild_lines(){
     case_people_line.clear()
     case_conflict_lines.clear()
     case_conflict_party.clear()
+    case_bill_total_str.clear()
+    case_bill_split_text.clear()
     // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
     // （点同一张卡：折叠；点别的卡：保留各自展开态，保留用户的"展开阅读"行为）
     for i in cases.len() {
@@ -216,6 +273,12 @@ fn rebuild_lines(){
         let ppl = "" + cases[i]["people"]
         if ppl == "" { ppl = "未填写" }
         case_people_line.push(ppl)
+
+        // === #30 新增：AA 均摊两列（扁平字符串，on_render 只读） ===
+        let bt = "" + cases[i]["bill_total"]
+        case_bill_total_str.push(bt)
+        let np_count = count_people(ppl == "未填写" ? "" : ppl)
+        case_bill_split_text.push(bill_display(bt, np_count))
 
         // === #17b 新增：扁平「星期几 / 时段 / 冲突标记」三字段（供 on_render 只读） ===
         // 对象字段访问在闭包里不稳，硬约束 #4/#5；预置到 push 字面量 + 重建时落到扁平数组。
@@ -473,6 +536,7 @@ fn add_person(id_str, raw){
                 "status": cases[qi]["status"],
                 "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
                 "conflict": cases[qi]["conflict"], "people": merged,
+                "bill_total": cases[qi]["bill_total"],
                 "receipt_activity": cases[qi]["receipt_activity"],
                 "receipt_place": cases[qi]["receipt_place"],
                 "receipt_text": cases[qi]["receipt_text"],
@@ -483,6 +547,7 @@ fn add_person(id_str, raw){
                 "status": cases[qi]["status"],
                 "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
                 "conflict": cases[qi]["conflict"], "people": cases[qi]["people"],
+                "bill_total": cases[qi]["bill_total"],
                 "receipt_activity": cases[qi]["receipt_activity"],
                 "receipt_place": cases[qi]["receipt_place"],
                 "receipt_text": cases[qi]["receipt_text"],
@@ -503,6 +568,69 @@ fn add_person(id_str, raw){
         ui.hint.set_text("已加 " + "" + added.len() + " 人（保存失败，仅在内存）")
     } else {
         ui.hint.set_text("#" + id_str + " 参与人：" + merged)
+    }
+}
+
+// === #30 新增：AA 收账总额（保存=原样写入 bill_total；展示由 bill_display 正向守卫兜底）
+//   C4 重建数组 / C7 字符串标记 bill_save_result / 不在循环内嵌套 if 赋值（避 C9）
+//   不做 trim 之外的格式校验——bill_display 的 total_f > 0 守卫天然处理空/0/负数/垃圾
+fn update_bill_total(id_str, raw){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再记 AA 总额")
+        return
+    }
+    let trimmed = ("" + raw).trim()
+    let cur = -1
+    for bi in cases.len() {
+        if "" + cases[bi]["id"] == id_str { cur = bi }
+    }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
+    }
+    // C4：重建数组（cur 分支写 trimmed，其余保留原 bill_total）
+    let new_cases = []
+    for bi2 in cases.len() {
+        if bi2 == cur {
+            new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
+                "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
+                "status": cases[bi2]["status"],
+                "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
+                "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
+                "bill_total": trimmed,
+                "receipt_activity": cases[bi2]["receipt_activity"],
+                "receipt_place": cases[bi2]["receipt_place"],
+                "receipt_text": cases[bi2]["receipt_text"],
+                "receipt_done": cases[bi2]["receipt_done"]})
+        } else {
+            new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
+                "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
+                "status": cases[bi2]["status"],
+                "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
+                "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
+                "bill_total": cases[bi2]["bill_total"],
+                "receipt_activity": cases[bi2]["receipt_activity"],
+                "receipt_place": cases[bi2]["receipt_place"],
+                "receipt_text": cases[bi2]["receipt_text"],
+                "receipt_done": cases[bi2]["receipt_done"]})
+        }
+    }
+    cases = new_cases
+    rebuild_lines()
+    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
+    bill_save_result = "ok"
+    if r != nil {
+        let m = "" + r
+        if m != "" { bill_save_result = "fail" }
+    }
+    ui.case_list.render()
+    ui.bill_input.set_text("")
+    if bill_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " AA 总额已记（保存失败，仅在内存）")
+    } else if trimmed == "" {
+        ui.hint.set_text("#" + id_str + " 已清空 AA 总额")
+    } else {
+        ui.hint.set_text("#" + id_str + " AA 总额：" + trimmed)
     }
 }
 
@@ -585,6 +713,7 @@ fn cycle_slot(id_str){
                 "status": cases[ri]["status"],
                 "slot_day": nd, "slot_part": np,
                 "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
                 "receipt_activity": cases[ri]["receipt_activity"],
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
@@ -596,6 +725,7 @@ fn cycle_slot(id_str){
                 "status": cases[ri]["status"],
                 "slot_day": cases[ri]["slot_day"], "slot_part": cases[ri]["slot_part"],
                 "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
                 "receipt_activity": cases[ri]["receipt_activity"],
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
@@ -879,7 +1009,7 @@ fn build_case_from_text(text, level){
     // === #27：slot_init_asked 字段预置（C5）。case 对象带这个标记后，cycle_slot
     //   才能在「时段未抽取」时进入二次确认：第一次点只翻标记 + 提示，第二次点
     //   才真正写入「周六-上午」初值。初值 "" 表示从未问过。
-    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "slot_init_asked": ""})
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "bill_total": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "slot_init_asked": ""})
     // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
     // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
     // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
@@ -1604,6 +1734,23 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                                     draw_bg +: {border_radius: 13.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
                                     draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
                             }
+                        }
+                        // === #30 新增：AA 总额输入行（与「参与人」输入行同级、同布局风格）
+                        //   C6：on_click 闭包只引 selected_id，不引 j
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "AA总额"}
+                            View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                                bill_input := TextInput{width: Fill height: 44 empty_text: "AA总额，如300（选填）"}
+                                ButtonFlat{text: "记一笔" height: 44 padding: Inset{left: 10 right: 10} on_click: || update_bill_total("" + selected_id, ui.bill_input.text())
+                                    draw_bg +: {border_radius: 13.0 color: #x34c759 color_hover: #x2ba84a color_down: #x278f40 border_size: 0.0}
+                                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                            }
+                        }
+                        // === #30 新增：均摊展示行（照「时间」SectionLabel+BodyLine 现成样式）
+                        //   未填时 case_bill_split_text[j] 由 bill_display 正向守卫兜底为「未记账」
+                        View{width: Fill height: Fit flow: Down spacing: 2
+                            SectionLabel{text: "均摊"}
+                            BodyLine{text: "均摊：" + case_bill_split_text[j]}
                         }
                         View{width: Fill height: Fit flow: Down spacing: 2
                             SectionLabel{text: "时间"}
