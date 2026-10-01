@@ -1245,7 +1245,6 @@ fn clear_all_data(){
         case_activity_lines = []
         case_place_full = []
         case_status_text = []
-        case_counts = []
         filtered_idxs = []
         filter_count_str = "0"
         filter_total_str = "0"
@@ -1291,7 +1290,7 @@ let accent = #x007aff
 // show_bg:true 是必填，否则 RoundedView 不绘背景
 let Card = RoundedView{width: Fill height: Fit flow: Down spacing: 8 padding: Inset{left: 12 right: 12 top: 12 bottom: 12}
     show_bg: true draw_bg.color: #xffffff draw_bg.border_radius: 14.0}
-let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 3 bottom: 3}
+let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 4 bottom: 4}
     show_bg: true draw_bg.color: #xefeff4 draw_bg.border_radius: 7.0}
 let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 11}}
 let TitleLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 16}
@@ -1307,7 +1306,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}
     Label{text: "群里说好的聚会，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 13}
     View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-        msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息，如：周六上午去深圳湾骑车"
+            msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息，如：周六上午去深圳湾骑车"
             draw_bg +: {color: #xf2f2f7 color_hover: #xf2f2f7 color_focus: #xf2f2f7 color_empty: #xf2f2f7 border_radius: 10.0}
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: secondary color_empty_hover: secondary}}
         // === #14：示例一键填充按钮（演示友好）===
@@ -1328,7 +1327,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         // on_change 实时调 set_query(q)；× 用 GestureView on_tap 清空；空字符串不过滤。
         // 照第一方 news 搜索框写法：TextInput empty_text + on_change 触发布尔过滤。
         let q_now = "" + current_query
-        View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
             // 搜索框本体（占满剩余宽度）
             TextInput{width: Fill height: 44 empty_text: "搜活动或地点，如：深圳湾"
                 text: q_now
@@ -1357,7 +1356,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         // 照第一方 news:301-306 写法：if t.id == tab {TabButtonActive{}} else {TabButton{}}
         // 计数照 ai-providers:45 "N models" 写法。Tab 是 GestureView on_tap 触发 set_filter。
         let cf_now = "" + current_filter
-        View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
             // 标签 1：全部
             GestureView{on_tap: |x, y| set_filter("all") height: 32
                 if cf_now == "all" {
