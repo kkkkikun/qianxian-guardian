@@ -34,6 +34,8 @@ class FakeMatrix:
 
 
 cfg = load()
+import pathlib
+pathlib.Path("/tmp/gosim/g4b-smoke.db").unlink(missing_ok=True)  # 重跑幂等：每次冒烟从空库起
 db = DB("/tmp/gosim/g4b-smoke.db")
 fake_llm = FakeLlm()
 bot = FakeMatrix()

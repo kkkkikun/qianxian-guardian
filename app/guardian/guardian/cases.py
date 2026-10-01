@@ -135,6 +135,10 @@ def approve_proposal(db, case_id: str, proposal_id: str, sender: str,
             (f"out-{_uuid()}", case_id, f"rcpt-{_uuid()}", "M2", case["room_id"],
              receipt, now()),
         )
+        # #37（外环批准）：T-24h 提醒任务入 scheduler（真实发送见 scheduler.sweep）。
+        # 与批准同事务：批准回滚 → 提醒任务一并消失，无孤儿任务。
+        from .scheduler import reminder_due, schedule_reminder
+        schedule_reminder(db, case_id, case["room_id"], reminder_due(start_at))
         db.audit(sender, f"proposal.approved:{proposal_id} -> plan:{plan_id}", case_id)
         db.conn.execute(
             "INSERT INTO case_events(case_id, matrix_event_id, revision, type, actor, created_at)"

@@ -18,6 +18,8 @@ results = []
 ok = lambda n, cond: results.append(bool(cond)) or print(f"{'✅' if cond else '❌ FAIL'} {n}")
 
 cfg = load()
+import pathlib
+pathlib.Path("/tmp/gosim/g5-smoke.db").unlink(missing_ok=True)  # 重跑幂等：每次冒烟从空库起
 db = DB("/tmp/gosim/g5-smoke.db")
 ROOM = "!g5:127.0.0.1:8128"
 A = "@rinx_test_a:127.0.0.1:8128"

@@ -78,10 +78,12 @@ class DB:
 
     # ---- durable scheduler（启动重载 + 过期补偿） ----
     def reload_due_tasks(self) -> list[sqlite3.Row]:
-        """启动恢复：NeedsRecovery 重载；到期未执行的返回给补偿队列。"""
+        """启动恢复：NeedsRecovery 重载；到期未执行的返回给补偿队列。
+        #37：Running 一并回收——发送成功后、落 Completed 前崩溃的窗口任务，
+        凭绑定 txn 幂等重放，不会重复投递。"""
         return self.conn.execute(
             "SELECT * FROM scheduled_tasks"
-            " WHERE status IN ('Pending','NeedsRecovery') AND due_at <= ?",
+            " WHERE status IN ('Pending','NeedsRecovery','Running') AND due_at <= ?",
             (now(),),
         ).fetchall()
 

@@ -1665,48 +1665,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     Label{text: "③ 组织者点同意，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
                 }
             }
-            // === #16 新增：「怎么用」说明卡 ——
-            //   写在 case_list.on_render 闭包里（根组件属性不随状态重算，#8 硬约束外环修）。
-            //   显隐走 howto_show_flag（字符串标记，#13 实证布尔不可靠）："yes" 才渲染整张卡；
-            //   折叠时只留 1px 占位，防上帧残留（ai-providers:241 兜底范式）。
-            //   默认展开策略：未建过守护（seq==0）→ 第一次启动自动展开；
-            //   建过守护（seq>0）→ 默认收起，不打扰老用户。点首屏底部「怎么用？」按钮可手动切。
-            //   只读 howto_show_flag / seq 两个字符串/整数，不读 cases[i][...]（符合硬约束 #2）。
-            if howto_show_flag == "yes" {
-                Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
-                    Label{text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "1. 粘贴群里那条聚会消息，或点「用示例试试」" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "2. 点建守护——牵线会分诊，命中时间/约定才生成提案" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "3. 点卡片展开详情，组织者点「确认这条守护」，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    // === #29（外环派）：低频操作折叠区 ——
-                    //   原 ai_row 的 4 个按钮（改时间 / AI 解析 / 导出数据 / 清空全部）
-                    //   从根组件搬到「怎么用？」说明卡内,只在卡片展开时可见。
-                    //   写在 on_render 闭包里,符合硬约束 #1(根组件属性不随状态重算,
-                    //   闭包内可重渲染);on_click 直接调既有 fn(cycle_slot/ai_parse/
-                    //   export_data/clear_all_data),无新逻辑、无新状态。
-                    //   height: 44 与主区三键对齐,触控目标达 HIG 44pt 标准。
-                    Label{text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
-                    // 复用 #11 AI 按钮弱化风格 + #14 灰底色,与主区三键视觉拉开层级
-                    // （次级灰底 + accent/secondary 字,不抢眼）。
-                    View{width: Fill height: Fit flow: Right spacing: 6
-                        ButtonFlat{text: "改时间（5 槽）" height: 44 padding: Inset{left: 10 right: 10} on_click: || cycle_slot("" + selected_id)
-                            draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-                        ButtonFlat{text: "AI 解析" height: 44 padding: Inset{left: 10 right: 10} on_click: || ai_parse()
-                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
-                            draw_text +: {color: accent color_hover: accent color_down: accent}}
-                        ButtonFlat{text: "导出数据" height: 44 padding: Inset{left: 10 right: 10} on_click: || export_data()
-                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
-                            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
-                        ButtonFlat{text: "清空全部" height: 44 padding: Inset{left: 10 right: 10} on_click: || clear_all_data()
-                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
-                            draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
-                    }
-                }
-            } else {
-                // 折叠时留 1px 占位（on_render 空分支硬约束 #5：至少一个子节点）
-                View{width: Fill height: 1}
-            }
+            // === #36：「怎么用」说明卡已移出空列表分支 → 列表模式公共尾部（见下方）。
+            //   #29 把 4 个低频键（改时间/AI解析/导出/清空全部）折叠进本卡后，
+            //   卡却只在本空态分支渲染——「有守护在册」时四键全部不可达：
+            //   清空全部永远删不到数据，演示剧本 8/18/19/20 步不可执行（#34 真机复验抓到）。
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
                 Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
                 Label{text: "粘贴一条群消息开始（例如：周六上午去深圳湾骑车）。点建守护后，行可点选。" draw_text.color: secondary draw_text.text_style.font_size: 13}
@@ -1815,6 +1777,50 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             // 非空分支兜底：留 1px 占位（ai-providers:241 注释范式）
             View{width: Fill height: 1}
         }
+            // === #36：「怎么用」说明卡（自空列表分支移此）——
+            //   写在 case_list.on_render 闭包里（根组件属性不随状态重算，#8 硬约束外环修）。
+            //   显隐走 howto_show_flag（字符串标记，#13 实证布尔不可靠）："yes" 才渲染整张卡；
+            //   折叠时只留 1px 占位，防上帧残留（ai-providers:241 兜底范式）。
+            //   默认展开策略：未建过守护（seq==0）→ 第一次启动自动展开；
+            //   建过守护（seq>0）→ 默认收起，不打扰老用户。点首屏底部「怎么用？」按钮可手动切。
+            //   只读 howto_show_flag / seq 两个字符串/整数，不读 cases[i][...]（符合硬约束 #2）。
+            //   #36 位置语义：列表模式三分支（空态/筛选空/有卡）共用此尾部，
+            //   展开后滚动到底即达——#29 的低频键在有数据时重新可达。
+            if howto_show_flag == "yes" {
+                Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
+                    Label{text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                    Label{text: "1. 粘贴群里那条聚会消息，或点「用示例试试」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "2. 点建守护——牵线会分诊，命中时间/约定才生成提案" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "3. 点卡片展开详情，组织者点「确认这条守护」，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    // === #29（外环派）：低频操作折叠区 ——
+                    //   原 ai_row 的 4 个按钮（改时间 / AI 解析 / 导出数据 / 清空全部）
+                    //   从根组件搬到「怎么用？」说明卡内,只在卡片展开时可见。
+                    //   写在 on_render 闭包里,符合硬约束 #1(根组件属性不随状态重算,
+                    //   闭包内可重渲染);on_click 直接调既有 fn(cycle_slot/ai_parse/
+                    //   export_data/clear_all_data),无新逻辑、无新状态。
+                    //   height: 44 与主区三键对齐,触控目标达 HIG 44pt 标准。
+                    Label{text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
+                    // 复用 #11 AI 按钮弱化风格 + #14 灰底色,与主区三键视觉拉开层级
+                    // （次级灰底 + accent/secondary 字,不抢眼）。
+                    View{width: Fill height: Fit flow: Right spacing: 6
+                        ButtonFlat{text: "改时间（5 槽）" height: 44 padding: Inset{left: 10 right: 10} on_click: || cycle_slot("" + selected_id)
+                            draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+                        ButtonFlat{text: "AI 解析" height: 44 padding: Inset{left: 10 right: 10} on_click: || ai_parse()
+                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                            draw_text +: {color: accent color_hover: accent color_down: accent}}
+                        ButtonFlat{text: "导出数据" height: 44 padding: Inset{left: 10 right: 10} on_click: || export_data()
+                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                        ButtonFlat{text: "清空全部" height: 44 padding: Inset{left: 10 right: 10} on_click: || clear_all_data()
+                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                            draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
+                    }
+                }
+            } else {
+                // 折叠时留 1px 占位（on_render 空分支硬约束 #5：至少一个子节点）
+                View{width: Fill height: 1}
+            }
         }
     }}
     // #31f：根静态详情面板已删除——面板并入 case_list on_render 的 ui_mode="detail" 分支

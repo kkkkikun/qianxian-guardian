@@ -8,22 +8,12 @@ from .ingress import Ingress
 from .matrix import MatrixClient
 
 
-def sweep_scheduler(db: DB) -> int:
-    """到期任务补偿：条件 UPDATE claim（防双 worker）→ 补偿 → Completed。
-    返回本次 claim 并补偿的任务数。"""
-    due = db.reload_due_tasks()
-    claimed = 0
-    for t in due:
-        cur = db.conn.execute(
-            "UPDATE scheduled_tasks SET status='Running' WHERE id=? AND status IN ('Pending','NeedsRecovery')",
-            (t["id"],))
-        if cur.rowcount != 1:
-            continue  # 已被其他 worker claim
-        db.audit("guardian", f"scheduler.compensate:{t['kind']}", t["id"])
-        db.conn.execute("UPDATE scheduled_tasks SET status='Completed' WHERE id=?", (t["id"],))
-        claimed += 1
-    db.conn.commit()
-    return claimed
+def sweep_scheduler(db: DB, matrix_client=None) -> int:
+    """到期任务执行（#37 升级）：委托 scheduler.sweep。
+    matrix_client=None → G5 补偿语义（smoke_g5 兼容）；
+    传入客户端 → reminder 任务真发 Matrix 房间消息（txn 绑定任务，幂等重试）。"""
+    from .scheduler import sweep as _sweep
+    return _sweep(db, matrix_client)
 
 
 def run() -> None:
@@ -33,8 +23,8 @@ def run() -> None:
     client.login()
     print(f"[guardian] logged in as {cfg['bot_user_id']} @ {cfg['homeserver']}")
 
-    # durable scheduler：启动重载（Crash → Recovery → Continue）
-    due = sweep_scheduler(db)
+    # durable scheduler：启动重载（Crash → Recovery → Continue；reminder 真发）
+    due = sweep_scheduler(db, client)
     future = db.future_tasks()
     print(f"[guardian] scheduler: {len(due)} 逾期待补偿, {len(future)} 个未来任务已装载")
 
@@ -57,7 +47,7 @@ def run() -> None:
             since = ingress.last_sync_token()
             if any(stats.values()):
                 print(f"[guardian] ingress {stats}")
-            sweep_scheduler(db)
+            sweep_scheduler(db, client)
         except KeyboardInterrupt:
             print("[guardian] bye")
             break

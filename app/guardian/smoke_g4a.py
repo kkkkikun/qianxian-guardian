@@ -13,6 +13,8 @@ from guardian.db import DB
 results = []
 ok = lambda n, cond: results.append(cond) or print(f"{'✅' if cond else '❌ FAIL'} {n}")
 
+import pathlib
+pathlib.Path("/tmp/gosim/g4a-smoke.db").unlink(missing_ok=True)  # 重跑幂等：每次冒烟从空库起
 db = DB("/tmp/gosim/g4a-smoke.db")
 ROOM = "!g4a:127.0.0.1:8128"
 ORG = "@rinx_test_a:127.0.0.1:8128"   # 组织者

@@ -30,7 +30,7 @@ A5 方法论（#33）：
   - 每步打印 [step] W=N HINT=[…]，PASS/FAIL 落到 stderr。
   - 结束时打印 DRIVE-V2-DONE。
 """
-import json, sys, time, urllib.request, urllib.parse
+import json, re, sys, time, urllib.request, urllib.parse
 
 BASE = "http://127.0.0.1:8146"
 
@@ -112,8 +112,9 @@ def is_list_mode(ws):
     return has_list and not is_detail_mode(ws)
 
 
-def receipts(ws):
-    return [t for t, r in labels(ws) if "↳" in t or "回执" in t]
+def title_re(k):
+    """卡片标题匹配：真实标题是 prefix+exp_prefix+`#N · …`（前导空格/▶/▾，见 #36 驱动修正）。"""
+    return re.compile(r"^[▶▾ ]*#%d ·" % k)
 
 
 def hint_of(ws):
@@ -147,6 +148,19 @@ def type_text(ws, text, wait=1.8):
     return snap()["s"]
 
 
+def type_and_create(ws, text, expect_sub, max_try=3):
+    """键入 + 建守护，按结果重试（#36 修正：/t 注入或按钮点击偶发丢失，
+    snap 不暴露 TextInput 文本 → 只能按「期望卡出现」闭环校验）。"""
+    for attempt in range(1, max_try + 1):
+        ws = type_text(ws, text)
+        ws = click_text(ws, "建守护", "Button") or ws
+        if any(expect_sub in t for t, r in labels(ws)):
+            print(f"[type-and-create] '{expect_sub}' 第 {attempt} 次尝试成功", flush=True)
+            return ws
+        print(f"[type-and-create] 第 {attempt} 次尝试未见到 '{expect_sub}'，重试", flush=True)
+    return ws
+
+
 # === 14 项回归项（映射到新路径） ===
 RESULTS = []  # [(id, name, pass_bool, evidence_short)]
 
@@ -169,9 +183,8 @@ rec(1, "示例填充可见", find(ws, "用示例试试", "Button") is None or an
 ws = click_text(ws, "建守护", "Button") or ws
 rec(2, "建守护 #1 可见", any("#1 ·" in t for t, r in labels(ws)), "列表出现 #1")
 
-# R03：键入第二条 + 建 #2（与 #1 同 slot → 冲突）
-ws = type_text(ws, "周六上午也要去吃饭")
-ws = click_text(ws, "建守护", "Button") or ws
+# R03：键入第二条 + 建 #2（与 #1 同 slot → 冲突；带结果重试，#36）
+ws = type_and_create(ws, "周六上午也要去吃饭", "#2 ·")
 rec(3, "建守护 #2 可见", any("#2 ·" in t for t, r in labels(ws)), "列表出现 #2")
 
 # R04：冲突徽章/行
@@ -183,17 +196,17 @@ ws = click_title(ws, 2) or ws
 R("enter-detail-2", ws)
 rec(5, "进入详情模式（返回列表按钮可见）", is_detail_mode(ws), f"detail-mode={is_detail_mode(ws)}")
 
-# R06：详情内 8 项信息
+# R06：详情内信息项（#36 修正：原文行是 #31g 有意删除——详情卡总高必须 ≤ 列表盒高，
+# 否则复现零布局裁剪；原文在折叠摘要与确认后回执中可见，详情面板计 6 项）
 det_labels = [t for t, r in labels(ws)]
 has_status = any("状态：" in t for t in det_labels)
 has_slot = any(k in " ".join(det_labels) for k in ("周六", "时间"))
 has_activity = any("吃饭" in t for t in det_labels)
 has_place = any(k in " ".join(det_labels) for k in ("地点", "地方"))
 has_people = any(k in " ".join(det_labels) for k in ("参与人", "人"))
-has_raw = any("原文：" in t for t in det_labels)
 has_aa = any("AA" in t or "均摊" in t or "¥" in t for t in det_labels)
-visible_8 = sum([has_status, has_slot, has_activity, has_place, has_people, has_raw, has_aa, True])
-rec(6, f"详情 8 项信息可见（{visible_8}/8）", visible_8 >= 6, f"status={has_status} slot={has_slot} act={has_activity} place={has_place} people={has_people} raw={has_raw} aa={has_aa}")
+visible_6 = sum([has_status, has_slot, has_activity, has_place, has_people, has_aa])
+rec(6, f"详情 6 项信息可见（{visible_6}/6）", visible_6 >= 6, f"status={has_status} slot={has_slot} act={has_activity} place={has_place} people={has_people} aa={has_aa}（原文按 #31g 在折叠摘要/回执）")
 
 # R07 准备：先选中目标卡（点标题进详情，按 #35 修正；详情模式已在 R05 进入）
 ws = click_title(ws, 2) or ws
@@ -216,19 +229,23 @@ ws = click_text(ws, "返回列表", "Button") or ws
 R("back-to-list", ws)
 rec(9, "返回列表生效", is_list_mode(ws), f"list-mode={is_list_mode(ws)}")
 
-# R10：折叠态 3 行（列表模式；按 #N · 标题匹配 — 标题即折叠行）
-folded = [t for t, r in labels(ws) if any(t.startswith(f"#{k} ·") for k in (1, 2, 3, 5, 6))]
+# R10：折叠态 3 行（列表模式；标题匹配用 title_re——前导空格/▶/▾ 前缀，#36 驱动修正）
+folded = [t for t, r in labels(ws) if any(title_re(k).match(t) for k in (1, 2, 3, 5, 6))]
 rec(10, f"折叠态可见（{len(folded)} 卡）", len(folded) >= 2, f"folded={len(folded)}")
 
 # R11：边滚边看（A5 方法论：滚动 → /snap → 再滚动）
-# 通过 GET /m?k=scroll 触发滚动（card-host 既有 API）；/scroll 端点不存在
-get("/m?k=scroll&x=200&y=450&dx=0&dy=-120")
+# card-host /m?k=scroll：dy 正值 = 向下滚（#36 实测：dy=-120 在顶部是 no-op）
+get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
 time.sleep(1.0)
 ws_after_scroll = snap()["s"]
 R("after-scroll", ws_after_scroll)
-# 滚动后 W 应不变或仅物化新节点；折叠卡可见数不应骤降
-folded_after = [t for t, r in labels(ws_after_scroll) if any(t.startswith(f"#{k} ·") for k in (1, 2, 3, 5, 6))]
+# 滚动后折叠卡可见数不应骤降（虚拟化列表物化稳定）
+folded_after = [t for t, r in labels(ws_after_scroll) if any(title_re(k).match(t) for k in (1, 2, 3, 5, 6))]
 rec(11, f"滚动后物化稳定（卡 {len(folded_after)}）", len(folded_after) >= 1, f"scroll-api=ok folded-after={len(folded_after)}")
+# 滚回顶部：R12 搜索框/计数标签在列表头部，必须在物化窗内（#36 修正）
+get("/m?k=scroll&x=200&y=500&dx=0&dy=-2400")
+time.sleep(1.0)
+ws = snap()["s"]
 
 # R12：搜索
 si = find(ws, "搜活动或地点", "TextInput")
@@ -250,31 +267,52 @@ if si:
 else:
     rec(12, "搜索框可见", False, "无搜索 TextInput")
 
-# R13：清空全部两段式（A5：先开「怎么用？」说明卡；找不到按钮先滚动）
+# R13：清空全部两段式（#36 修正：说明卡在列表尾部、展开标志与历史相关——
+# 先试找按钮；找不到再确保展开（点「怎么用？」），滚动向下逐次物化查找）
 ws_now = snap()["s"]
-help_btn = find(ws_now, "怎么用？", "Button")
-if not help_btn:
-    # A5：虚拟化列表下，按钮可能未物化；先滚动触发再抓
-    get("/m?k=scroll&x=200&y=450&dx=0&dy=-120")
-    time.sleep(1.0)
-    ws_now = snap()["s"]
-    help_btn = find(ws_now, "怎么用？", "Button")
-if help_btn:
-    ws_now = click_text(ws_now, "怎么用？", "Button") or ws_now
-    R("after-help-open", ws_now)
 cb = find(ws_now, "清空全部", "Button")
+for attempt in (1, 2):
+    if cb:
+        break
+    if find(ws_now, "怎么用？", "Button") is not None:
+        ws_now = click_text(ws_now, "怎么用？", "Button") or ws_now
+    for _si in range(8):
+        ws_now = snap()["s"]
+        cb = find(ws_now, "清空全部", "Button")
+        if cb:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=400")
+        time.sleep(0.7)
+    if cb:
+        break
 if cb:
-    ws = click_text(ws_now, "清空全部", "Button") or ws_now
-    ws = click_text(ws, "清空全部", "Button") or ws
+    x, y = center(cb)
+    print(f"[click] '清空全部' -> ({x},{y}) ty=Button", flush=True)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(1.4)
+    R("after-clear-arm", snap()["s"])
+    # 二次点击前重新物化定位（两段式按钮需仍在视口）
+    cb2 = None
+    for _si in range(6):
+        ws = snap()["s"]
+        cb2 = find(ws, "清空全部", "Button")
+        if cb2:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=400")
+        time.sleep(0.7)
+    if cb2:
+        x, y = center(cb2)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(1.8)
+    ws = snap()["s"]
     R("after-clear", ws)
-    rec(13, "清空全部两段式生效", find(ws, "清空全部", "Button") is None or not any("#1" in t or "#2" in t for t, r in labels(ws)), "列表清空")
+    rec(13, "清空全部两段式生效", not any(title_re(k).search(t) for k in (1, 2) for t, r in labels(ws)), "列表清空（#1/#2 标题消失）")
 else:
-    rec(13, "清空全部按钮可见", False, "无按钮")
+    rec(13, "清空全部按钮可见", False, "展开+滚动后仍无按钮")
 
-# R14：草稿输入 + 建守护（第 3 条不同 slot）
-ws = type_text(ws, "周日下午去唱歌")
-ws = click_text(ws, "建守护", "Button") or ws
-rec(14, "第 3 条（不同 slot）建卡可见", any("#3" in t or "唱歌" in t for t, r in labels(ws)), "列表含 #3 或 唱歌")
+# R14：草稿输入 + 建守护（清空后 seq 续号，id 可能为 #4；带结果重试，#36 修正）
+ws = type_and_create(ws, "周日下午去唱歌", "唱歌")
+rec(14, "清空后重建卡可见", any(("#3" in t or "#4" in t or "唱歌" in t) for t, r in labels(ws)), "列表含 #3/#4 或 唱歌")
 
 # ---- 收尾 ----
 print("\n=== 14 项回归汇总（v2，新路径） ===", flush=True)
