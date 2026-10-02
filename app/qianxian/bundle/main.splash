@@ -543,33 +543,36 @@ fn add_person(id_str, raw){
     for an in added {
         if merged == "" { merged = an } else { merged = merged + "," + an }
     }
-    // C4：重建数组
-    let new_cases = []
-    for qi in cases.len() {
-        if qi == cur {
-            new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
-                "activity": cases[qi]["activity"], "place": cases[qi]["place"],
-                "status": cases[qi]["status"],
-                "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
-                "conflict": cases[qi]["conflict"], "people": merged,
-                "bill_total": cases[qi]["bill_total"],
-                "receipt_activity": cases[qi]["receipt_activity"],
-                "receipt_place": cases[qi]["receipt_place"],
-                "receipt_text": cases[qi]["receipt_text"],
-                "receipt_done": cases[qi]["receipt_done"]})
-        } else {
-            new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
-                "activity": cases[qi]["activity"], "place": cases[qi]["place"],
-                "status": cases[qi]["status"],
-                "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
-                "conflict": cases[qi]["conflict"], "people": cases[qi]["people"],
-                "bill_total": cases[qi]["bill_total"],
-                "receipt_activity": cases[qi]["receipt_activity"],
-                "receipt_place": cases[qi]["receipt_place"],
-                "receipt_text": cases[qi]["receipt_text"],
-                "receipt_done": cases[qi]["receipt_done"]})
+// C4：重建数组（#38 修：必须保留 slot_init_asked，否则 add_person 会把
+        //   首次点改时间的"再点一次才填"标记清掉，导致反复弹窗）
+        let new_cases = []
+        for qi in cases.len() {
+            if qi == cur {
+                new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
+                    "activity": cases[qi]["activity"], "place": cases[qi]["place"],
+                    "status": cases[qi]["status"],
+                    "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
+                    "conflict": cases[qi]["conflict"], "people": merged,
+                    "bill_total": cases[qi]["bill_total"],
+                    "receipt_activity": cases[qi]["receipt_activity"],
+                    "receipt_place": cases[qi]["receipt_place"],
+                    "receipt_text": cases[qi]["receipt_text"],
+                    "receipt_done": cases[qi]["receipt_done"],
+                    "slot_init_asked": cases[qi]["slot_init_asked"]})
+            } else {
+                new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
+                    "activity": cases[qi]["activity"], "place": cases[qi]["place"],
+                    "status": cases[qi]["status"],
+                    "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
+                    "conflict": cases[qi]["conflict"], "people": cases[qi]["people"],
+                    "bill_total": cases[qi]["bill_total"],
+                    "receipt_activity": cases[qi]["receipt_activity"],
+                    "receipt_place": cases[qi]["receipt_place"],
+                    "receipt_text": cases[qi]["receipt_text"],
+                    "receipt_done": cases[qi]["receipt_done"],
+                    "slot_init_asked": cases[qi]["slot_init_asked"]})
+            }
         }
-    }
     cases = new_cases
     rebuild_lines()
     let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
@@ -604,33 +607,35 @@ fn update_bill_total(id_str, raw){
         ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
         return
     }
-    // C4：重建数组（cur 分支写 trimmed，其余保留原 bill_total）
-    let new_cases = []
-    for bi2 in cases.len() {
-        if bi2 == cur {
-            new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
-                "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
-                "status": cases[bi2]["status"],
-                "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
-                "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
-                "bill_total": trimmed,
-                "receipt_activity": cases[bi2]["receipt_activity"],
-                "receipt_place": cases[bi2]["receipt_place"],
-                "receipt_text": cases[bi2]["receipt_text"],
-                "receipt_done": cases[bi2]["receipt_done"]})
-        } else {
-            new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
-                "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
-                "status": cases[bi2]["status"],
-                "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
-                "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
-                "bill_total": cases[bi2]["bill_total"],
-                "receipt_activity": cases[bi2]["receipt_activity"],
-                "receipt_place": cases[bi2]["receipt_place"],
-                "receipt_text": cases[bi2]["receipt_text"],
-                "receipt_done": cases[bi2]["receipt_done"]})
+// C4：重建数组（cur 分支写 trimmed，其余保留原 bill_total；#38 同 add_person 补 slot_init_asked）
+        let new_cases = []
+        for bi2 in cases.len() {
+            if bi2 == cur {
+                new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
+                    "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
+                    "status": cases[bi2]["status"],
+                    "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
+                    "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
+                    "bill_total": trimmed,
+                    "receipt_activity": cases[bi2]["receipt_activity"],
+                    "receipt_place": cases[bi2]["receipt_place"],
+                    "receipt_text": cases[bi2]["receipt_text"],
+                    "receipt_done": cases[bi2]["receipt_done"],
+                    "slot_init_asked": cases[bi2]["slot_init_asked"]})
+            } else {
+                new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
+                    "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
+                    "status": cases[bi2]["status"],
+                    "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
+                    "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
+                    "bill_total": cases[bi2]["bill_total"],
+                    "receipt_activity": cases[bi2]["receipt_activity"],
+                    "receipt_place": cases[bi2]["receipt_place"],
+                    "receipt_text": cases[bi2]["receipt_text"],
+                    "receipt_done": cases[bi2]["receipt_done"],
+                    "slot_init_asked": cases[bi2]["slot_init_asked"]})
+            }
         }
-    }
     cases = new_cases
     rebuild_lines()
     let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
