@@ -5,10 +5,12 @@
     "glance"
   ],
   "agent": {
-    "peer": true,
-    "ask_user_question": true,
-    "account_folder_read": true,
-    "account_folder_write": false
+    "profile": "workspace-write",
+    "tools": [
+      "ask_user_question"
+    ],
+    "max_iterations": 8,
+    "token_budget": 16000
   },
   "id": "qianxian",
   "integrity": {
