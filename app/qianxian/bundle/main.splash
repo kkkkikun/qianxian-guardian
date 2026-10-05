@@ -1308,42 +1308,231 @@ fn undo_cancel(){
     }
 }
 
-// AI 增强（可选）：仅当宿主提供 octos.* 时才尝试，否则明确降级
+// AI 增强（可选）：双通道 #37（外环派·复赛切片，原则第2条）
+// 首选：host.has("model") → model.complete 一次性 schema 校验，输出 {activity, slot_day,
+//   slot_part, place} 四字段（字符串、长度 ≤24、无JSON残留照 #30 范式）。走 AI-SERVICES 闭环。
+// 降级：card-host 无 model → host.request("octos.turn.start", ...) 对话式peer；
+//   首次会弹"等人允许"，30s 缓冲区分授权等待 vs 实际超时（#32/#26 实证）。
+// LLM 不碰状态机：解析结果仅经 parse_apply 规范化写入 msg_input，hint 明示「AI 已建议
+//   活动/时间/地点，请过目后点建守护」。本地分诊仍是唯一事实源。
 fn ai_parse(){
-    // === #32 外环修：agentic 收口——超时兜底 + 重复点防护 + 回复入输入框（LLM 不碰状态机） ===
+    // === #32 外环修：重复点防护 ===
     if ai_pending == "yes" {
-        ui.hint.set_text("AI 仍在解析中，请稍候（8 秒无响应会自动降级）")
+        ui.hint.set_text("AI 仍在解析中，请稍候（30 秒无响应会自动降级）")
         return
     }
-    let has_octos = host.has("octos.turn.start")
-    if has_octos {
-        let text = ui.msg_input.text()
-        if text == "" {
-            ui.hint.set_text("先输入一条群消息再试 AI 解析")
-            return
+    let text = ui.msg_input.text()
+    if text == "" {
+        ui.hint.set_text("先输入一条群消息再试 AI 解析")
+        return
+    }
+    ai_pending = "yes"
+    ui.hint.set_text("AI 解析中…（约 30 秒，无响应自动降级本地规则）")
+    // 30s 兜底（turn.start 首次需等"允许"，8s 太短见 #37；model.complete 通常秒级）
+    start_timeout(30.0, || {
+        if ai_pending == "yes" {
+            ai_pending = "no"
+            ui.hint.set_text("AI 无响应（30 秒），已降级本地规则——直接点「建守护」即可")
         }
-        ai_pending = "yes"
-        ui.hint.set_text("AI 解析中…（约 8 秒，无响应自动降级本地规则）")
-        // 8 秒兜底：回调不触发（#26 审查⑥）也能回到可用态；机制同 undo 5s 窗口
-        start_timeout(8.0, || {
-            if ai_pending == "yes" {
-                ai_pending = "no"
-                ui.hint.set_text("AI 无响应（8 秒），已降级本地规则——直接点「建守护」即可")
-            }
-        })
-        host.request("octos.turn.start", {text: "从这条聚会消息提取活动/时间/地点，只回 JSON：" + text}, fn(r){
+    })
+    // === 通道 1：首选 model.complete（一次性 schema 校验）===
+    if host.has("model") {
+        host.request("model.complete", {
+            schema: {activity: "string", slot_day: "string", slot_part: "string", place: "string"},
+            prompt: "从这条聚会消息提取活动/时间/地点，字段长度 ≤24，只回 JSON：" + text
+        }, fn(r){
             ai_pending = "no"
             if r.is_ok {
-                // AI 回复写入输入框供人过目（不自动建卡——本地规则仍是唯一事实源）
-                ui.msg_input.set_text("" + r.data.text)
-                ui.hint.set_text("AI 已整理到输入框，请过目后点「建守护」")
+                if parse_apply("" + r.data.activity, "" + r.data.slot_day, "" + r.data.slot_part, "" + r.data.place) {
+                    ui.hint.set_text("AI 已建议活动/时间/地点，请过目后点「建守护」")
+                } else {
+                    ui.hint.set_text("AI 返回格式不合规，已降级为本地规则")
+                }
             } else {
                 ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
             }
         })
-    } else {
-        ui.hint.set_text("本设备无 AI 服务（no service answers \"octos\"），本地规则继续可用")
+        return
     }
+    // === 通道 2：降级 octos.turn.start（card-host 无 model 时）===
+    if host.has("octos.turn.start") {
+        host.request("octos.turn.start", {text: "从这条聚会消息提取活动/时间/地点，只回 JSON：" + text}, fn(r){
+            ai_pending = "no"
+            if r.is_ok {
+                // turn.start 回包非 schema 化，走宽松抽取；不再裸 set_text r.data.text
+                let parsed = parse_loose("" + r.data.text)
+                if parse_apply(parsed[0], parsed[1], parsed[2], parsed[3]) {
+                    ui.hint.set_text("AI 已建议活动/时间/地点，请过目后点「建守护」（turn.start 首次会等授权）")
+                } else {
+                    ui.hint.set_text("AI 返回格式不合规，已降级为本地规则")
+                }
+            } else {
+                ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
+            }
+        })
+        return
+    }
+    // 双通道皆无服务
+    ai_pending = "no"
+    ui.hint.set_text("本设备无 AI 服务（no service answers \"model/octos\"），本地规则继续可用")
+}
+
+// === #37 parse_apply：把 AI 抽出的 4 字段规范化到 msg_input ===
+//   字段长度硬限 ≤24（无 JSON 残留照 #30 范式）；活动/时段/地点/星期几分别填入输入框草稿位置。
+//   msg_input 单输入框策略——按"活动 · 星期几-时段 · 地点"合成可读文本；本地分诊仍按原
+//   文本走（cases 字段以「点建守护」时的输入为事实源）。
+//   返回 true = 规范化成功，false = 字段不全或格式不合规（hint 已在外层写）。
+fn parse_apply(act, sd, sp, pl){
+    let a = trim24(act)
+    let d = trim24(sd)
+    let p = trim24(sp)
+    let l = trim24(pl)
+    // 至少要活动或地点其一
+    if a == "" && l == "" {
+        return false
+    }
+    let composed = a
+    if d != "" || p != "" {
+        composed = composed + " · " + d + "-" + p
+    }
+    if l != "" {
+        composed = composed + " · " + l
+    }
+    ui.msg_input.set_text(composed)
+    return true
+}
+
+// === #37 parse_loose：turn.start 回包宽松抽取 ——
+    //   回包通常是自由文本含 JSON，扫首段 {…} 取四字段；取不到则按已知关键词扫描。
+    //   返回 [activity, slot_day, slot_part, place] 数组。
+fn parse_loose(raw){
+    let act = ""
+    let sd = ""
+    let sp = ""
+    let pl = ""
+    // 尝试取首段 JSON
+    let lb = raw.index_of("{")
+    let rb = raw.last_index_of("}")
+    if lb >= 0 && rb > lb {
+        let js = raw[lb:rb+1]
+        act = json_field(js, "activity")
+        sd = json_field(js, "slot_day")
+        sp = json_field(js, "slot_part")
+        pl = json_field(js, "place")
+    }
+    // 兜底扫描（按本地规则词表），缺啥补啥
+    if act == "" {
+        let parts = ["聚会", "聚餐", "骑车", "徒步", "爬山", "打球", "唱歌", "电影", "桌游", "烧烤"]
+        for k in parts { if raw.contains(k) { break } }
+    }
+    if sd == "" {
+        let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日", "周末"]
+        for k in days { if raw.contains(k) { sd = k; break } }
+    }
+    if sp == "" {
+        let parts = ["上午", "中午", "下午", "晚上"]
+        for k in parts { if raw.contains(k) { sp = k; break } }
+    }
+    return [act, sd, sp, pl]
+}
+
+// === #37 辅助：trim24 截到 ≤24 字 + json_field 提字段 ===
+fn trim24(s){
+    let r = "" + s
+    if r.len() > 24 { r = r[0:24] }
+    return r
+}
+fn json_field(js, key){
+    let kq = "\"" + key + "\""
+    let idx = js.index_of(kq)
+    if idx < 0 { return "" }
+    let rest = js[idx + kq.len():]
+    let colon = rest.index_of(":")
+    if colon < 0 { return "" }
+    let after = rest[colon+1:]
+    // 跳过空白
+    let start = 0
+    while start < after.len() {
+        let ch = after[start:start+1]
+        if ch != " " && ch != "\n" && ch != "\t" { break }
+        start = start + 1
+    }
+    after = after[start:]
+    // 字符串值
+    if after.len() > 0 && after[0:1] == "\"" {
+        let end = after.index_of("\"", 1)
+        if end < 0 { return "" }
+        return after[1:end]
+    }
+    // 非字符串（罕见），截到 ,/}/空白
+    let end = after.len()
+    for ci in after.len() {
+        let ch = after[ci:ci+1]
+        if ch == "," || ch == "}" || ch == " " || ch == "\n" { end = ci; break }
+    }
+    return after[0:end]
+}
+
+// === #37 publish_glance：向 glance 屏发「今晚聚会 T-X 提醒」L0卡 ===
+//   人触发（仅当 status==Confirmed 且当前时刻在约定时段前 5/30/60 分钟区间内）。
+//   card-host 无 glance 服务时按"已降级本地规则"友好提示；glance capability 已在
+//   manifest 封闭清单（#37 三件套②）。默认不主动调，仅"发布到 glance 屏"按钮触发。
+fn publish_glance(){
+    // 任何低频按钮都视为"放弃取消/清空/AI 等待"
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    undo_show_flag2 = "no"
+    cancel_pending_flag = "no"
+    clear_pending_flag = "no"
+    clear_pending_deadline = 0
+    if ai_pending == "yes" {
+        ui.hint.set_text("AI 还在跑，等解析完再发 glance 提醒")
+        return
+    }
+    if !host.has("glance") {
+        ui.hint.set_text("本宿主无 glance 服务（card-host），无法投递 L0 卡；外环真机可跑")
+        return
+    }
+    // 找一条 Confirmed 的守护做投递目标；按 selected_id 优先，否则取第一条 Confirmed
+    let target = -1
+    if selected_id > 0 {
+        for qi in cases.len() {
+            if cases[qi]["id"] == selected_id {
+                if "" + cases[qi]["status"] == "Confirmed" {
+                    target = qi
+                }
+                break
+            }
+        }
+    }
+    if target < 0 {
+        for qi in cases.len() {
+            if "" + cases[qi]["status"] == "Confirmed" {
+                target = qi
+                break
+            }
+        }
+    }
+    if target < 0 {
+        ui.hint.set_text("暂无「已确认」守护可发 glance 提醒（先确认一条守护）")
+        return
+    }
+    let act = "" + cases[target]["activity"]
+    let sd = "" + cases[target]["slot_day"]
+    let sp = "" + cases[target]["slot_part"]
+    let pl = "" + cases[target]["place"]
+    let summary = "聚会提醒：" + act + " · " + sd + "-" + sp + " · " + pl
+    host.request("glance.publish", {
+        level: "L0",
+        title: "牵线 · 守护提醒",
+        body: summary
+    }, fn(r){
+        if r.is_ok {
+            ui.hint.set_text("已投递 glance 屏（" + summary + "）")
+        } else {
+            ui.hint.set_text("glance 投递失败（" + r.error + "），外环真机可排查")
+        }
+    })
 }
 
 // === #14 新增：示例一键填充（演示友好） ===
@@ -1815,6 +2004,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
                             draw_text +: {color: accent color_hover: accent color_down: accent}}
                         ButtonFlat{text: "导出数据" height: 44 padding: Inset{left: 10 right: 10} on_click: || export_data()
+                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                        // === #37「发布到 glance 屏」按钮（人触发，与导出/清空同级灰底）===
+                        ButtonFlat{text: "发布到 glance 屏" height: 44 padding: Inset{left: 10 right: 10} on_click: || publish_glance()
                             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
                             draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
                         ButtonFlat{text: "清空全部" height: 44 padding: Inset{left: 10 right: 10} on_click: || clear_all_data()

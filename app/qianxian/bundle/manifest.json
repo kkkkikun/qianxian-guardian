@@ -1,11 +1,18 @@
 {
   "capabilities": [
     "storage",
-    "octos.turn.start"
+    "octos.turn.start",
+    "glance"
   ],
+  "agent": {
+    "peer": true,
+    "ask_user_question": true,
+    "account_folder_read": true,
+    "account_folder_write": false
+  },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "6bc647ff2e5299719aab1b897e72016873ef38b77e19e6cc666ee24cce02f31e"
+    "bundle_blake3": "[hex-redacted]"
   },
   "name": "牵线",
   "schema": 1,
