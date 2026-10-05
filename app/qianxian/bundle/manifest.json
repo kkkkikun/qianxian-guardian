@@ -1,20 +1,19 @@
 {
-  "capabilities": [
-    "storage",
-    "octos.turn.start",
-    "glance"
-  ],
   "agent": {
+    "max_iterations": 8,
     "profile": "workspace-write",
+    "token_budget": 16000,
     "tools": [
       "ask_user_question"
-    ],
-    "max_iterations": 8,
-    "token_budget": 16000
+    ]
   },
+  "capabilities": [
+    "storage",
+    "octos.turn.start"
+  ],
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "[hex-redacted]"
+    "bundle_blake3": "d1af2d3e945975e709edd82384189fd3716ba04cdb2f5a0a5b4b9afb88c3561e"
   },
   "name": "牵线",
   "schema": 1,
