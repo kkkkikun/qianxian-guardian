@@ -3,9 +3,7 @@
     "max_iterations": 8,
     "profile": "workspace-write",
     "token_budget": 16000,
-    "tools": [
-      "ask_user_question"
-    ]
+    "tools": []
   },
   "capabilities": [
     "storage",
@@ -13,7 +11,7 @@
   ],
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "d1af2d3e945975e709edd82384189fd3716ba04cdb2f5a0a5b4b9afb88c3561e"
+    "bundle_blake3": "b0fdf5fb96fd943cbbfc56b29649ab944279df5f43e390d61e61fff3708c95cf"
   },
   "name": "牵线",
   "schema": 1,

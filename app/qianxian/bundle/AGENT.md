@@ -12,16 +12,17 @@
 
 ## 我能做什么
 
-- 读我自己的 `cases.json`（account_folder_read 已声明），问答当前守护状态、活动/时间/地点、
-  参与人、AA 均摊、回执完成度、撤销窗口剩余。
-- 协助把外部触发（如 cron 提醒模板、用户口语化查询）映射到 App 已有动作（建守护/分诊/
-  改期/取消/AA 收账）。
-- 在「Ask 牵线」面板与用户对话，提示当前 #N 守护的卡片状态。
+- 在「Ask 牵线」面板与用户对话；按当前 `cases.json` 状态回答（活动/时间/地点/
+  参与人、AA 均摊、回执完成度、撤销窗口剩余）。
+- 协助把外部触发（cron 提醒模板、用户口语化查询）映射到 App 已有动作（建守护/分诊/
+  改期/取消/AA 收账），由**用户在 splash UI 主动点按钮**触发实际变更。
 
 ## 我不能做什么
 
-- 不能改你们 App 之外的任何东西——account_folder_write 已显式置 false。
-- 不能调度别的 App——store app 走 peer 调度，不走内核；派工只能由系统 Agent 转给我。
+- 不能读写 App 之外的任何文件——manifest agent.tools=[]，hub 对 contained app
+  不开放任何工具调用（AI-SERVICES §"What the agent gets today"）。
+- 不能直接调 `cases.py` 或 `fs`——所有变更走 splash UI 按钮（人主动）。
+- 不能调度别的 App——store app 走 peer，不走内核；派工只能由系统 Agent 转给我。
 - 不能看别人卡——私有 context 受 peer 隔离保护。
 - 不能自驱——App Hub 当前不开放 needs/triggers/background runs（见 AI-SERVICES）。
 
