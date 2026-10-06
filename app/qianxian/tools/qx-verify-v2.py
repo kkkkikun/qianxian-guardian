@@ -288,6 +288,10 @@ rec(9, "返回列表生效", is_list_mode(ws), f"list-mode={is_list_mode(ws)}")
 # #46 外环修正：原"不滚动直接数视口"是装箱金丝雀——任何视口高度变化（如 #46 加
 #   capability 行）都会误报。照 A5 边滚边看：滚动收集去重标题，断言见过的折叠卡 >=2。
 seen_titles = set()
+# #48b：R-09 返回列表后 scroll 停在离开时的位置（双视图重构后列表记忆滚动位）——
+#   walk 先回顶再向下，保证从内容头开始覆盖。
+get("/m?k=scroll&x=200&y=500&dx=0&dy=-3000")
+time.sleep(0.8)
 for _si in range(6):
     ws_now = snap()["s"]
     for t, r in labels(ws_now):
@@ -295,7 +299,9 @@ for _si in range(6):
             seen_titles.add(t.strip())
     if len(seen_titles) >= 2:
         break
-    get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+    # #48：case_list 盒高随 capability 行/双视图重构变为 ~372（305..677），步长 300 易
+    #   整步跨过折叠卡——步长改 200 提高重叠率。
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=200")
     time.sleep(0.8)
 rec(10, f"折叠态可见（去重 {len(seen_titles)} 卡）", len(seen_titles) >= 2, f"walk-saw={len(seen_titles)}")
 
