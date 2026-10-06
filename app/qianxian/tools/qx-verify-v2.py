@@ -239,6 +239,14 @@ rec(5, "进入详情模式（返回列表按钮可见）", is_detail_mode(ws), f
 
 # R06：详情内信息项（#36 修正：原文行是 #31g 有意删除——详情卡总高必须 ≤ 列表盒高，
 # 否则复现零布局裁剪；原文在折叠摘要与确认后回执中可见，详情面板计 6 项）
+# #47 外环修正：click_title 见到「返回列表」即返回，详情其余内容软渲染中尚未物化——
+#   按内容标记就绪轮询（≤6s），不靠单次 snap。
+for _pi in range(6):
+    det_labels = [t for t, r in labels(ws)]
+    if any("状态：" in t and "活动：" in t for t in det_labels):
+        break
+    time.sleep(1.0)
+    ws = snap()["s"]
 det_labels = [t for t, r in labels(ws)]
 has_status = any("状态：" in t for t in det_labels)
 has_slot = any(k in " ".join(det_labels) for k in ("周六", "时间"))
@@ -261,6 +269,12 @@ has_confirmed = any("Confirmed" in t or "已确认" in t for t, r in labels(ws))
 rec(7, "详情内确认生效", has_confirmed, f"confirmed-visible={has_confirmed}")
 
 # R08：当前详情卡存在 + 回执四行（确认后重抓树）
+# #47 外环修正：确认后回执行同样晚于「返回列表」物化——就绪轮询 ≤6s。
+for _pi in range(6):
+    if len([t for t, r in labels(ws) if "↳" in t]) >= 4:
+        break
+    time.sleep(1.0)
+    ws = snap()["s"]
 det_labels = [t for t, r in labels(ws)]
 rec_lines = [t for t in det_labels if "↳" in t]
 rec(8, f"详情卡 ↳ 回执四行（{len(rec_lines)}/4）", len(rec_lines) >= 1, f"lines={rec_lines[:4]}")
