@@ -543,6 +543,9 @@ fn load(){
     //   load() 此刻读回的偏好不会反映到标签——重启后按钮显示「标准」实际却是 emoji 档
     //   （首次点击才自愈）。照 ui.hint.set_text 同范式命令式同步。
     ui.style_btn.set_text("风格：" + style_label_for(receipt_style))
+    // #46 A切片：根组件 ai_cap_label 首次定型为静态 placeholder，
+    //   load() 末尾用 probe_ai_cap() 命令式同步真实 host 探测文案（照 #44 范式）。
+    ui.ai_cap_label.set_text(probe_ai_cap())
     rebuild_lines()
     ui.case_list.render()
     ui.hint.set_text(hint + hint_suffix)
@@ -1475,6 +1478,20 @@ fn undo_cancel(){
 //   slot_part, place} 四字段（字符串、长度 ≤24、无JSON残留照 #30 范式）。走 AI-SERVICES 闭环。
 // 降级：card-host 无 model → host.request("octos.turn.start", ...) 对话式peer；
 //   首次会弹"等人允许"，30s 缓冲区分授权等待 vs 实际超时（#32/#26 实证）。
+// === #46 A切片：AI capability 可见性提示（复赛方向 A 的诚实降级形态）===
+//   探测 host 端哪个 AI 通道可用，返回给小字标签显示的文案。
+//   顺序与 ai_parse() 双通道优先级一致：model.complete 优先，回落到 turn.start，再无则本地规则。
+//   仅做"探测并展示"——不参与状态机、不改 ai_parse 通道逻辑、不动 manifest。
+fn probe_ai_cap(){
+    if host.has("model") {
+        return "AI 服务：model.complete（结构化解析可用）"
+    }
+    if host.has("octos.turn.start") {
+        return "AI 服务：对话通道可用（首次使用需在宿主点允许）"
+    }
+    return "AI：本机无 AI 服务，本地规则解析兜底"
+}
+
 // LLM 不碰状态机：解析结果仅经 parse_apply 规范化写入 msg_input，hint 明示「AI 已建议
 //   活动/时间/地点，请过目后点建守护」。本地分诊仍是唯一事实源。
 fn ai_parse(){
@@ -1562,6 +1579,8 @@ fn ai_parse(){
     // 双通道皆无服务
     ai_pending = "no"
     ui.hint.set_text("本设备无 AI 服务（no service answers \"model/octos\"），本地规则继续可用")
+    // #46 A切片：防御性幂等——load() 已设过 ai_cap_label，此处保持一致。
+    ui.ai_cap_label.set_text(probe_ai_cap())
 }
 
 // === #42 新增：ai_adopt —— 把「✨ AI 生成」建议卡四字段采纳到 msg_input ===
@@ -1918,6 +1937,11 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             draw_bg +: {border_radius: 20.0 color: accent color_hover: #x0a84ff color_down: #x0062cc border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
     }
+    // === #46 A切片：AI capability 可见性标签（次级色小字，width Fill）===
+    //   根组件首次求值定型 → 静态 placeholder；load() 末尾用 probe_ai_cap() 命令式同步
+    //   真实文案（照 #44 ui.style_btn.set_text 同范式）。
+    ai_cap_label := Label{width: Fill text: "AI 服务：探测中…"
+        draw_text.color: secondary draw_text.text_style.font_size: 12}
     hint := Label{width: Fill text: "载入中…" draw_text.color: secondary draw_text.text_style.font_size: 13}
     case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
         // === #31f：详情模式分支（列表/详情互斥，同一 ScrollY 内无高度竞争）===
