@@ -1930,7 +1930,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}
     Label{text: "群里说好的聚会，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 13}
     View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-            msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息，如：周六上午去深圳湾骑车"
+            // #47 外环修（用户截图实锤）：占位文案 19 字在固定 44px 高输入框内折行、
+            //   第二行被裁——缩到 12 字保单行（412 宽下输入框 ~201px，~13px/字）；
+            //   保留「粘贴群消息」前缀（回归驱动 type_text 按此定位输入框）。
+            msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息，如：周六骑车"
             draw_bg +: {color: #xf2f2f7 color_hover: #xf2f2f7 color_focus: #xf2f2f7 color_empty: #xf2f2f7 border_radius: 10.0}
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: secondary color_empty_hover: secondary}}
         // === #14：示例一键填充按钮（演示友好）===
