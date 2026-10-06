@@ -1,5 +1,6 @@
 {
   "agent": {
+    "instructions": "AGENT.md",
     "max_iterations": 8,
     "profile": "workspace-write",
     "token_budget": 16000,
@@ -18,7 +19,7 @@
     "bundle_blake3": "743c1a7f8d26fe6a39d4c4813a9d8129481463d2ac607eff5fe6ee4965b7aef6",
     "signature": {
       "key_id": "aurora-x",
-      "value": "5e9f8702110ec28559366e03b1ab565f2da70a43a94f6945f0f6566c4519fc2ebd8c541c16088407c703971ed554ece30dbff1e7012ef412586e12db60b4a700"
+      "value": "22205407ec5bfce800c61289f832929e928a0a68e4116a320fff1117a91374ba52f2f7c960570145f734736c1d069052157f3c18d86905365b2043625a5f990b"
     }
   },
   "name": "牵线",
