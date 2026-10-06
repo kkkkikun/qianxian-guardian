@@ -11,6 +11,17 @@
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
 - **提交形态**：OctoSense **script-app**（`app/qianxian/bundle/`，`hub check — PASSED`）
 - **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）
+- 🎥 **2 分 16 秒演示视频**（15 步全流程）→ [Release v0.1.0 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.1.0)
+
+## 界面预览
+
+| 主界面（筛选 + 冲突徽章） | 详情与确认回执 | 冲突警示（失败态明示） |
+|---|---|---|
+| ![主界面](app/qianxian/bundle/screenshots/01-main.png) | ![详情](app/qianxian/bundle/screenshots/02-expanded.png) | ![冲突](app/qianxian/bundle/screenshots/03-conflict.png) |
+
+> 诚实标注：截图由 `tools/snap-to-png.py` 按**运行时真实控件树**重绘
+> （文字/层级/坐标/状态色来自 card-host 实际运行；本开发环境无图形会话，
+> `/g` 帧抓取超时，故非宿主像素）。评审可用 `tools/octo shot` 获取宿主像素图。
 
 ## 它做什么
 
@@ -43,14 +54,16 @@
 ## 无 AI 也完整可用
 
 本应用**不依赖任何模型服务**：分诊、时间槽抽取、冲突检测、状态机全部是确定性规则。
-AI 只是可选增强——宿主提供 `octos.turn.start` 时才出现「AI 解析（可选）」按钮；
-本运行环境无该服务时**明确降级**并继续可用（见 `evidence/ux-specs.md` 4.8 记档的平台限制）。
+AI 只是可选增强——屏上有常驻的**能力可见性行**（探测 `model` / `octos.turn.start`，
+如实显示"可用 / 实测无响应 / 本机无服务"）；解析结果先渲染「✨ AI 生成」建议卡，
+**由人点「采纳到输入框」才写回**，模型文本只进文本槽、绝不碰状态机。
+本机无活后端时**明确降级**为本地规则并继续可用（见 `evidence/ux-specs.md` 4.8 记档）。
 
 ## 怎么审这个作品（三条路，从零门槛到完整复现）
 
 **① 零门槛：直接读源码**（不需要任何构建）
 本应用是纯解释执行的脚本，核心逻辑都在一个文件里：
-`app/qianxian/bundle/main.splash`（约 1600 行，Splash/OctoScript 方言；函数名即语义：add_case / confirm_case / cycle_slot / add_person / rebuild_lines …）。
+`app/qianxian/bundle/main.splash`（约 2400 行，Splash/OctoScript 方言；函数名即语义：add_case / confirm_case / cycle_slot / add_person / rebuild_lines …）。
 配套阅读：[evidence/demo-script.md](evidence/demo-script.md)（21 步操作）、
 [evidence/regression-20261001.md](evidence/regression-20261001.md)（14 项真机验证）。
 
