@@ -208,6 +208,17 @@ fn ai_badge_fg(){
     return #x7c3aed
 }
 
+// === #43 D 切片：回执模板三档可切换（standard/brief/emoji）+ pref.json 持久化 ===
+// 字符串标记（与 howto_show_flag/ai_card_visible 同源；照 #13 实证范式）。
+// 合法值三档，其他值一律按 standard 兜底（rebuild_lines 内归一化）。
+// "app 记住人的偏好" 演示：点首屏底部「风格：X」按钮循环切换，写 pref.json，
+// 重启后 load() 读回内存 → 已有守护立即按新风格重排（rebuild_lines 即时刷新）。
+let receipt_style = "standard"
+// pref.json 写入失败标记（照 save_result 范式字符串：调用点用 == "fail" 判定）。
+// 与 save_result 不同：本任务不需返回值给调用点（hint 已内置两路文案），
+// 留全局只为方便调试/未来追溯；hint 范式已要求 fs.write 返回非 nil = 失败。
+let pref_save_result = "ok"
+
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
 // 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
 fn rebuild_lines(){
@@ -387,10 +398,29 @@ fn rebuild_lines(){
             let rp = "" + cases[i]["receipt_place"]
             let rt = "" + cases[i]["receipt_text"]
             let arr = []
-            arr.push("活动：" + ra)
-            arr.push("地点：" + rp)
-            arr.push("原文：" + rt)
-            arr.push("T-24h 提醒（本地提醒文本，需宿主定时能力）")
+            // === #43 D 切片：按 receipt_style 渲染行（快照语义不变——ra/rp/rt 仍固定，
+            //   风格只影响**渲染行**；切换风格立即 rebuild_lines，已有守护即按新风格重排）
+            if receipt_style == "brief" {
+                // 简短：合并活动+地点为一行 + 提醒行（地点为空时合并行只留活动）
+                if rp != "" {
+                    arr.push("活动：" + ra + " ｜ 地点：" + rp)
+                } else {
+                    arr.push("活动：" + ra)
+                }
+                arr.push("T-24h 提醒（本地提醒文本，需宿主定时能力）")
+            } else if receipt_style == "emoji" {
+                // 带 emoji：4 行各加前缀（与现状✨/⚠前缀一致——emoji 不增不减）
+                arr.push("📌 活动：" + ra)
+                arr.push("📍 地点：" + rp)
+                arr.push("💬 原文：" + rt)
+                arr.push("⏰ T-24h 提醒（本地提醒文本，需宿主定时能力）")
+            } else {
+                // standard（默认兜底；任何 receipt_style 非合法值都走这里）
+                arr.push("活动：" + ra)
+                arr.push("地点：" + rp)
+                arr.push("原文：" + rt)
+                arr.push("T-24h 提醒（本地提醒文本，需宿主定时能力）")
+            }
             case_receipt.push(arr)
         } else {
             case_receipt.push([])
@@ -487,6 +517,27 @@ fn load(){
         if cases.len() > 20 {
             hint_suffix = "，列表较长，建议用筛选或搜索"
         }
+    }
+    // #43：载入 pref.json（与 cases.json 同一 fs.read/parse_json 范式）。
+    // 内容 {"receipt_style": "standard|brief|emoji"}；文件不存在 / parse 失败 /
+    // 字段非法一律回落到 "standard"，**不报错不归档**——preference 损坏不影响
+    // 用户的聚会数据（与 cases 损坏的"备份改名"语义不同，preference 是偏好不是资产）。
+    // 字段校验：仅三档合法（"standard"/"brief"/"emoji"），其他值按兜底走。
+    if fs.exists("pref.json") {
+        let praw = fs.read("pref.json")
+        let pv = praw.parse_json()
+        let pbad = (pv == nil)
+        if !pbad {
+            let prs = pv["receipt_style"]
+            if prs != nil {
+                let prs_str = "" + prs
+                if prs_str == "standard" || prs_str == "brief" || prs_str == "emoji" {
+                    receipt_style = prs_str
+                }
+                // 其他值（含空串）走兜底：receipt_style 保持 "standard"
+            }
+        }
+        // pv == nil 或 prs == nil：同样兜底，不报错
     }
     rebuild_lines()
     ui.case_list.render()
@@ -944,6 +995,56 @@ fn set_query(q){
     } else {
         ui.hint.set_text("搜索 " + current_query + " · 共 " + filter_count_str + " / " + filter_total_str + " 条")
     }
+}
+
+// === #43 D 切片：回执风格切换（循环 standard→brief→emoji→standard）
+//   1. 翻转 receipt_style（按当前值决定下一档）；
+//   2. 写 pref.json {"receipt_style": <new>}——fs.write 返回非 nil = 失败（照 #13 save() 范式）；
+//      失败也要在**本次会话**让 receipt_style 生效（用户视觉立刻变），仅 hint 明示「偏好保存失败
+//      （风格本次会话仍生效）」——会话内不影响体验，重启才丢档；
+//   3. rebuild_lines 让已有守护的 case_receipt 立即按新风格重排（快照语义不变——ra/rp/rt 不动）；
+//   4. ui.style_btn.set_text(...) 命令式更新底部按钮文案（照 ui.hint.set_text 范式，根组件静态区
+//      靠 imperative set_text 而非 on_render 重算——task 明确允许此路径）；
+//   5. ui.hint.set_text(...) 给用户反馈（成功/失败两路）。
+//   注：style_btn 是根组件 ButtonFlat 的具名绑定（详见根组件布局），set_text 范式已在
+//      ui.hint 上多次实证（line 493, 504 等），runtime 可靠。
+fn set_receipt_style(){
+    let next = "standard"
+    if receipt_style == "standard" { next = "brief" }
+    else if receipt_style == "brief" { next = "emoji" }
+    else if receipt_style == "emoji" { next = "standard" }
+    // 其他值（理论上 load() 已兜底，但保险起见）→ 回 standard
+    receipt_style = next
+    // 写 pref.json（to_json 把字符串包成 {"receipt_style":"brief"} 形式）
+    let pw = fs.write("pref.json", {receipt_style: receipt_style}.to_json())
+    let write_ok = true
+    if pw != nil {
+        let pwmsg = "" + pw
+        if pwmsg != "" { write_ok = false }
+    }
+    rebuild_lines()
+    ui.case_list.render()
+    // 按钮文案命令式更新：根组件 if 不重算，但 on_click 事件回调内 imperative set_text 可靠
+    if ui.style_btn != nil {
+        ui.style_btn.set_text("风格：" + style_label_for(receipt_style))
+    }
+    let label_cn = style_label_for(receipt_style)
+    if write_ok {
+        // 成功：明示持久化+已有守护立即生效
+        ui.hint.set_text("回执风格已切换为 " + label_cn + "（已有守护的回执立即按新风格重排）")
+    } else {
+        // 失败：本次会话仍生效（receipt_style 已翻，case_receipt 已 rebuild），仅持久化未落盘
+        ui.hint.set_text("偏好保存失败（风格本次会话仍生效）：" + label_cn)
+    }
+}
+
+// === #43 辅助：把 receipt_style 内部值映射成按钮文案用的中文短词
+//   三档分别显示「标准 / 简短 / 带emoji」——按钮文字 + hint 反馈共用此映射
+//   （与 receipt_style 三合法值一一对应；其他值兜底返回「标准」）
+fn style_label_for(s){
+    if s == "brief" { return "简短" }
+    if s == "emoji" { return "带emoji" }
+    return "标准"
 }
 
 // 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清
@@ -2180,6 +2281,14 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     // 根组件属性只在首次求值定型——但按钮本身的 on_click 是事件回调，不依赖 if 重算；
     //   说明卡的显隐走 on_render 闭包内的 howto_show_flag 判断，符合硬约束 #1。
     ButtonFlat{text: "怎么用？" height: 44 padding: Inset{left: 14 right: 14} on_click: || toggle_howto()
+        draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+        draw_text +: {color: accent color_hover: accent color_down: accent}}
+    // === #43 D 切片：底部「风格：X」按钮（与「怎么用？」同行，文字按钮样式）===
+    //   具名 style_btn → ui.style_btn.set_text(...) 命令式更新（根组件 if 只在首次定型，
+    //   on_render 重算不可靠——实证范式见 ui.hint.set_text line 493/504 等，已多次回归通过）。
+    //   文案随 receipt_style 变（标准/简短/带emoji），on_click 走 set_receipt_style()
+    //   循环切换。详见 set_receipt_style 内调用 ui.style_btn.set_text(...)。
+    style_btn := ButtonFlat{text: "风格：" + style_label_for(receipt_style) height: 44 padding: Inset{left: 14 right: 14} on_click: || set_receipt_style()
         draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
         draw_text +: {color: accent color_hover: accent color_down: accent}}
 }
