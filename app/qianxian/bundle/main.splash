@@ -1484,12 +1484,12 @@ fn undo_cancel(){
 //   仅做"探测并展示"——不参与状态机、不改 ai_parse 通道逻辑、不动 manifest。
 fn probe_ai_cap(){
     if host.has("model") {
-        return "AI 服务：model.complete（结构化解析可用）"
+        return "AI：model.complete 结构化解析可用"
     }
     if host.has("octos.turn.start") {
-        return "AI 服务：对话通道可用（首次使用需在宿主点允许）"
+        return "AI：对话通道可用（首次需宿主允许）"
     }
-    return "AI：本机无 AI 服务，本地规则解析兜底"
+    return "AI：本机无服务，本地规则兜底"
 }
 
 // LLM 不碰状态机：解析结果仅经 parse_apply 规范化写入 msg_input，hint 明示「AI 已建议
@@ -1542,6 +1542,9 @@ fn ai_parse(){
                 }
             } else {
                 ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
+                // #46b 外环补：host.has 只证"已注册"，实测失败说明无活后端——
+                //   标签同步到实测结果，别让「可用」字样留在屏上误导（诚实可见性）。
+                ui.ai_cap_label.set_text("AI：通道实测无响应，本地规则兜底")
             }
         })
         return
@@ -1572,6 +1575,9 @@ fn ai_parse(){
                 }
             } else {
                 ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
+                // #46b 外环补：host.has 只证"已注册"，实测失败说明无活后端——
+                //   标签同步到实测结果，别让「可用」字样留在屏上误导（诚实可见性）。
+                ui.ai_cap_label.set_text("AI：通道实测无响应，本地规则兜底")
             }
         })
         return
