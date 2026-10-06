@@ -84,21 +84,43 @@ def click_text(ws, sub, ty=None, wait=1.6):
     return snap()["s"]
 
 
-def click_title(ws, card_id, wait=1.6):
-    """精确点某卡标题：找以 '#N ·' 开头的 Label。"""
+def click_title(ws, card_id, wait=2.0):
+    """精确点某卡标题并**效果验证**进详情（#46 外环修正）：
+    点击后轮询确认 ui_mode 真的切到 detail（软渲染重渲染有延迟，且 walk_find
+    停滚瞬间的 rect 可能未稳导致点击落空）——没进就继续边滚边找重试（A5）。
+    全程找不到/点不进则滚回顶部，返回 None（调用点 `or ws` 兜底）。"""
     prefix = f"#{card_id} ·"
-    for w in ws:
-        if w.get("ty") != "Label":
-            continue
-        t = (w.get("t") or "").strip()
-        if t.startswith(prefix) or (("▶" in t or "▾" in t) and prefix in t):
-            x, y = center(w)
-            print(f"[click-title] #{card_id} -> ({x},{y}) t={t[:30]!r}", flush=True)
-            get(f"/click?x={x}&y={y}")
-            time.sleep(wait)
-            return snap()["s"]
-    print(f"[click-title] #{card_id} NOT FOUND", flush=True)
-    return None
+    def _find_click(wsx):
+        for w in wsx:
+            if w.get("ty") != "Label":
+                continue
+            t = (w.get("t") or "").strip()
+            if t.startswith(prefix) or (("▶" in t or "▾" in t) and prefix in t):
+                rr = w.get("r")
+                # 标题被 fold 裁半时中心点在视口外，点击会落空——只点完整可见的
+                if rr and (rr[1] < 260 or rr[1] + rr[3] > 745):
+                    continue
+                x, y = center(w)
+                print(f"[click-title] #{card_id} -> ({x},{y}) t={t[:30]!r}", flush=True)
+                get(f"/click?x={x}&y={y}")
+                for _p in range(4):
+                    time.sleep(1.5)
+                    if is_detail_mode(snap()["s"]):
+                        return snap()["s"]
+                return None  # 点击未生效（rect 未稳/落空），继续 walk 重试
+        return None
+    r = _find_click(ws)
+    if r is not None:
+        return r
+    for _si in range(8):
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+        time.sleep(0.7)
+        r = _find_click(snap()["s"])
+        if r is not None:
+            return r
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-3000")
+    time.sleep(0.8)
+    return _find_click(snap()["s"])
 
 
 def is_detail_mode(ws):
@@ -151,9 +173,22 @@ def type_text(ws, text, wait=1.8):
 def type_and_create(ws, text, expect_sub, max_try=3):
     """键入 + 建守护，按结果重试（#36 修正：/t 注入或按钮点击偶发丢失，
     snap 不暴露 TextInput 文本 → 只能按「期望卡出现」闭环校验）。"""
+    # #46 外环修正（A5）：列表最老在前、新卡追加在尾部——创建后全列表边滚边找，
+    # 固定视口/回顶直查都对 fold 位置敏感（capability 行 ±27px 即翻车实证）。
+    def walk_find(sub, max_steps=10):
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=-3000")
+        time.sleep(0.6)
+        for _i in range(max_steps):
+            wsx = snap()["s"]
+            if any(sub in t for t, r in labels(wsx)):
+                return wsx
+            get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+            time.sleep(0.6)
+        return snap()["s"]
     for attempt in range(1, max_try + 1):
         ws = type_text(ws, text)
         ws = click_text(ws, "建守护", "Button") or ws
+        ws = walk_find(expect_sub)
         if any(expect_sub in t for t, r in labels(ws)):
             print(f"[type-and-create] '{expect_sub}' 第 {attempt} 次尝试成功", flush=True)
             return ws
@@ -193,6 +228,12 @@ rec(4, "冲突标签可见", len(conf) >= 1, f"conflict-labels={conf[:2]}")
 
 # ---- 进入详情模式（新路径核心） ----
 ws = click_title(ws, 2) or ws
+# #46 外环修正：软渲染重渲染有延迟——轮询等详情就绪（最多 ~6s），不靠单次 snap。
+for _pi in range(4):
+    if is_detail_mode(ws):
+        break
+    time.sleep(1.5)
+    ws = snap()["s"]
 R("enter-detail-2", ws)
 rec(5, "进入详情模式（返回列表按钮可见）", is_detail_mode(ws), f"detail-mode={is_detail_mode(ws)}")
 
@@ -230,8 +271,19 @@ R("back-to-list", ws)
 rec(9, "返回列表生效", is_list_mode(ws), f"list-mode={is_list_mode(ws)}")
 
 # R10：折叠态 3 行（列表模式；标题匹配用 title_re——前导空格/▶/▾ 前缀，#36 驱动修正）
-folded = [t for t, r in labels(ws) if any(title_re(k).match(t) for k in (1, 2, 3, 5, 6))]
-rec(10, f"折叠态可见（{len(folded)} 卡）", len(folded) >= 2, f"folded={len(folded)}")
+# #46 外环修正：原"不滚动直接数视口"是装箱金丝雀——任何视口高度变化（如 #46 加
+#   capability 行）都会误报。照 A5 边滚边看：滚动收集去重标题，断言见过的折叠卡 >=2。
+seen_titles = set()
+for _si in range(6):
+    ws_now = snap()["s"]
+    for t, r in labels(ws_now):
+        if any(title_re(k).match(t) for k in (1, 2, 3, 5, 6)):
+            seen_titles.add(t.strip())
+    if len(seen_titles) >= 2:
+        break
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+    time.sleep(0.8)
+rec(10, f"折叠态可见（去重 {len(seen_titles)} 卡）", len(seen_titles) >= 2, f"walk-saw={len(seen_titles)}")
 
 # R11：边滚边看（A5 方法论：滚动 → /snap → 再滚动）
 # card-host /m?k=scroll：dy 正值 = 向下滚（#36 实测：dy=-120 在顶部是 no-op）
@@ -240,8 +292,16 @@ time.sleep(1.0)
 ws_after_scroll = snap()["s"]
 R("after-scroll", ws_after_scroll)
 # 滚动后折叠卡可见数不应骤降（虚拟化列表物化稳定）
+# #46 外环修正：单步滚动可能跳出卡区（folded=0 是正常虚拟化，不是不稳）——
+#   A5 恢复断言：滚动后继续边滚边找，能重新见到折叠卡 = 物化机制稳定。
 folded_after = [t for t, r in labels(ws_after_scroll) if any(title_re(k).match(t) for k in (1, 2, 3, 5, 6))]
-rec(11, f"滚动后物化稳定（卡 {len(folded_after)}）", len(folded_after) >= 1, f"scroll-api=ok folded-after={len(folded_after)}")
+recover_steps = 0
+while len(folded_after) < 1 and recover_steps < 6:
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-400")
+    time.sleep(0.7)
+    folded_after = [t for t, r in labels(snap()["s"]) if any(title_re(k).match(t) for k in (1, 2, 3, 5, 6))]
+    recover_steps += 1
+rec(11, f"滚动后物化稳定（卡 {len(folded_after)}，恢复 {recover_steps} 步）", len(folded_after) >= 1, f"scroll-api=ok folded-after={len(folded_after)}")
 # 滚回顶部：R12 搜索框/计数标签在列表头部，必须在物化窗内（#36 修正）
 get("/m?k=scroll&x=200&y=500&dx=0&dy=-2400")
 time.sleep(1.0)
@@ -316,6 +376,10 @@ else:
 # #45 外环实测：清空全部会重置 seq，新卡 id 从 #1 重新计数（外环假设 #3/#4 系陈旧），
 #   且重试会连建多条——匹配范围放开到 #1..#6 的唱歌标题卡。
 ws = type_and_create(ws, "周日下午去唱歌", "唱歌")
+# #46 外环修正：新卡在列表顶部，而 R13 流程把视口滚到了尾部——断言前先滚回顶部（A5）。
+get("/m?k=scroll&x=200&y=500&dx=0&dy=-2400")
+time.sleep(1.0)
+ws = snap()["s"]
 rec(14, "清空后重建卡可见", any(title_re(k).search(t) and "唱歌" in t for k in (1, 2, 3, 4, 5, 6) for t, r in labels(ws)), "列表含 #N · 唱歌 标题卡")
 
 # ---- 收尾 ----
