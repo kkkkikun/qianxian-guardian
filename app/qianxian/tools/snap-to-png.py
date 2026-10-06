@@ -16,15 +16,17 @@ import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 412, 892
-BG = (255, 255, 255)
-INK = (28, 28, 30)
-SECOND = (142, 142, 147)
-ACCENT = (0, 122, 255)
-GREEN = (52, 199, 89)
-ORANGE = (255, 149, 0)
-RED = (255, 59, 48)
-PURPLE = (88, 86, 214)
-CARD = (242, 242, 247)
+# #48「红线」设计 tokens（与 main.splash 同源）：暖纸底/墨/朱砂/玉绿/琥珀/赤陶
+BG = (247, 242, 236)      # xf7f2ec 暖米白
+INK = (43, 39, 34)        # x2b2722 墨
+SECOND = (110, 103, 94)   # x6e675e 暖灰
+ACCENT = (199, 64, 47)    # xc7402f 朱砂
+GREEN = (47, 125, 79)     # x2f7d4f 玉绿
+ORANGE = (163, 95, 0)     # xa35f00 琥珀
+RED = (161, 77, 60)       # xa14d3c 赤陶
+PURPLE = (199, 64, 47)    # x5856d6→朱砂（撤销/AI 徽章已并入红线系）
+CARD = (241, 236, 228)    # xf1ece4 控件底
+BADGE_BG = (251, 233, 229)  # xfbe9e5 朱砂浅底
 
 FONT_CJK = [
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
@@ -46,6 +48,13 @@ def fetch(port, path):
     with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=10) as r:
         return json.load(r)
 
+
+GLYPH_MAP = {"⚠": "!", "✨": "", "📌": "", "📍": "", "💬": "", "⏰": "", "▶": "> ", "▾": "v ", "↳": " ->"}
+def clean(text):
+    t = text or ""
+    for k, v in GLYPH_MAP.items():
+        t = t.replace(k, v)
+    return t
 
 def color_of(text):
     t = text or ""
@@ -95,22 +104,31 @@ def main():
         ty, text = w.get("ty"), (w.get("t") or "").strip()
         if not text:
             continue
+        text = clean(text)
 
+        # 标题豁免：大字号标题不套 chip 底（#48 渲染器修）
+        is_title = y < 90 and hh >= 26
         if ty == "Button":
             fill = {
                 "确认这条守护": GREEN, "重新收敛": ORANGE, "取消守护": RED,
                 "建守护": ACCENT, "AI 解析": ACCENT, "改时间（5 槽）": ORANGE,
-                "添加": ACCENT, "撤销取消": PURPLE,
-            }.get(text, CARD)
-            d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=fill)
-            fg = (255, 255, 255)
+                "添加": ACCENT, "采纳到输入框": ACCENT, "撤销取消": ACCENT,
+            }.get(text)
+            if fill:
+                d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=fill)
+                fg = (255, 255, 255)
+            else:
+                # flat 文字按钮（用示例试试/怎么用？/风格：X/忽略/导出数据/清空全部）
+                d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=CARD)
+                fg = ACCENT if text in ("用示例试试", "怎么用？") or text.startswith("风格：") else (
+                    RED if text == "清空全部" else SECOND)
             f = f_badge
         elif ty == "TextInput":
             d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=CARD)
             fg, f = SECOND, f_small
-        elif len(text) <= 12 and ("·" in text or text.startswith("#")):
+        elif not is_title and len(text) <= 12 and ("·" in text or text.startswith("#")):
             d.rounded_rectangle([x, y, x + ww, y + hh], radius=7,
-                                fill=(230, 240, 254))
+                                fill=BADGE_BG)
             fg, f = ACCENT, f_badge
         elif text.startswith("↳") or text.startswith("⚠"):
             fg, f = ORANGE, f_small
