@@ -311,8 +311,10 @@ else:
     rec(13, "清空全部按钮可见", False, "展开+滚动后仍无按钮")
 
 # R14：草稿输入 + 建守护（清空后 seq 续号，id 可能为 #4；带结果重试，#36 修正）
+# #44 复验教训入册：旧断言 "唱歌" in t 可被 howto 卡示例文本假阳性满足（外环 #42 轮
+# 13/14 的 R-14 ✓ 即此）——收紧为卡片标题匹配（title_re 同源：#N · 前缀行）。
 ws = type_and_create(ws, "周日下午去唱歌", "唱歌")
-rec(14, "清空后重建卡可见", any(("#3" in t or "#4" in t or "唱歌" in t) for t, r in labels(ws)), "列表含 #3/#4 或 唱歌")
+rec(14, "清空后重建卡可见", any(title_re(k).search(t) and "唱歌" in t for k in (3, 4, 5, 6) for t, r in labels(ws)), "列表含 #N · 唱歌 标题卡")
 
 # ---- 收尾 ----
 print("\n=== 14 项回归汇总（v2，新路径） ===", flush=True)
