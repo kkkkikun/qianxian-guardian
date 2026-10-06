@@ -539,6 +539,10 @@ fn load(){
         }
         // pv == nil 或 prs == nil：同样兜底，不报错
     }
+    // #44 外环修：根组件按钮文案在首次求值已定型（当时 receipt_style 还是 "standard"），
+    //   load() 此刻读回的偏好不会反映到标签——重启后按钮显示「标准」实际却是 emoji 档
+    //   （首次点击才自愈）。照 ui.hint.set_text 同范式命令式同步。
+    ui.style_btn.set_text("风格：" + style_label_for(receipt_style))
     rebuild_lines()
     ui.case_list.render()
     ui.hint.set_text(hint + hint_suffix)
@@ -2225,16 +2229,21 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     Label{text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
                     // 复用 #11 AI 按钮弱化风格 + #14 灰底色,与主区三键视觉拉开层级
                     // （次级灰底 + accent/secondary 字,不抢眼）。
+                    // #44 外环修：五键原单行 flow:Right 总宽 ~500px > 容器 ~380px，第 5 键
+                    //   （清空全部）被布局丢弃出控件树——#37 加 glance 键后清空全部不可达
+                    //   （回归 R-13 真机实锤：按钮不在 /snap 树）。拆两行根治。
                     View{width: Fill height: Fit flow: Right spacing: 6
                         ButtonFlat{text: "改时间（5 槽）" height: 44 padding: Inset{left: 10 right: 10} on_click: || cycle_slot("" + selected_id)
                             draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
+                            draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff}}
                         ButtonFlat{text: "AI 解析" height: 44 padding: Inset{left: 10 right: 10} on_click: || ai_parse()
                             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
                             draw_text +: {color: accent color_hover: accent color_down: accent}}
                         ButtonFlat{text: "导出数据" height: 44 padding: Inset{left: 10 right: 10} on_click: || export_data()
                             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
                             draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                    }
+                    View{width: Fill height: Fit flow: Right spacing: 6
                         // === #37「发布到 glance 屏」按钮（人触发，与导出/清空同级灰底）===
                         ButtonFlat{text: "发布到 glance 屏" height: 44 padding: Inset{left: 10 right: 10} on_click: || publish_glance()
                             draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
