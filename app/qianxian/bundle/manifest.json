@@ -9,11 +9,25 @@
     "storage",
     "octos.turn.start"
   ],
+  "compute": {
+    "instruction_budget": null,
+    "memory_bytes": null
+  },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "743c1a7f8d26fe6a39d4c4813a9d8129481463d2ac607eff5fe6ee4965b7aef6"
+    "bundle_blake3": "743c1a7f8d26fe6a39d4c4813a9d8129481463d2ac607eff5fe6ee4965b7aef6",
+    "signature": {
+      "key_id": "aurora-x",
+      "value": "5e9f8702110ec28559366e03b1ab565f2da70a43a94f6945f0f6566c4519fc2ebd8c541c16088407c703971ed554ece30dbff1e7012ef412586e12db60b4a700"
+    }
   },
   "name": "牵线",
+  "network": {
+    "hosts": []
+  },
   "schema": 1,
+  "storage": {
+    "max_bytes": null
+  },
   "version": "0.1.0"
 }
