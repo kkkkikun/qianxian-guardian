@@ -162,14 +162,14 @@ let case_status_text = []           // 每条 case 的状态中文（"待拍板"
 // 状态色：行首徽章文字色与底色（Proposing 灰 / Confirmed 绿 / Cancelled 红）
 // 注：颜色必须是颜色字面量（#x…），不能返回字符串——draw_bg.color 期望 Vec4f
 fn status_badge_bg(st){
-    if st == "Confirmed" { return #xe6f7ec }
-    if st == "Cancelled" { return #xfdecea }
-    return #xefeff4  // Proposing / 兜底灰
+    if st == "Confirmed" { return #xe8f3ec }
+    if st == "Cancelled" { return #xf6e8e3 }
+    return #xf1ece4  // Proposing / 兜底灰
 }
 fn status_badge_fg(st){
-    if st == "Confirmed" { return #x1f8a3a }
-    if st == "Cancelled" { return #xff3b30 }
-    return #x6b6b73  // Proposing / 兜底灰
+    if st == "Confirmed" { return #x2f7d4f }
+    if st == "Cancelled" { return #xa14d3c }
+    return #x6e675e  // Proposing / 兜底灰
 }
 fn status_badge_text(st){
     if st == "Confirmed" { return "已确认" }
@@ -178,9 +178,9 @@ fn status_badge_text(st){
     return "" + st
 }
 fn status_bar_color(st){
-    if st == "Confirmed" { return #x34c759 }
-    if st == "Cancelled" { return #xff3b30 }
-    return #xb0b0b8  // Proposing / 兜底
+    if st == "Confirmed" { return #x2f7d4f }
+    if st == "Cancelled" { return #xa14d3c }
+    return #xc9bfb2  // Proposing / 兜底
 }
 
 // === #42 新增：AI 解析结果"建议卡"展示态（不直接写入输入框） ===
@@ -199,13 +199,13 @@ let ai_act = ""
 let ai_day = ""
 let ai_part = ""
 let ai_place = ""
-// AI 眉标配色（紫调）：底 #xf3e8ff（淡紫）/ 字 #x7c3aed（深紫）
+// AI 眉标配色（紫调）：底 #xfbe9e5（淡紫）/ 字 #xc7402f（深紫）
 // 照 status_badge_bg/fg 范式，draw_bg.color 期望颜色字面量（#x…），不能返回字符串
 fn ai_badge_bg(){
-    return #xf3e8ff
+    return #xfbe9e5
 }
 fn ai_badge_fg(){
-    return #x7c3aed
+    return #xc7402f
 }
 
 // === #43 D 切片：回执模板三档可切换（standard/brief/emoji）+ pref.json 持久化 ===
@@ -539,6 +539,9 @@ fn load(){
         }
         // pv == nil 或 prs == nil：同样兜底，不报错
     }
+    // #48b：detail_list 初始隐藏（命令式，声明里写 visible:false 会被 render() 的
+    //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
+    ui.detail_list.set_visible(false)
     // #44 外环修：根组件按钮文案在首次求值已定型（当时 receipt_style 还是 "standard"），
     //   load() 此刻读回的偏好不会反映到标签——重启后按钮显示「标准」实际却是 emoji 档
     //   （首次点击才自愈）。照 ui.hint.set_text 同范式命令式同步。
@@ -547,7 +550,7 @@ fn load(){
     //   load() 末尾用 probe_ai_cap() 命令式同步真实 host 探测文案（照 #44 范式）。
     ui.ai_cap_label.set_text(probe_ai_cap())
     rebuild_lines()
-    ui.case_list.render()
+    render_views()
     ui.hint.set_text(hint + hint_suffix)
 }
 
@@ -696,7 +699,7 @@ fn add_person(id_str, raw){
         let m = "" + r
         if m != "" { people_save_result = "fail" }
     }
-    ui.case_list.render()
+    render_views()
     people_draft = ""
     if people_save_result == "fail" {
         ui.hint.set_text("已加 " + "" + added.len() + " 人（保存失败，仅在内存）")
@@ -759,7 +762,7 @@ fn update_bill_total(id_str, raw){
         let m = "" + r
         if m != "" { bill_save_result = "fail" }
     }
-    ui.case_list.render()
+    render_views()
     bill_draft = ""
     if bill_save_result == "fail" {
         ui.hint.set_text("#" + id_str + " AA 总额已记（保存失败，仅在内存）")
@@ -823,7 +826,7 @@ fn cycle_slot(id_str){
             let ma = "" + ra
             if ma != "" { cycle_save_result = "fail" }
         }
-        ui.case_list.render()
+        render_views()
         if cycle_save_result == "fail" {
             ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）（保存标记失败，仅在内存）")
         } else {
@@ -897,7 +900,7 @@ fn cycle_slot(id_str){
         let m = "" + r
         if m != "" { cycle_save_result = "fail" }
     }
-    ui.case_list.render()
+    render_views()
     let label_new = nd + "-" + np
     if cycle_save_result == "fail" {
         ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（保存失败，仅在内存）")
@@ -921,7 +924,7 @@ fn clear_cancel_pending(hint_text){
 
 // === #16 新增：切换「怎么用」说明卡的展开/收起 ===
 // 用字符串标记（#13 实证：函数返回布尔在调用点 == false 不可靠）。
-// 触发后再走 ui.case_list.render()，让 on_render 闭包按新 flag 重渲染。
+// 触发后再走 render_views()，让 on_render 闭包按新 flag 重渲染。
 fn toggle_howto(){
     if howto_show_flag == "yes" {
         howto_show_flag = "no"
@@ -930,7 +933,7 @@ fn toggle_howto(){
         howto_show_flag = "yes"
         ui.hint.set_text("已展开「怎么用」说明卡")
     }
-    ui.case_list.render()
+    render_views()
 }
 
 // === #31 新增：详情面板八项命令式刷新（hint 模式翻版）
@@ -967,7 +970,7 @@ fn toggle_case(id){
         }
     }
     rebuild_lines()
-    ui.case_list.render()
+    render_views()
     let idx = -1
     for i in case_ids.len() {
         if case_ids[i] == ("" + id) { idx = i; break }
@@ -982,8 +985,19 @@ fn toggle_case(id){
 }
 
 // === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
+fn render_views(){
+    // #48b：列表/详情双视图统一刷新口——按 ui_mode 只刷当前可见视图
+    //   （两个都刷会在单次 eval 内双倍 on_render 指令，实测超 instruction limit；
+    //    且此处若递归调用自身=无限循环，黑板 #48 引以为戒）
+    if ui_mode == "detail" {
+        ui.detail_list.render()
+    } else {
+        ui.case_list.render()
+    }
+}
 fn on_tap_card(id){
-    // #31f：选中即进详情模式（列表/详情互斥渲染，无高度竞争）
+    // #31f：选中即进详情模式（#48b 起列表/详情双 ScrollY 互斥——详情视图重显从
+    //   scroll=0 起步，深位点卡详情必在视口内）
     if id == 0 {
         ui.hint.set_text("先建一条守护")
         return
@@ -994,14 +1008,18 @@ fn on_tap_card(id){
     selected_id = id
     ui_mode = "detail"
     rebuild_lines()
-    ui.case_list.render()
+    ui.case_list.set_visible(false)
+    ui.detail_list.set_visible(true)
+    render_views()
     ui.hint.set_text("已选中 #" + "" + id + "，详情见下方；「返回列表」回到全部守护")
 }
 
 // === #31f：返回列表模式 ===
 fn back_to_list(){
     ui_mode = "list"
-    ui.case_list.render()
+    ui.detail_list.set_visible(false)
+    ui.case_list.set_visible(true)
+    render_views()
     ui.hint.set_text("已返回列表；点卡片看单条详情")
 }
 
@@ -1012,7 +1030,7 @@ fn set_filter(ft){
     let prev = "" + current_filter
     current_filter = "" + ft
     rebuild_lines()
-    ui.case_list.render()
+    render_views()
     // hint 反馈：切了哪个标签 + 当前命中条数
     let label_all = "全部"
     if ft == "Proposing" { label_all = "待拍板" }
@@ -1028,7 +1046,7 @@ fn set_filter(ft){
 fn set_query(q){
     current_query = "" + q
     rebuild_lines()
-    ui.case_list.render()
+    render_views()
     if current_query == "" {
         ui.hint.set_text("已清空搜索，按当前标签显示（" + filter_count_str + " / " + filter_total_str + " 条）")
     } else {
@@ -1062,7 +1080,7 @@ fn set_receipt_style(){
         if pwmsg != "" { write_ok = false }
     }
     rebuild_lines()
-    ui.case_list.render()
+    render_views()
     // 按钮文案命令式更新：根组件 if 不重算，但 on_click 事件回调内 imperative set_text 可靠
     if ui.style_btn != nil {
         ui.style_btn.set_text("风格：" + style_label_for(receipt_style))
@@ -1248,7 +1266,7 @@ fn build_case_from_text(text, level){
     ui.msg_input.set_text("")
     rebuild_lines()
     save()   // 结果写入全局 save_result
-    ui.case_list.render()
+    render_views()
     if save_result == "fail" {
         ui.hint.set_text("保存失败：守护数据可能未落盘（已建守护 #" + "" + seq + "，分诊命中：" + level + "）")
     } else {
@@ -1280,7 +1298,7 @@ fn confirm_case(){
             cases[i]["status"] = "Confirmed"
             rebuild_lines()
             save()   // 结果写入全局 save_result
-            ui.case_list.render()
+            render_views()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
             if save_result == "fail" {
@@ -1317,7 +1335,7 @@ fn reschedule_case(){
             cases[i]["receipt_done"] = ""
             rebuild_lines()
             save()   // 结果写入全局 save_result
-            ui.case_list.render()
+            render_views()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
             if save_result == "fail" {
@@ -1364,7 +1382,7 @@ fn cancel_case(){
                 undo_show_flag2 = "yes"    // #11：让 on_render 渲染可点的「撤销取消」
                 rebuild_lines()
                 save()   // 结果写入全局 save_result
-                ui.case_list.render()
+                render_views()
                 let tag = ""
                 if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
                 if save_result == "fail" {
@@ -1383,7 +1401,7 @@ fn cancel_case(){
                         //   之后任何 undo_cancel 都找不到目标（C4 重建 + 全局数字标记）
                         cancelled_last_id = 0
                         rebuild_lines()
-                        ui.case_list.render()
+                        render_views()
                         ui.hint.set_text("取消 #" + "" + target + " 已生效（撤销窗口已过）")
                     }
                 })
@@ -1401,7 +1419,7 @@ fn cancel_case(){
             cancel_pending_deadline = 1
             cancel_pending_flag = "yes"   // #11：让 on_render 渲染「确认取消（5s）」变体
             rebuild_lines()
-            ui.case_list.render()
+            render_views()
             let tag = ""
             if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
             ui.hint.set_text("再点一次「确认取消」才会真取消 #" + "" + target + "；5 秒内点别的按钮或选别的卡可放弃" + tag)
@@ -1414,7 +1432,7 @@ fn cancel_case(){
                     cancel_pending_flag = "no"
                     undo_show_flag2 = "no"
                     rebuild_lines()
-                    ui.case_list.render()
+                    render_views()
                     ui.hint.set_text("已放弃取消 #" + "" + target + "（5 秒内未再点取消）")
                 }
             })
@@ -1459,7 +1477,7 @@ fn undo_cancel(){
     cancel_pending_flag = "no"
     rebuild_lines()
     save()   // 结果写入全局 save_result
-    ui.case_list.render()
+    render_views()
     if save_result == "fail" {
         if restored_id != "0" && restored_id != "" {
             ui.hint.set_text("保存失败：守护数据可能未落盘（#已撤销取消 in-memory；#" + restored_id + " 恢复到 " + prev + "）")
@@ -1537,7 +1555,7 @@ fn ai_parse(){
                     ai_part = _p
                     ai_place = _l
                     ai_card_visible = "yes"
-                    ui.case_list.render()
+                    render_views()
                     ui.hint.set_text("AI 已给出建议卡，过目后点「采纳到输入框」")
                 }
             } else {
@@ -1570,7 +1588,7 @@ fn ai_parse(){
                     ai_part = _p
                     ai_place = _l
                     ai_card_visible = "yes"
-                    ui.case_list.render()
+                    render_views()
                     ui.hint.set_text("AI 已给出建议卡，过目后点「采纳到输入框」（turn.start 首次会等授权）")
                 }
             } else {
@@ -1602,7 +1620,7 @@ fn ai_adopt(){
     if ai_card_visible != "yes" { return }
     if parse_apply(ai_act, ai_day, ai_part, ai_place) {
         ai_card_visible = "no"
-        ui.case_list.render()
+        render_views()
         ui.hint.set_text("已采纳 AI 建议，核对后点「建守护」")
     } else {
         // 兜底分支：理论上 ai_parse() 已在通道回调内做过活动或地点非空判断，
@@ -1616,7 +1634,7 @@ fn ai_adopt(){
 fn ai_dismiss(){
     if ai_card_visible != "yes" { return }
     ai_card_visible = "no"
-    ui.case_list.render()
+    render_views()
     ui.hint.set_text("已忽略 AI 建议")
 }
 
@@ -1875,7 +1893,7 @@ fn clear_all_data(){
         matched_total_str = "0"
         current_query = ""
         rebuild_lines()
-        ui.case_list.render()
+        render_views()
         clear_pending_flag = "no"
         clear_pending_deadline = 0
         if removed_msg != "" {
@@ -1906,16 +1924,18 @@ fn clear_all_data(){
 
 start_timeout(0.05, || load())
 
-let ink = #x1c1c1e
-let secondary = #x8e8e93
-let accent = #x007aff
+let ink = #x2b2722
+let secondary = #x6e675e
+let accent = #xc7402f
 
 // 组件工厂：第一方 RoundedView/徽章范式（#7 落实）
 // show_bg:true 是必填，否则 RoundedView 不绘背景
+// #48 「红线」设计pass：纸白卡 + 发丝描边 + 暖投影（全部零布局尺寸变化）
 let Card = RoundedView{width: Fill height: Fit flow: Down spacing: 8 padding: Inset{left: 12 right: 12 top: 12 bottom: 12}
-    show_bg: true draw_bg.color: #xffffff draw_bg.border_radius: 14.0}
+    show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
+    draw_bg.shadow_color: #x2b272212 draw_bg.shadow_radius: 8.0 draw_bg.shadow_offset: vec2(0.0, 1.0)}
 let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 4 bottom: 4}
-    show_bg: true draw_bg.color: #xefeff4 draw_bg.border_radius: 7.0}
+    show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 7.0}
 let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 11}}
 let TitleLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 16}
 let TextLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
@@ -1926,7 +1946,7 @@ let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_te
 let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 14}
 let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
 
-SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.color: #xffffff
+SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.color: #xf7f2ec
     Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}
     Label{text: "群里说好的聚会，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 13}
     View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
@@ -1934,16 +1954,16 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             //   第二行被裁——缩到 12 字保单行（412 宽下输入框 ~201px，~13px/字）；
             //   保留「粘贴群消息」前缀（回归驱动 type_text 按此定位输入框）。
             msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息，如：周六骑车"
-            draw_bg +: {color: #xf2f2f7 color_hover: #xf2f2f7 color_focus: #xf2f2f7 color_empty: #xf2f2f7 border_radius: 10.0}
+            draw_bg +: {color: #xf1ece4 color_hover: #xf1ece4 color_focus: #xf1ece4 color_empty: #xf1ece4 border_radius: 10.0}
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: secondary color_empty_hover: secondary}}
         // === #14：示例一键填充按钮（演示友好）===
         // 放根组件静态位置——根组件 if 只在首次求值定型，这里是固定按钮；
         // fill_example() 内部用 "cur != "" 守卫避免覆盖用户手打稿子。
         ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 12 right: 12} on_click: || fill_example()
-            draw_bg +: {border_radius: 20.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+            draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
             draw_text +: {color: accent color_hover: accent color_down: accent}}
         ButtonFlat{text: "建守护" height: 44 padding: Inset{left: 16 right: 16} on_click: || add_case()
-            draw_bg +: {border_radius: 20.0 color: accent color_hover: #x0a84ff color_down: #x0062cc border_size: 0.0}
+            draw_bg +: {border_radius: 20.0 color: accent color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
     }
     // === #46 A切片：AI capability 可见性标签（次级色小字，width Fill）===
@@ -1955,46 +1975,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
         // === #31f：详情模式分支（列表/详情互斥，同一 ScrollY 内无高度竞争）===
         if ui_mode == "detail" {
-            let sel = -1
-            for si in case_ids.len() {
-                if case_ids[si] == ("" + selected_id) { sel = si; break }
-            }
-            if sel < 0 {
-                Card{Label{width: Fill text: "还没有选中的守护——返回列表点选一条" draw_text.color: secondary}}
-            } else {
-                Card{
-                    let slot_now = case_slot_day[sel] + "-" + case_slot_part[sel]
-                    if slot_now == "-" { slot_now = "未抽取" }
-                    BodyLine{text: "状态：" + case_status_text[sel] + " ｜ 时间：" + slot_now}
-                    BodyLine{text: "参与人：" + case_people_line[sel] + " ｜ AA：" + case_bill_split_text[sel]}
-                    BodyLine{text: "活动：" + case_activity_lines[sel] + " ｜ 地点：" + case_place_full[sel]}
-                    // #31g：原文行删（回执与折叠摘要已含）；返回列表上移——详情卡总高必须
-                    //   ≤ case_list 盒高（~480px），超出部分零布局（#31 实测机制）。
-                    ButtonFlat{text: "← 返回列表" height: 44 on_click: || back_to_list()
-                        draw_bg +: {border_radius: 13.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
-                        draw_text +: {color: accent color_hover: accent color_down: accent}}
-                    if case_receipt[sel].len() > 0 {
-                        for _ri in case_receipt[sel].len() {
-                            ReceiptLine{text: "  ↳ " + case_receipt[sel][_ri]}
-                        }
-                    }
-                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                        TextInput{width: Fill height: 44 empty_text: "加参与人（逗号分隔）"
-                            on_change: |txt| set_people_draft("" + txt)}
-                        ButtonFlat{text: "添加" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_person("" + selected_id, people_draft)
-                            draw_bg +: {border_radius: 13.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
-                    }
-                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                        TextInput{width: Fill height: 44 empty_text: "记 AA 总额，如300（选填）"
-                            on_change: |txt| set_bill_draft("" + txt)}
-                        ButtonFlat{text: "记一笔" height: 44 padding: Inset{left: 10 right: 10} on_click: || update_bill_total("" + selected_id, bill_draft)
-                            draw_bg +: {border_radius: 13.0 color: #x34c759 color_hover: #x2ba84a color_down: #x278f40 border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
-                    }
-                }
-            }
-            // 详情模式兜底占位（#5 空分支范式）
+            // #48b：详情已拆到 detail_list（本视图只服务列表）；占位照 #5 范式
             View{width: Fill height: 1}
         } else {
         // === #42 新增：「✨ AI 生成」建议卡（AI 解析成功后停在列表分支顶部）——
@@ -2027,10 +2008,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                 BodyLine{text: "活动：" + _act_disp + " ｜ 时间：" + _slot_disp + " ｜ 地点：" + _place_disp}
                 View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
                     ButtonFlat{text: "采纳到输入框" height: 44 padding: Inset{left: 14 right: 14} on_click: || ai_adopt()
-                        draw_bg +: {border_radius: 16.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
+                        draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
                         draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
                     ButtonFlat{text: "忽略" height: 44 padding: Inset{left: 14 right: 14} on_click: || ai_dismiss()
-                        draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                        draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                         draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
                 }
             }
@@ -2053,7 +2034,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             if q_now != "" {
                 GestureView{on_tap: |x, y| set_query("") height: 32
                     RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 6 bottom: 6}
-                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
                         Label{text: "× 清空" draw_text.color: secondary draw_text.text_style.font_size: 13}
                     }
                 }
@@ -2063,7 +2044,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         if cancel_pending_flag == "yes" {
             View{width: Fill height: Fit flow: Right align: Align{y: 0.5}
                 ButtonFlat{text: "确认取消（5s）" height: 44 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
-                    draw_bg +: {border_radius: 16.0 color: #xff3b30 color_hover: #xe6352b color_down: #xcc2f26 border_size: 0.0}
+                    draw_bg +: {border_radius: 16.0 color: #xa14d3c color_hover: #x8f4335 color_down: #x7d382c border_size: 0.0}
                     draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
             }
         } else {
@@ -2083,7 +2064,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     }
                 } else {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
-                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
                         Label{text: "全部" draw_text.color: secondary draw_text.text_style.font_size: 13}
                     }
                 }
@@ -2097,7 +2078,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     }
                 } else {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
-                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
                         Label{text: "待拍板" draw_text.color: secondary draw_text.text_style.font_size: 13}
                     }
                 }
@@ -2111,7 +2092,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     }
                 } else {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
-                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
                         Label{text: "已确认" draw_text.color: secondary draw_text.text_style.font_size: 13}
                     }
                 }
@@ -2125,7 +2106,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     }
                 } else {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
-                        show_bg: true draw_bg.color: #xf2f2f7 draw_bg.border_radius: 16.0
+                        show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
                         Label{text: "已取消" draw_text.color: secondary draw_text.text_style.font_size: 13}
                     }
                 }
@@ -2177,10 +2158,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             if undo_win_open == "yes" {
                 View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                     padding: Inset{left: 12 right: 12 top: 8 bottom: 8}
-                    show_bg: true draw_bg.color: #xf2efff draw_bg.border_radius: 12.0
-                    Label{width: Fill text: "撤销窗口已开（点下方按钮恢复）" draw_text.color: #x5856d6 draw_text.text_style: theme.font_bold{font_size: 13}}
+                    show_bg: true draw_bg.color: #xfbe9e5 draw_bg.border_radius: 12.0
+                    Label{width: Fill text: "撤销窗口已开（点下方按钮恢复）" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 13}}
                     ButtonFlat{text: "撤销取消" height: 44 padding: Inset{left: 14 right: 14} on_click: || undo_cancel()
-                        draw_bg +: {border_radius: 16.0 color: #x5856d6 color_hover: #x4e4dc2 color_down: #x4443ab border_size: 0.0}
+                        draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xa83424 color_down: #x8f2b1d border_size: 0.0}
                         draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
                 }
             }
@@ -2303,23 +2284,23 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     //   （回归 R-13 真机实锤：按钮不在 /snap 树）。拆两行根治。
                     View{width: Fill height: Fit flow: Right spacing: 6
                         ButtonFlat{text: "改时间（5 槽）" height: 44 padding: Inset{left: 10 right: 10} on_click: || cycle_slot("" + selected_id)
-                            draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xe68600 color_down: #xcc7700 border_size: 0.0}
+                            draw_bg +: {border_radius: 16.0 color: #xa35f00 color_hover: #x8f5400 color_down: #x7d4a00 border_size: 0.0}
                             draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff}}
                         ButtonFlat{text: "AI 解析" height: 44 padding: Inset{left: 10 right: 10} on_click: || ai_parse()
-                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: accent color_hover: accent color_down: accent}}
                         ButtonFlat{text: "导出数据" height: 44 padding: Inset{left: 10 right: 10} on_click: || export_data()
-                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
                     }
                     View{width: Fill height: Fit flow: Right spacing: 6
                         // === #37「发布到 glance 屏」按钮（人触发，与导出/清空同级灰底）===
                         ButtonFlat{text: "发布到 glance 屏" height: 44 padding: Inset{left: 10 right: 10} on_click: || publish_glance()
-                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
                         ButtonFlat{text: "清空全部" height: 44 padding: Inset{left: 10 right: 10} on_click: || clear_all_data()
-                            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
-                            draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
+                            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                            draw_text +: {color: #xa14d3c color_hover: #xa14d3c color_down: #xa14d3c}}
                     }
                 }
             } else {
@@ -2328,23 +2309,74 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             }
         }
     }}
+    // === #48b 外环修：详情/列表拆双 ScrollY——set_visible 互斥切换。单视图复用时
+    //   滚动偏移不随内容切换复位（深位点卡详情在视口外，用户看到"点了没反应"，
+    //   #48 复验真机实锤）；新建/重显的视图从 scroll=0 起步，天然复位。零尺寸变化。
+    // 注：visible:false 不能写进声明——render() 会把声明源 re-apply 回视图（view.rs
+    //   make_render_me 机制），把 set_visible(true) 覆盖回 false（#48b 实测踩坑）。
+    //   初始隐藏改由 load() 里 set_visible(false) 命令式完成。
+    detail_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
+        if ui_mode == "detail" {
+            let sel = -1
+            for si in case_ids.len() {
+                if case_ids[si] == ("" + selected_id) { sel = si; break }
+            }
+            if sel < 0 {
+                Card{Label{width: Fill text: "还没有选中的守护——返回列表点选一条" draw_text.color: secondary}}
+            } else {
+                Card{
+                    let slot_now = case_slot_day[sel] + "-" + case_slot_part[sel]
+                    if slot_now == "-" { slot_now = "未抽取" }
+                    BodyLine{text: "状态：" + case_status_text[sel] + " ｜ 时间：" + slot_now}
+                    BodyLine{text: "参与人：" + case_people_line[sel] + " ｜ AA：" + case_bill_split_text[sel]}
+                    BodyLine{text: "活动：" + case_activity_lines[sel] + " ｜ 地点：" + case_place_full[sel]}
+                    // #31g：原文行删（回执与折叠摘要已含）；返回列表上移——详情卡总高必须
+                    //   ≤ case_list 盒高（~480px），超出部分零布局（#31 实测机制）。
+                    ButtonFlat{text: "← 返回列表" height: 44 on_click: || back_to_list()
+                        draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                        draw_text +: {color: accent color_hover: accent color_down: accent}}
+                    if case_receipt[sel].len() > 0 {
+                        for _ri in case_receipt[sel].len() {
+                            ReceiptLine{text: "  ↳ " + case_receipt[sel][_ri]}
+                        }
+                    }
+                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                        TextInput{width: Fill height: 44 empty_text: "加参与人（逗号分隔）"
+                            on_change: |txt| set_people_draft("" + txt)}
+                        ButtonFlat{text: "添加" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_person("" + selected_id, people_draft)
+                            draw_bg +: {border_radius: 13.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                    }
+                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                        TextInput{width: Fill height: 44 empty_text: "记 AA 总额，如300（选填）"
+                            on_change: |txt| set_bill_draft("" + txt)}
+                        ButtonFlat{text: "记一笔" height: 44 padding: Inset{left: 10 right: 10} on_click: || update_bill_total("" + selected_id, bill_draft)
+                            draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                    }
+                }
+            }
+        } else {
+            View{width: Fill height: 1}
+        }
+    }}
     // #31f：根静态详情面板已删除——面板并入 case_list on_render 的 ui_mode="detail" 分支
     action_row := View{width: Fill height: Fit flow: Right spacing: 8
 
         // === #11 动词化文案：同意选中 → 确认这条守护（绿=主行动 #7 状态色） ===
         ButtonFlat{text: "确认这条守护" height: 44 padding: Inset{left: 14 right: 14} on_click: || confirm_case()
-            draw_bg +: {border_radius: 16.0 color: #x34c759 color_hover: #x30b350 color_down: #x2a9e47 border_size: 0.0}
+            draw_bg +: {border_radius: 16.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
         // === #11 动词化文案：改口 → 重新收敛（橙=警示 #7 状态色） ===
         ButtonFlat{text: "重新收敛" height: 44 padding: Inset{left: 14 right: 14} on_click: || reschedule_case()
-            draw_bg +: {border_radius: 16.0 color: #xff9500 color_hover: #xf08a00 color_down: #xd67d00 border_size: 0.0}
+            draw_bg +: {border_radius: 16.0 color: #xa35f00 color_hover: #x8f5400 color_down: #x7d4a00 border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
         // === #11 动词化文案 + 取消按钮降权（默认态：浅底红字，视觉弱化）===
         // 注：确认态的「确认取消（5s）」变体由 case_list 的 on_render 渲染
         // （根组件属性不随状态重算，#8 实证）；此处只保留固定的默认态按钮。
         ButtonFlat{text: "取消守护" height: 44 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
-            draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
-            draw_text +: {color: #xff3b30 color_hover: #xff3b30 color_down: #xff3b30}}
+            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+            draw_text +: {color: #xa14d3c color_hover: #xa14d3c color_down: #xa14d3c}}
         // #9：撤销按钮已移到 case_list on_render 内的 undo_bar，根组件不再放 if 块
         // （#8 外环复验：根组件属性不随状态重算，必须放闭包里）
     }
@@ -2355,11 +2387,11 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     View{width: Fill height: 1}
     // === #16 新增：首屏底部可点「怎么用？」—— 放在 ai_row 下方、整屏最底 ===
     // 文本按钮（次级灰底 + accent 蓝字，视觉弱化但不抢眼）；
-    // 点击触发 toggle_howto() 翻转 howto_show_flag，再走 ui.case_list.render() 重渲染说明卡。
+    // 点击触发 toggle_howto() 翻转 howto_show_flag，再走 render_views() 重渲染说明卡。
     // 根组件属性只在首次求值定型——但按钮本身的 on_click 是事件回调，不依赖 if 重算；
     //   说明卡的显隐走 on_render 闭包内的 howto_show_flag 判断，符合硬约束 #1。
     ButtonFlat{text: "怎么用？" height: 44 padding: Inset{left: 14 right: 14} on_click: || toggle_howto()
-        draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+        draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
         draw_text +: {color: accent color_hover: accent color_down: accent}}
     // === #43 D 切片：底部「风格：X」按钮（与「怎么用？」同行，文字按钮样式）===
     //   具名 style_btn → ui.style_btn.set_text(...) 命令式更新（根组件 if 只在首次定型，
@@ -2367,6 +2399,6 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     //   文案随 receipt_style 变（标准/简短/带emoji），on_click 走 set_receipt_style()
     //   循环切换。详见 set_receipt_style 内调用 ui.style_btn.set_text(...)。
     style_btn := ButtonFlat{text: "风格：" + style_label_for(receipt_style) height: 44 padding: Inset{left: 14 right: 14} on_click: || set_receipt_style()
-        draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+        draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
         draw_text +: {color: accent color_hover: accent color_down: accent}}
 }
