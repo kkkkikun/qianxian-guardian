@@ -1477,6 +1477,7 @@ fn json_field(js, key){
 //   人触发（仅当 status==Confirmed 且当前时刻在约定时段前 5/30/60 分钟区间内）。
 //   card-host 无 glance 服务时按"已降级本地规则"友好提示；glance capability 已在
 //   manifest 封闭清单（#37 三件套②）。默认不主动调，仅"发布到 glance 屏"按钮触发。
+// #40 hub 现实封闭清单无 glance，本函数在 card-host 永远降级；保留以备官方实现 glance 能力后启用
 fn publish_glance(){
     // 任何低频按钮都视为"放弃取消/清空/AI 等待"
     clear_cancel_pending("")
