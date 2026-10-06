@@ -555,6 +555,34 @@ fn load(){
 // 函数返回的 true/false 在调用点 `ok == false` 比较中不可靠（写入明明成功
 // 却走进失败分支）。字符串比较已在多处验证可靠。
 let save_result = "ok"
+let brief_save_result = "ok"   // #45：agent-brief.json 落盘结果（独立标记，best-effort）
+// #45 C 切片：agent 自适应提示——agent 优先读 agent-brief.json（紧凑摘要，省上下文）。
+//   字段全部 "" + x 字符串化，与 cases.json 字段一一对应；status 保留以便 agent
+//   区分 Confirmed / Proposing。**best-effort**：brief_save_result 失败只扁平落全局
+//   字符串（照 save_result 范式），不打 hint、不影响 cases.json 保存语义——
+//   brief 是辅助件，cases.json 才是事实源；与"错误不静默编造"不冲突（不编造、
+//   只是辅助件降级，下次 save() 会自然重写）。
+fn write_agent_brief(){
+    let rows = []
+    for i in cases.len() {
+        let row = {
+            id: "" + cases[i]["id"],
+            activity: "" + cases[i]["activity"],
+            slot_day: "" + cases[i]["slot_day"],
+            slot_part: "" + cases[i]["slot_part"],
+            place: "" + cases[i]["place"],
+            status: "" + cases[i]["status"]
+        }
+        rows.push(row)
+    }
+    let payload = {seq: seq, cases: rows}.to_json()
+    let br = fs.write("agent-brief.json", payload)
+    if br == nil { brief_save_result = "ok" }
+    else {
+        let bm = "" + br
+        if bm == "" { brief_save_result = "ok" } else { brief_save_result = "fail" }
+    }
+}
 fn save(){
     let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
     // SCRIPT-API §Storage：fs.write 成功返回 nil；失败返回一个错误值。
@@ -563,6 +591,10 @@ fn save(){
         let msg = "" + r
         if msg == "" { save_result = "ok" } else { save_result = "fail" }
     }
+    // #45：save() 是唯一落盘咽喉——建卡/改期/取消/AA/清空全部路径都过这里，
+    //   因此在 save() 末尾同步刷一份 agent-brief.json，agent 就能拿到最新状态。
+    //   brief 是辅助件（cases.json 才是事实源），失败不阻断、不打 hint。
+    write_agent_brief()
 }
 
 // 解析"作用目标"：选中优先，否则最新一条并明示
@@ -2219,6 +2251,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     //   「采纳到输入框」后写回 msg_input，再点「建守护」即走分诊。
                     //   「忽略」按钮只翻标记，msg_input 原样保留（用户原文不动）。
                     Label{text: "4. AI 解析成功会先出「✨ AI 生成」建议卡，过目后点「采纳到输入框」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    // === #45 C 切片：app 不能自驱唤醒 agent（无 needs/triggers），
+                    // 宿主「Ask 牵线」面板问我任何问题时，我会主动带出临期/待拍板提醒
+                    // （详见 AGENT.md "主动提示行为"小节）。
+                    Label{text: "5. 在宿主「Ask 牵线」面板可以问：「周六有什么安排？」——已确认的守护临期时我会主动提醒你" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #29（外环派）：低频操作折叠区 ——
                     //   原 ai_row 的 4 个按钮（改时间 / AI 解析 / 导出数据 / 清空全部）
                     //   从根组件搬到「怎么用？」说明卡内,只在卡片展开时可见。
