@@ -183,6 +183,31 @@ fn status_bar_color(st){
     return #xb0b0b8  // Proposing / 兜底
 }
 
+// === #42 新增：AI 解析结果"建议卡"展示态（不直接写入输入框） ===
+//   外环范式：官方 AI-SERVICES 强制模型文本只填文本槽、绝不参与动作接线；
+//   shells 侧 kit 会自动画 sparkle+AI 眉标（OctoScript#53/#68），但本仓库 pinned runtime
+//   （card-host）的 L0 checker 不认识——所以诚实降级形态 = app 自己画「✨ AI 生成」眉标。
+//   ai_card_visible="yes" → on_render 列表分支顶部渲染「✨ AI 生成」建议卡
+//     + BodyLine 汇总（活动/时间/地点，空字段显"未给出"）
+//     + 「采纳到输入框」按钮（accent 蓝）→ 调 ai_adopt()，guard 后用既有 parse_apply 写入 msg_input
+//     + 「忽略」按钮（灰 flat）→ 调 ai_dismiss()，仅翻标记 + 重渲染。
+//   ai_act/ai_day/ai_part/ai_place = trim24 后的结构化字段，采纳时直接喂 parse_apply。
+//   字符串标记（与 cancel_pending_flag / undo_show_flag2 同源；本 runtime 函数返回布尔在
+//   调用点 == false 比较不可靠，黑板 #13 实证）。
+let ai_card_visible = "no"
+let ai_act = ""
+let ai_day = ""
+let ai_part = ""
+let ai_place = ""
+// AI 眉标配色（紫调）：底 #xf3e8ff（淡紫）/ 字 #x7c3aed（深紫）
+// 照 status_badge_bg/fg 范式，draw_bg.color 期望颜色字面量（#x…），不能返回字符串
+fn ai_badge_bg(){
+    return #xf3e8ff
+}
+fn ai_badge_fg(){
+    return #x7c3aed
+}
+
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
 // 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
 fn rebuild_lines(){
@@ -1343,10 +1368,23 @@ fn ai_parse(){
         }, fn(r){
             ai_pending = "no"
             if r.is_ok {
-                if parse_apply("" + r.data.activity, "" + r.data.slot_day, "" + r.data.slot_part, "" + r.data.place) {
-                    ui.hint.set_text("AI 已建议活动/时间/地点，请过目后点「建守护」")
-                } else {
+                // === #42 改造：成功路径不再直接写 msg_input，先填四字段 + 翻 ai_card_visible，
+            //   让用户在「✨ AI 生成」建议卡上点「采纳到输入框」才会写到 msg_input。
+            //   字段合法性由 ai_adopt() 内 parse_apply() 兜底（活动/地点至少其一非空）。
+                let _a = "" + r.data.activity
+                let _d = "" + r.data.slot_day
+                let _p = "" + r.data.slot_part
+                let _l = "" + r.data.place
+                if _a == "" && _l == "" {
                     ui.hint.set_text("AI 返回格式不合规，已降级为本地规则")
+                } else {
+                    ai_act = _a
+                    ai_day = _d
+                    ai_part = _p
+                    ai_place = _l
+                    ai_card_visible = "yes"
+                    ui.case_list.render()
+                    ui.hint.set_text("AI 已给出建议卡，过目后点「采纳到输入框」")
                 }
             } else {
                 ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
@@ -1361,10 +1399,22 @@ fn ai_parse(){
             if r.is_ok {
                 // turn.start 回包非 schema 化，走宽松抽取；不再裸 set_text r.data.text
                 let parsed = parse_loose("" + r.data.text)
-                if parse_apply(parsed[0], parsed[1], parsed[2], parsed[3]) {
-                    ui.hint.set_text("AI 已建议活动/时间/地点，请过目后点「建守护」（turn.start 首次会等授权）")
-                } else {
+                let _a = parsed[0]
+                let _d = parsed[1]
+                let _p = parsed[2]
+                let _l = parsed[3]
+                // === #42 改造：与通道 1 同策略——成功且字段合规时填四字段 + 翻标记；
+                //   失败/字段为空仍走旧 hint，不渲染建议卡（防用户看到空卡）。
+                if _a == "" && _l == "" {
                     ui.hint.set_text("AI 返回格式不合规，已降级为本地规则")
+                } else {
+                    ai_act = _a
+                    ai_day = _d
+                    ai_part = _p
+                    ai_place = _l
+                    ai_card_visible = "yes"
+                    ui.case_list.render()
+                    ui.hint.set_text("AI 已给出建议卡，过目后点「采纳到输入框」（turn.start 首次会等授权）")
                 }
             } else {
                 ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
@@ -1375,6 +1425,37 @@ fn ai_parse(){
     // 双通道皆无服务
     ai_pending = "no"
     ui.hint.set_text("本设备无 AI 服务（no service answers \"model/octos\"），本地规则继续可用")
+}
+
+// === #42 新增：ai_adopt —— 把「✨ AI 生成」建议卡四字段采纳到 msg_input ===
+//   guard：ai_card_visible=="yes" 才执行（防 on_click 闭包被多次触发的幻读）；
+//   parse_apply 内部已经做了「活动或地点至少其一」字段合法性校验与 trim24 截断。
+//   成功：翻 ai_card_visible="no" + render + hint「已采纳 AI 建议，核对后点「建守护」」。
+//   失败（字段不全，已被 ai_parse() 上游过滤，此处为兜底）：
+//     保留卡片可见，hint「AI 建议字段不全，已保留输入框原样」（不覆盖 msg_input）。
+//   与 ai_parse() 改造配套：现在 AI 结果先停在建议卡，必须用户点按钮才落地——这是
+//   官方 AI-SERVICES「模型文本只填文本槽、绝不参与动作接线」的 App 侧落点（shells 侧 kit
+//   会画 sparkle+AI 眉标；card-host 不识别，故 App 自绘「✨ AI 生成」眉标）。
+fn ai_adopt(){
+    if ai_card_visible != "yes" { return }
+    if parse_apply(ai_act, ai_day, ai_part, ai_place) {
+        ai_card_visible = "no"
+        ui.case_list.render()
+        ui.hint.set_text("已采纳 AI 建议，核对后点「建守护」")
+    } else {
+        // 兜底分支：理论上 ai_parse() 已在通道回调内做过活动或地点非空判断，
+        // 这里 parse_apply 仍失败说明 trim24 后变成空串；保留卡让用户继续看。
+        ui.hint.set_text("AI 建议字段不全，已保留输入框原样")
+    }
+}
+
+// === #42 新增：ai_dismiss —— 忽略「✨ AI 生成」建议卡，不写 msg_input ===
+//   仅翻标记 + 重渲染 + 友好 hint；不改 msg_input（用户原文原样保留在输入框）。
+fn ai_dismiss(){
+    if ai_card_visible != "yes" { return }
+    ai_card_visible = "no"
+    ui.case_list.render()
+    ui.hint.set_text("已忽略 AI 建议")
 }
 
 // === #37 parse_apply：把 AI 抽出的 4 字段规范化到 msg_input ===
@@ -1746,6 +1827,47 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             // 详情模式兜底占位（#5 空分支范式）
             View{width: Fill height: 1}
         } else {
+        // === #42 新增：「✨ AI 生成」建议卡（AI 解析成功后停在列表分支顶部）——
+        //   ai_parse() 两条通道成功后填 ai_act/ai_day/ai_part/ai_place + 翻 ai_card_visible="yes"；
+        //   此处只读 ai_card_visible 字符串标记 + 四字段（闭包外已规范化，不再读 ai_pending）。
+        //   零渲染零占位（ai_card_visible=="no" 时留 1px，#5 空分支硬约束范式）。
+        //   按钮文案是静态 copy——模型文本绝不参与动作接线，只进文本槽（官方 AI-SERVICES 约束）。
+        if ai_card_visible == "yes" {
+            // 字段显示：空字段显「未给出」，避免空槽让用户疑惑（照 #34 demo 实证）。
+            let _act_disp = "" + ai_act
+            if _act_disp == "" { _act_disp = "未给出" }
+            let _day_disp = "" + ai_day
+            let _part_disp = "" + ai_part
+            let _slot_disp = ""
+            if _day_disp != "" && _part_disp != "" {
+                _slot_disp = _day_disp + "-" + _part_disp
+            } else if _day_disp != "" {
+                _slot_disp = _day_disp
+            } else if _part_disp != "" {
+                _slot_disp = _part_disp
+            } else {
+                _slot_disp = "未给出"
+            }
+            let _place_disp = "" + ai_place
+            if _place_disp == "" { _place_disp = "未给出" }
+            Card{padding: Inset{left: 12 right: 12 top: 12 bottom: 12} spacing: 8
+                Badge{show_bg: true draw_bg.color: ai_badge_bg()
+                    BadgeText{text: "✨ AI 生成" draw_text.color: ai_badge_fg() draw_text.text_style: theme.font_bold{font_size: 11}}
+                }
+                BodyLine{text: "活动：" + _act_disp + " ｜ 时间：" + _slot_disp + " ｜ 地点：" + _place_disp}
+                View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                    ButtonFlat{text: "采纳到输入框" height: 44 padding: Inset{left: 14 right: 14} on_click: || ai_adopt()
+                        draw_bg +: {border_radius: 16.0 color: #x007aff color_hover: #x0060dd color_down: #x0055cc border_size: 0.0}
+                        draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
+                    ButtonFlat{text: "忽略" height: 44 padding: Inset{left: 14 right: 14} on_click: || ai_dismiss()
+                        draw_bg +: {border_radius: 16.0 color: #xf2f2f7 color_hover: #xe5e5ea color_down: #xd8d8dd border_size: 0.0}
+                        draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                }
+            }
+        } else {
+            // 无 AI 建议卡时 1px 占位（#5 硬约束：on_render 空分支至少一个子节点）
+            View{width: Fill height: 1}
+        }
         // === #12 新增：搜索框（放在筛选栏之上、确认取消变体之上；
         //   根组件 if 只在首次求值定型，所以搜索框必须放在 on_render 闭包内；
         //   闭包内只读 current_query 字符串，不读 cases[i][...]） ===
@@ -1987,6 +2109,11 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     Label{text: "1. 粘贴群里那条聚会消息，或点「用示例试试」" draw_text.color: ink draw_text.text_style.font_size: 14}
                     Label{text: "2. 点建守护——牵线会分诊，命中时间/约定才生成提案" draw_text.color: ink draw_text.text_style.font_size: 14}
                     Label{text: "3. 点卡片展开详情，组织者点「确认这条守护」，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    // === #42 新增：AI 解析成功会先停在建议卡上，等用户点头才落地 ——
+                    //   与上一步「点 AI 解析」配套：建议卡显示「活动/时间/地点」汇总，
+                    //   「采纳到输入框」后写回 msg_input，再点「建守护」即走分诊。
+                    //   「忽略」按钮只翻标记，msg_input 原样保留（用户原文不动）。
+                    Label{text: "4. AI 解析成功会先出「✨ AI 生成」建议卡，过目后点「采纳到输入框」" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #29（外环派）：低频操作折叠区 ——
                     //   原 ai_row 的 4 个按钮（改时间 / AI 解析 / 导出数据 / 清空全部）
                     //   从根组件搬到「怎么用？」说明卡内,只在卡片展开时可见。
