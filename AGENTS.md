@@ -7,12 +7,12 @@ thing submitted to the App Hub; everything else stays outside it.
 
 Follow the harness, and do not invent requirements or APIs:
 
-- How to build, run and test: [QUICKSTART](https://github.com/OctoSense-org/OctoScript-App-Design-Flow/blob/main/docs/QUICKSTART.md)
-- The language and every API an app may use: [SCRIPT-API](https://github.com/OctoSense-org/OctoScript-App-Design-Flow/blob/main/docs/SCRIPT-API.md)
-- Capabilities: [CAPABILITIES](https://github.com/OctoSense-org/OctoScript-App-Design-Flow/blob/main/docs/CAPABILITIES.md)
-- Publishing, step by step, with the human checkpoints: [PUBLISHING](https://github.com/OctoSense-org/OctoScript-App-Design-Flow/blob/main/docs/PUBLISHING.md)
+- How to build, run and test: [QUICKSTART](https://github.com/OctoSense-org/OctoSense-App-Flow/blob/main/docs/QUICKSTART.md)
+- The language and every API an app may use: [SCRIPT-API](https://github.com/OctoSense-org/OctoSense-App-Flow/blob/main/docs/SCRIPT-API.md)
+- Capabilities: [CAPABILITIES](https://github.com/OctoSense-org/OctoSense-App-Flow/blob/main/docs/CAPABILITIES.md)
+- Publishing, step by step, with the human checkpoints: [PUBLISHING](https://github.com/OctoSense-org/OctoSense-App-Flow/blob/main/docs/PUBLISHING.md)
 
-The loop, with `OCTO=<path to OctoScript-App-Design-Flow>/tools/octo` (the CLI
+The loop, with `OCTO=<path to OctoSense-App-Flow>/tools/octo` (the CLI
 lives in the harness repository, not here), run from this directory: edit
 `bundle/main.splash` → `$OCTO run bundle --port 8141 --detach` → drive it
 (`/click`, `/t`, `/snap`) and `$OCTO shot 8141 out.png` → `curl -s 127.0.0.1:8141/quit`
@@ -29,4 +29,16 @@ Rules:
 - Keys, `.local-state/`, `build/` and review packets never enter `bundle/` or git.
 - Stop at human steps: publisher key, publisher details, platform claims, submission.
 
-Add this app's own requirements, data sources and tests below.
+This app's own requirements, data sources and tests:
+
+- App: 「牵线」聚会筹办守护 (qianxian) — a group-chat gather-up guardian:
+  triage a message into a Case, propose/confirm/reschedule/cancel with
+  organizer-only confirm, AA split, honest AI suggestion card (LLM never
+  touches the state machine; degraded paths are explicit).
+- Data sources: `storage` only (on-device cases.json via host storage) and
+  the `octos.turn.start` host service when present; `network.hosts` is empty.
+  No facts are invented: fields the model cannot extract stay empty.
+- Tests: `python3 app/qianxian/tools/qx-verify-v2.py` against a running
+  card-host (14-step regression over the #31 detail/list interaction paths).
+  Reproduction steps and version pins: [run.md](run.md); acceptance evidence
+  under [evidence/](evidence/).

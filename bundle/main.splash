@@ -28,6 +28,7 @@ let case_bill_split_text = []
 let bill_save_result = "ok"           // C7 字符串标记：保存失败可见
 let ui_mode = "list"                   // #31f 外环修：列表/详情模式切换（flag+render 既有模式）
 let ai_pending = "no"                  // #32：AI 回合进行中（回调可能不触发，start_timeout 兜底降级）
+let ai_seq = 0                         // 决赛改进②：AI 回合代际序号——迟到回调按序号丢弃，不覆盖降级提示
 let people_draft = ""                  // #31f：参与人输入草稿（on_render 内输入行走草稿，免具名绑定）
 let bill_draft = ""                    // #31f：AA总额输入草稿
 fn set_people_draft(s){
@@ -996,6 +997,10 @@ fn render_views(){
     }
 }
 fn on_tap_card(id){
+    // 决赛修：cur_id 来自 case_ids 扁平数组（字符串 id）。字符串落进 selected_id
+    // 会让 target_id 的 `> 0` 判假 → 确认/改期/取消静默回退「最新一条」（多卡下
+    // 确认错卡的实锤 bug）。统一在函数体内转数值（to_f64 放闭包内会中断渲染）。
+    id = ("" + id).to_f64()
     // #31f：选中即进详情模式（#48b 起列表/详情双 ScrollY 互斥——详情视图重显从
     //   scroll=0 起步，深位点卡详情必在视口内）
     if id == 0 {
@@ -1512,6 +1517,14 @@ fn probe_ai_cap(){
 
 // LLM 不碰状态机：解析结果仅经 parse_apply 规范化写入 msg_input，hint 明示「AI 已建议
 //   活动/时间/地点，请过目后点建守护」。本地分诊仍是唯一事实源。
+// === 决赛改进②：30s 降级定时器（带代际核对）===
+//   只有「本回合仍是最新回合且仍在等待」才降级；旧回合定时器对已升级的新回合无副作用。
+fn ai_timeout(my){
+    if my == ai_seq && ai_pending == "yes" {
+        ai_pending = "no"
+        ui.hint.set_text("AI 无响应（30 秒），已降级本地规则——直接点「建守护」即可")
+    }
+}
 fn ai_parse(){
     // === #32 外环修：重复点防护 ===
     if ai_pending == "yes" {
@@ -1524,20 +1537,22 @@ fn ai_parse(){
         return
     }
     ai_pending = "yes"
+    ai_seq = ai_seq + 1
+    let my = ai_seq
+    ai_seq = ai_seq + 1
+    let my = ai_seq
     ui.hint.set_text("AI 解析中…（约 30 秒，无响应自动降级本地规则）")
     // 30s 兜底（turn.start 首次需等"允许"，8s 太短见 #37；model.complete 通常秒级）
-    start_timeout(30.0, || {
-        if ai_pending == "yes" {
-            ai_pending = "no"
-            ui.hint.set_text("AI 无响应（30 秒），已降级本地规则——直接点「建守护」即可")
-        }
-    })
+    // 决赛改进②：带代际序号——旧回合的定时器不降级新回合（官方 ai-providers banner 同款代际模式）
+    start_timeout(30.0, || ai_timeout(my))
     // === 通道 1：首选 model.complete（一次性 schema 校验）===
     if host.has("model") {
         host.request("model.complete", {
             schema: {activity: "string", slot_day: "string", slot_part: "string", place: "string"},
             prompt: "从这条聚会消息提取活动/时间/地点，字段长度 ≤24，只回 JSON：" + text
         }, fn(r){
+            // 决赛改进②：迟到回调按序号丢弃——已降级/已被新回合取代时不动任何 UI 状态
+            if my != ai_seq { return }
             ai_pending = "no"
             if r.is_ok {
                 // === #42 改造：成功路径不再直接写 msg_input，先填四字段 + 翻 ai_card_visible，
@@ -1570,6 +1585,8 @@ fn ai_parse(){
     // === 通道 2：降级 octos.turn.start（card-host 无 model 时）===
     if host.has("octos.turn.start") {
         host.request("octos.turn.start", {text: "从这条聚会消息提取活动/时间/地点，只回 JSON：" + text}, fn(r){
+            // 决赛改进②：同通道 1——迟到回调按序号丢弃
+            if my != ai_seq { return }
             ai_pending = "no"
             if r.is_ok {
                 // turn.start 回包非 schema 化，走宽松抽取；不再裸 set_text r.data.text
@@ -1707,10 +1724,11 @@ fn json_field(js, key){
     let kq = "\"" + key + "\""
     let idx = js.index_of(kq)
     if idx < 0 { return "" }
-    let rest = js[idx + kq.len():]
+    // 决赛改进①：切片一律两界写法（开放式 [x:] 在最新 card-host/makepad 解析失败，初赛评审指出）
+    let rest = js[idx + kq.len():js.len()]
     let colon = rest.index_of(":")
     if colon < 0 { return "" }
-    let after = rest[colon+1:]
+    let after = rest[colon+1:rest.len()]
     // 跳过空白
     let start = 0
     while start < after.len() {
@@ -1718,7 +1736,7 @@ fn json_field(js, key){
         if ch != " " && ch != "\n" && ch != "\t" { break }
         start = start + 1
     }
-    after = after[start:]
+    after = after[start:after.len()]
     // 字符串值
     if after.len() > 0 && after[0:1] == "\"" {
         let end = after.index_of("\"", 1)

@@ -20,7 +20,7 @@ A5 方法论（#33）：
   - 草稿输入（msg_input）按 text 字段填入；点「建守护」前不清空（保留输入状态可见性）。
 
 用法：
-  card-host --bundle app/qianxian/bundle --app-data /tmp/qx-outer34 \\
+  card-host --bundle bundle --app-data /tmp/qx-outer34 \\
             --allow-unsigned --stamp --port 8146 &
   sleep 24  # 等 splash 起
   python3 app/qianxian/tools/qx-verify-v2.py

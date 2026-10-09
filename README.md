@@ -9,7 +9,7 @@
 - **主场景**：日历（时间收敛、**冲突检测**、待定 vs 已确认）
   → 与官方「日历」场景四步演示的逐条对齐见
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
-- **提交形态**：OctoSense **script-app**（`app/qianxian/bundle/`，`hub check — PASSED`）
+- **提交形态**：OctoSense **script-app**（`bundle/`，`hub check — PASSED`）
 - **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）
 - 🎥 **2 分 16 秒演示视频**（15 步全流程）→ [Release v0.1.0 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.1.0)
 
@@ -17,7 +17,7 @@
 
 | 主界面（筛选 + 冲突徽章） | 详情与确认回执 | 冲突警示（失败态明示） |
 |---|---|---|
-| ![主界面](app/qianxian/bundle/screenshots/01-main.png) | ![详情](app/qianxian/bundle/screenshots/02-expanded.png) | ![冲突](app/qianxian/bundle/screenshots/03-conflict.png) |
+| ![主界面](bundle/screenshots/01-main.png) | ![详情](bundle/screenshots/02-expanded.png) | ![冲突](bundle/screenshots/03-conflict.png) |
 
 > 诚实标注：截图由 `tools/snap-to-png.py` 按**运行时真实控件树**重绘
 > （文字/层级/坐标/状态色来自 card-host 实际运行；本开发环境无图形会话，
@@ -63,7 +63,7 @@ AI 只是可选增强——屏上有常驻的**能力可见性行**（探测 `mo
 
 **① 零门槛：直接读源码**（不需要任何构建）
 本应用是纯解释执行的脚本，核心逻辑都在一个文件里：
-`app/qianxian/bundle/main.splash`（约 2400 行，Splash/OctoScript 方言；函数名即语义：add_case / confirm_case / cycle_slot / add_person / rebuild_lines …）。
+`bundle/main.splash`（约 2400 行，Splash/OctoScript 方言；函数名即语义：add_case / confirm_case / cycle_slot / add_person / rebuild_lines …）。
 配套阅读：[evidence/demo-script.md](evidence/demo-script.md)（21 步操作）、
 [evidence/regression-20261001.md](evidence/regression-20261001.md)（14 项真机验证）。
 
@@ -76,7 +76,7 @@ git clone https://github.com/OctoSense-org/OctoScript-App-Design-Flow.git
 cd OctoScript-App-Design-Flow && python3 tools/setup-native.py   # 拉齐 makepad/octoscript/octoscript-makepad
 cd ../OctoSense-App-Hub
 cargo build --release -p octosense-app-hub --bin hub
-./target/release/hub check <你的-clone>/my-entry/app/qianxian/bundle --allow-unsigned
+./target/release/hub check <你的-clone>/my-entry/bundle --allow-unsigned
 # 期望：qianxian 0.1.0 — PASSED（仅 unsigned warning）
 ```
 
@@ -89,12 +89,12 @@ python3 ../../../octosense-ws/OctoScript-App-Design-Flow/tools/octo run bundle -
 
 - **怎么用**：见 **[evidence/demo-script.md](evidence/demo-script.md)**（21 步三线：主线 / 冲突检测 / 危险操作与数据控制；每步输入都经真机验证）。
 - **复现与版本锁定**：见 **[run.md](run.md)**。
-- **门检**：`python3 $OCTO check app/qianxian/bundle` → 目标 `— PASSED`（仅 unsigned warning）。
+- **门检**：`python3 $OCTO check bundle` → 目标 `— PASSED`（仅 unsigned warning）。
 
 ## 目录
 
 ```
-app/qianxian/bundle/     THE SUBMISSION：manifest/listing/main.splash/icon/截图
+bundle/     THE SUBMISSION：manifest/listing/main.splash/icon/截图
 app/guardian/            场外链路证明（同一套设计在真实 Matrix + 真实 LLM 通道跑通，
                          G1–G5 六套冒烟 70+ 断言全绿）
 app/miniapp-qianxian/    旧 Rinx spike（已归档，被 app/qianxian 取代）
