@@ -9,9 +9,9 @@
 - **主场景**：日历（时间收敛、**冲突检测**、待定 vs 已确认）
   → 与官方「日历」场景四步演示的逐条对齐见
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
-- **提交形态**：OctoSense **script-app**（`bundle/`，`hub check — PASSED`）
-- **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）
-- 🎥 **2 分 16 秒演示视频**（15 步全流程）→ [Release v0.1.0 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.1.0)
+- **提交形态**：OctoSense **script-app**（仓库根 `bundle/`，v**0.2.0**，`hub check — PASSED`，contract 1.10.0）
+- **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）；初赛入围（73/100）
+- 🎥 **演示视频**：初赛 2 分 16 秒（15 步）→ [Release v0.1.0 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.1.0)；决赛 2 分 08 秒（16 步，v0.2.0）→ [evidence/finals-demo-v2.mp4](evidence/finals-demo-v2.mp4)
 
 ## 界面预览
 
@@ -19,9 +19,9 @@
 |---|---|---|
 | ![主界面](bundle/screenshots/01-main.png) | ![详情](bundle/screenshots/02-expanded.png) | ![冲突](bundle/screenshots/03-conflict.png) |
 
-> 诚实标注：截图由 `tools/snap-to-png.py` 按**运行时真实控件树**重绘
-> （文字/层级/坐标/状态色来自 card-host 实际运行；本开发环境无图形会话，
-> `/g` 帧抓取超时，故非宿主像素）。评审可用 `tools/octo shot` 获取宿主像素图。
+> 来源标注：三张截图为 **card-host 真实渲染帧**（v0.2.0，WSLg 可见窗口 `/g?wait=1` 抓取，
+> 412×892 布局点）。演示视频帧为 `tools/snap-to-png.py` 按运行时真实控件树重绘（视频内
+> 已标注「非宿主像素」）；评审可用 `tools/octo shot` 获取宿主像素图复核。
 
 ## 它做什么
 
