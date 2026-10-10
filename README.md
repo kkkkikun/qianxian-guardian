@@ -6,22 +6,27 @@
 > **一条群消息，长成一个被照顾到收尾的完整活动。**
 > 本作品是**活动生命周期守护**（Case 状态机），不是聊天增强——聊天只是意图的入口和结果的回执通道。
 
+- **决赛迭代（v0.3.0 管家模式）**：**agent 驱动全流程，人只做最终拍板**——
+  粘贴群消息点「交给管家」→ agent 分诊/查冲突/出 **PLAN 机器提案** → 提案卡上点「拍板」→
+  白名单动作执行 + 回执。真模型已验证：MiniMax-M3 在真实 octos 内核上按协议返回 PLAN
+  （[evidence/s4-real-host-20261010.md](evidence/s4-real-host-20261010.md)）
 - **主场景**：日历（时间收敛、**冲突检测**、待定 vs 已确认）
   → 与官方「日历」场景四步演示的逐条对齐见
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
-- **提交形态**：OctoSense **script-app**（仓库根 `bundle/`，v**0.2.0**，`hub check — PASSED`，contract 1.10.0）
+- **提交形态**：OctoSense **script-app**（仓库根 `bundle/`，v**0.3.0**，`hub check — PASSED`，contract 1.10.0，agent read-only 最小权限 + AGENT.md v3）
 - **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）；初赛入围（73/100）
-- 🎥 **演示视频**：初赛 2 分 16 秒（15 步）→ [Release v0.1.0 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.1.0)；决赛 2 分 08 秒（16 步，v0.2.0）→ [evidence/finals-demo-v2.mp4](evidence/finals-demo-v2.mp4)
+- 🎥 **演示视频**：决赛 v3 70 秒（agent 主线：内核 PLAN 双证 + app 拍板 UX + 诚实降级）→ [evidence/finals-demo-v3.mp4](evidence/finals-demo-v3.mp4)；初赛 2 分 16 秒 → [Release v0.1.0](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.1.0)
 
 ## 界面预览
 
-| 主界面（筛选 + 冲突徽章） | 详情与确认回执 | 冲突警示（失败态明示） |
+| 主界面（管家 CTA + 筛选） | 详情与确认回执 | 冲突警示（失败态明示） |
 |---|---|---|
 | ![主界面](bundle/screenshots/01-main.png) | ![详情](bundle/screenshots/02-expanded.png) | ![冲突](bundle/screenshots/03-conflict.png) |
 
-> 来源标注：三张截图为 **card-host 真实渲染帧**（v0.2.0，WSLg 可见窗口 `/g?wait=1` 抓取，
-> 412×892 布局点）。演示视频帧为 `tools/snap-to-png.py` 按运行时真实控件树重绘（视频内
-> 已标注「非宿主像素」）；评审可用 `tools/octo shot` 获取宿主像素图复核。
+> 来源标注（诚实）：本开发机 WSLg 会话无头（`/g` 抓帧超时），三张截图与视频帧为
+> `tools/snap-to-png.py` 按**运行时真实控件树**重绘（文字/层级/坐标/状态色来自
+> card-host 实际运行，v0.1.0 同款先例）。Rinx 真宿主运行帧见
+> `evidence/shots-v3/s5-rinx-app.png`；评审可用 `tools/octo shot` 复核。
 
 ## 它做什么
 
@@ -51,13 +56,29 @@
 失败不掩盖：无 AI 服务→明确降级继续可用 · 分诊未命中→澄清卡说明原因 ·
 损坏数据→备份后重启不丢 · 重复确认→「已确认，未重复」。
 
+## 管家模式（决赛 v0.3.0）：AI 接管全流程，用户只拍板
+
+「交给管家」是主入口（朱砂主按钮）。管家 = 底层 **octos agent**（`octos.turn.start` 真回合，
+app 把角色提示词与当前守护快照嵌入 turn 文本——不依赖宿主注入 AGENT.md）：
+
+```
+群消息 → 交给管家 → agent 抽字段+查冲突 → 回复尾部输出单行机器提案：
+  PLAN{"op":"create","text":"原文","activity":"骑车","slot_day":"周六","slot_part":"上午","place":"深圳湾",...}
+→ app 解析进提案卡（槽位词表归一，编造的时间进不了状态机）
+→ 人点「拍板执行」→ 白名单动作（建/确认/改期/取消/加人/记账，全部复用既有函数）
+→ sys 回执 + 撤销窗口照常；agent 绝不声称已改状态
+```
+
+- **ops**：`create / confirm / reschedule / cancel / add_people / set_bill`——app 的全部状态变更操作都可由 agent 提案驱动。
+- **合法性前置校验**：create 必须带消息原文（溯源）、目标 id 必须存在、改期/加人必须有值——非法提案拍板即拒并给拒绝文案。
+- **双处一致**：`bundle/AGENT.md` v3（官方四段式）与 app 内提示词同文；agent 工具最小权限（read-only + `ask_user_question`）。
+- **真模型实证**：真实 `octos serve` 内核 × MiniMax-M3 回复生成合规 PLAN（mock 剧本模型亦验）→ `tools/qx-kernel-turn.py`。
+
 ## 无 AI 也完整可用
 
 本应用**不依赖任何模型服务**：分诊、时间槽抽取、冲突检测、状态机全部是确定性规则。
-AI 只是可选增强——屏上有常驻的**能力可见性行**（探测 `model` / `octos.turn.start`，
-如实显示"可用 / 实测无响应 / 本机无服务"）；解析结果先渲染「✨ AI 生成」建议卡，
-**由人点「采纳到输入框」才写回**，模型文本只进文本槽、绝不碰状态机。
-本机无活后端时**明确降级**为本地规则并继续可用（见 `evidence/ux-specs.md` 4.8 记档）。
+无 AI 宿主时点「交给管家」**明确降级**（sys 气泡明示原因），本地规则路径（「建守护」）完整可用；
+屏上有常驻能力可见性行，如实显示「可用 / 实测无响应 / 本机无服务」。
 
 ## 怎么审这个作品（三条路，从零门槛到完整复现）
 

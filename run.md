@@ -84,6 +84,22 @@ python3 $OCTO check bundle    # 目标：— PASSED（仅 unsigned warning）
 <hub> scan bundle --packet app/qianxian/build/review.json   # 8 问作答见 evidence/qianxian/
 ```
 
+### D. 管家模式与 agent 通路验证（v0.3.0 决赛）
+
+```sh
+# 1) 回归 v3（16 步 = 原 14 步 + R-15 交给管家降级 + R-16 回列表）
+QX_PORT=8160 python3 app/qianxian/tools/qx-verify-v2.py
+
+# 2) 内核直连 PLAN 证明（真实 octos serve 内核；先起 mock 模型）
+python3 tools/qx-mock-llm.py 8181 &          # 剧本化 OpenAI 兼容模型
+rm -rf /tmp/qx-kernel-data && python3 tools/qx-kernel-turn.py          # mock 轮
+rm -rf /tmp/qx-kernel-data && python3 tools/qx-kernel-turn.py --real   # MiniMax-M3 真模型轮
+
+# 3) Rinx 真宿主（Mini apps 导入 → Review → Run；注意 9-26 基线宿主不认识 agent 块，
+#    演示用同源变体 /tmp/qx-demo-bundle——仅删 manifest.agent，见 evidence/s4 文档披露）
+../../run-rinx.sh    # RINX_DATA_DIR/RINX_OCTOS_BIN/MAKEPAD_REMOTE 用法见 tools/qx-rinx-drive.py 头注
+```
+
 ## 双账号全流程复现（P0-C / 验收条件 12）
 
 ```sh

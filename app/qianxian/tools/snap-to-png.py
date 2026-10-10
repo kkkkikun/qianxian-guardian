@@ -64,9 +64,8 @@ def color_of(text):
         return GREEN
     if "待拍板" in t:
         return SECOND
-    if "冲突" in t:
-        return ORANGE
-    if "⚠" in t or "时间冲突" in t:
+    # 冲突/⚠ 只给短徽章式文本上橙色；说明步骤等长文案保持墨色（S3 截图评审抓过误染）
+    if (len(t) <= 16 and "冲突" in t) or (len(t) <= 16 and "⚠" in t):
         return ORANGE
     if "未填写" in t or "未抽取" in t:
         return SECOND
@@ -110,18 +109,20 @@ def main():
         is_title = y < 90 and hh >= 26
         if ty == "Button":
             fill = {
-                "确认这条守护": GREEN, "重新收敛": ORANGE, "取消守护": RED,
-                "建守护": ACCENT, "AI 解析": ACCENT, "改时间（5 槽）": ORANGE,
-                "添加": ACCENT, "采纳到输入框": ACCENT, "撤销取消": ACCENT,
+                "确认这条守护": GREEN, "重新收敛": ORANGE,
+                "交给管家": ACCENT, "去拍板": ACCENT, "拍板执行": ACCENT, "添加": ACCENT,
+                "改时间（5 槽）": ORANGE, "撤销取消": ACCENT,
             }.get(text)
             if fill:
                 d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=fill)
                 fg = (255, 255, 255)
             else:
-                # flat 文字按钮（用示例试试/怎么用？/风格：X/忽略/导出数据/清空全部）
+                # flat 文字按钮：S3 起建守护降为次级（描边语义→灰底朱砂字）
                 d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=CARD)
-                fg = ACCENT if text in ("用示例试试", "怎么用？") or text.startswith("风格：") else (
-                    RED if text == "清空全部" else SECOND)
+                fg = ACCENT if (text in ("示例", "怎么用？", "建守护", "打开管家",
+                                         "回到守护列表", "返回列表", "用示例试试")
+                                or text.startswith("风格：")) else (
+                    RED if text in ("清空全部", "放弃") else SECOND)
             f = f_badge
         elif ty == "TextInput":
             d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=CARD)

@@ -1,30 +1,30 @@
 {
- "schema": 1,
- "subtitle": "群里说好的聚会，盯到人人到场",
- "description": "牵线是聚会筹办守护：把群里一句聚会意向变成一条守护，抽时间槽与活动地点，检测同时段冲突并交人裁决；组织者确认后生成回执草稿与提醒计划；改时间、改口、取消都有退路。抽不到就留空，不编造。无 AI 也完整可用（本地规则分诊+状态机）；有设备 AI 服务时可做可选的解析增强。",
- "category": "productivity",
- "keywords": [
-  "聚会",
-  "活动",
-  "守护",
-  "日历",
-  "组织"
- ],
- "screenshots": [
-  "screenshots/01-main.png",
-  "screenshots/02-expanded.png",
-  "screenshots/03-conflict.png"
- ],
- "icon": "assets/icon.svg",
- "platforms": [
-  "linux"
- ],
- "publisher": {
-  "name": "Aurora-X",
-  "support": "kkkkikun@foxmail.com",
-  "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
- },
- "release_notes": "0.2.0（决赛迭代）：修复开放式切片语法在新宿主（最新 makepad/card-host）的解析失败——AI 通道 JSON 抽取恢复可用；AI 回调迟到按代际序号丢弃，不再覆盖降级提示；修复多卡下点选后确认错卡的问题（选中态类型统一为数值）；仓库结构对齐官方发布流程（bundle/ 移根目录，一仓一应用）；截图换新宿主真实渲染帧。",
- "age_rating": "all",
- "license": "Apache-2.0"
+  "schema": 1,
+  "subtitle": "群里说好的聚会，盯到人人到场",
+  "description": "牵线是聚会筹办守护：把群里一句聚会意向变成一条守护，抽时间槽与活动地点，检测同时段冲突并交人裁决；组织者确认后生成回执草稿与提醒计划；改时间、改口、取消都有退路。抽不到就留空，不编造。无 AI 也完整可用（本地规则分诊+状态机）；有设备 AI 服务时可做可选的解析增强。",
+  "category": "productivity",
+  "keywords": [
+    "聚会",
+    "活动",
+    "守护",
+    "日历",
+    "组织"
+  ],
+  "screenshots": [
+    "screenshots/01-main.png",
+    "screenshots/02-expanded.png",
+    "screenshots/03-conflict.png"
+  ],
+  "icon": "assets/icon.svg",
+  "platforms": [
+    "linux"
+  ],
+  "publisher": {
+    "name": "Aurora-X",
+    "support": "kkkkikun@foxmail.com",
+    "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
+  },
+  "release_notes": "v0.3.0 决赛迭代：管家模式——agent 驱动全流程，人只拍板。PLAN 单行机器提案协议（create/confirm/reschedule/cancel/add_people/set_bill 六操作，槽位词表归一+合法性前置校验）；octos.turn.start 单通道对话，角色提示词与守护快照自嵌 turn 文本；AGENT.md v3 四段式+agent read-only 最小权限；真模型实证（octos 内核×MiniMax-M3 返回合规 PLAN）；无 AI 宿主诚实降级，本地规则路径完整可用；状态层收口 save() 唯一咽喉；回归 16/16。",
+  "age_rating": "all",
+  "license": "Apache-2.0"
 }
