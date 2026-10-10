@@ -694,12 +694,10 @@ fn add_person(id_str, raw){
         }
     cases = new_cases
     rebuild_lines()
-    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
-    people_save_result = "ok"
-    if r != nil {
-        let m = "" + r
-        if m != "" { people_save_result = "fail" }
-    }
+    // 决赛 S1：收口唯一落盘咽喉（原直写 fs.write 绕过 write_agent_brief，
+    //   导致参与人变更后 agent 拿到的 brief 滞后一步）
+    save()
+    people_save_result = save_result
     render_views()
     people_draft = ""
     if people_save_result == "fail" {
@@ -757,12 +755,9 @@ fn update_bill_total(id_str, raw){
         }
     cases = new_cases
     rebuild_lines()
-    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
-    bill_save_result = "ok"
-    if r != nil {
-        let m = "" + r
-        if m != "" { bill_save_result = "fail" }
-    }
+    // 决赛 S1：同 add_person，收口 save() 咽喉
+    save()
+    bill_save_result = save_result
     render_views()
     bill_draft = ""
     if bill_save_result == "fail" {
@@ -821,12 +816,9 @@ fn cycle_slot(id_str){
                 "slot_init_asked": mk})
         }
         cases = new_cases_ask
-        cycle_save_result = "ok"
-        let ra = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
-        if ra != nil {
-            let ma = "" + ra
-            if ma != "" { cycle_save_result = "fail" }
-        }
+        // 决赛 S1：收口 save() 咽喉（原直写 fs.write）
+        save()
+        cycle_save_result = save_result
         render_views()
         if cycle_save_result == "fail" {
             ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）（保存标记失败，仅在内存）")
@@ -895,12 +887,9 @@ fn cycle_slot(id_str){
     }
     let my_conflict = "" + cases[cur]["conflict"]
     rebuild_lines()
-    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
-    cycle_save_result = "ok"
-    if r != nil {
-        let m = "" + r
-        if m != "" { cycle_save_result = "fail" }
-    }
+    // 决赛 S1：收口 save() 咽喉（原直写 fs.write）
+    save()
+    cycle_save_result = save_result
     render_views()
     let label_new = nd + "-" + np
     if cycle_save_result == "fail" {
@@ -1537,8 +1526,7 @@ fn ai_parse(){
         return
     }
     ai_pending = "yes"
-    ai_seq = ai_seq + 1
-    let my = ai_seq
+    // 决赛 S1 清债：此处原有重复的 ai_seq 自增/let my 声明块（笔误，功能无害但冗余）
     ai_seq = ai_seq + 1
     let my = ai_seq
     ui.hint.set_text("AI 解析中…（约 30 秒，无响应自动降级本地规则）")
@@ -1699,9 +1687,10 @@ fn parse_loose(raw){
         pl = json_field(js, "place")
     }
     // 兜底扫描（按本地规则词表），缺啥补啥
+    // 决赛 S1 修：原循环命中后没有给 act 赋值（死代码），活动词兜底从未生效
     if act == "" {
         let parts = ["聚会", "聚餐", "骑车", "徒步", "爬山", "打球", "唱歌", "电影", "桌游", "烧烤"]
-        for k in parts { if raw.contains(k) { break } }
+        for k in parts { if raw.contains(k) { act = k; break } }
     }
     if sd == "" {
         let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日", "周末"]
