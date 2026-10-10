@@ -2,9 +2,17 @@
   "agent": {
     "instructions": "AGENT.md",
     "max_iterations": 8,
-    "profile": "workspace-write",
+    "model": {
+      "needs": [
+        "tool_calling"
+      ],
+      "tier": "standard"
+    },
+    "profile": "read-only",
     "token_budget": 16000,
-    "tools": []
+    "tools": [
+      "ask_user_question"
+    ]
   },
   "capabilities": [
     "storage",
@@ -16,7 +24,7 @@
   },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "0d6a885947c094bd9e6913d371714b28213e3948043878a1e6143aee060f3f61"
+    "bundle_blake3": "0d8ea0c4b2102874b5dcb3b45e7745556b98ead0438b3a7fedb474195160a400"
   },
   "name": "牵线",
   "network": {
@@ -26,5 +34,5 @@
   "storage": {
     "max_bytes": null
   },
-  "version": "0.2.0"
+  "version": "0.3.0"
 }

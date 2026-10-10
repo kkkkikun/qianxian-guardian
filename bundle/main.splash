@@ -602,6 +602,11 @@ fn write_agent_brief(){
         let bm = "" + br
         if bm == "" { brief_save_result = "ok" } else { brief_save_result = "fail" }
     }
+    // === 决赛 S2：宿主 agent 的 files.* 只读 accounts/<hash>/（默认 accounts/device/），
+    //   官方模式是 app 把给 agent 看的数据写到该子目录（AI-SERVICES email-action 范式）。
+    //   同一份 brief 双写到 accounts/device/ ——失败 best-effort（目录可能不被 jail 自动创建），
+    //   不改根下副本（根副本供调试/直接查看）。AGENT.md v3 指面板 agent 优先读 accounts/device/。
+    fs.write("accounts/device/agent-brief.json", payload)
 }
 fn save(){
     let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
