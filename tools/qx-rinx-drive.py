@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""S4 真宿主端到端驱动：Rinx(backup) + octos 内核 + mock LLM 上的管家全链。
+"""S4 真宿主端到端驱动：Rinx(backup) + octos 内核(#2734 修复版) + mock LLM 管家全链。
 
-流程：Mini apps → 导入 bundle → Review → Run → app 内输入群消息 → 交给管家 →
-等 PLAN 提案卡 → 拍板执行 → 断言 sys 回执 + 卡片出现 + cases.json 落盘。
-（Rinx 的 vendored makepad 不做 /t 百分号解码 → 一律走裸 UTF-8 socket 请求行。）
+2026-10-10 实测校准的宿主边界（见 evidence/s4-real-host-20261010.md）：
+- 每次回合前都 Back → Review → Run（fresh 生成上下文）：旧 broker 同上下文第二回合的
+  Complete 事件偶发丢失；fresh Run 首回合稳定送达。
+- 提案卡/拍板按钮在聊天视口下方（ScrollY 虚拟化）——先滚再找。
+- /t 百分号编码不解码 → 裸 UTF-8 socket 请求行。
 
 用法：python3 qx-rinx-drive.py [--port 8170] [--bundle /tmp/qx-demo-bundle] [--full]
   --full 追加第二轮：改期提案 → 拍板 → 断言 slot 变化。

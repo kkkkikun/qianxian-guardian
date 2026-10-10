@@ -84,7 +84,11 @@ python3 $OCTO check bundle    # 目标：— PASSED（仅 unsigned warning）
 <hub> scan bundle --packet app/qianxian/build/review.json   # 8 问作答见 evidence/qianxian/
 ```
 
-### D. 管家模式与 agent 通路验证（v0.3.0 决赛）
+### D. 管家模式与 agent 通路验证（v0.3.0 决赛；Rinx e2e 已全通）
+
+> 2026-10-10 起内核需用重建版（含 octos #2734 修复）：
+> `cd repos/octos && cargo build --release -p octos-cli --no-default-features --features api`
+> （旧二进制已备份 octos.rc13-sep27.bak；Rinx 每回合前 Back→Review→Run，见 qx-rinx-drive.py 头注）
 
 ```sh
 # 1) 回归 v3（16 步 = 原 14 步 + R-15 交给管家降级 + R-16 回列表）

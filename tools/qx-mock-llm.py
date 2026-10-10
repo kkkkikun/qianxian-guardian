@@ -30,29 +30,31 @@ def user_text(body):
 
 
 def scripted(text):
-    # turn 文本里【用户消息】之后才是用户真正说的话
-    seg = text.split("【用户消息】", 1)
-    msg = seg[1] if len(seg) == 2 else text
-    if "骑车" in msg or "深圳湾" in msg:
-        return ("消息里抽到：周六上午在深圳湾骑车，活动/时间/地点都齐了。"
-                "建议现在建守护盯住这条，拍板即生效。\n"
-                'PLAN{"op":"create","text":"周六上午去深圳湾骑车","activity":"骑车",'
-                '"slot_day":"周六","slot_part":"上午","place":"深圳湾","people":"","bill_total":""}')
+    # turn 文本里【用户消息】之后才是用户真正说的话；内核多轮会重建 prompt
+    # （prompt_replaced），守护摘要（含活动词）会并入最后一条用户消息——
+    # 所以意图词（改期/确认/取消/加人/记账）必须排在活动词（骑车等）之前判定。
+    seg = text.split("【用户消息】")
+    msg = seg[-1] if len(seg) >= 2 else text
     if "改到" in msg or "改期" in msg:
         return ("好的，改到周日下午——避开周六上午那条，不再撞车。拍板后生效。\n"
                 'PLAN{"op":"reschedule","id":"1","slot_day":"周日","slot_part":"下午"}')
     if "确认" in msg:
         return ("第 1 条信息齐了，确认后我出回执并登记 T-24h 提醒。拍板即确认。\n"
                 'PLAN{"op":"confirm","id":"1"}')
+    if "取消" in msg:
+        return ("明白，取消第 1 条。拍板后进入 5 秒撤销窗口，反悔还来得及。\n"
+                'PLAN{"op":"cancel","id":"1"}')
     if "加人" in msg or ("阿明" in msg and "小红" in msg):
         return ("收到，把阿明和小红加进第 1 条的参与人（AA 均摊会跟着人头算）。\n"
                 'PLAN{"op":"add_people","id":"1","people":"阿明,小红"}')
     if "AA" in msg or "记账" in msg:
         return ("记上了：第 1 条 AA 总额 300，按参与人人数均摊。拍板后入账。\n"
                 'PLAN{"op":"set_bill","id":"1","bill_total":"300"}')
-    if "取消" in msg:
-        return ("明白，取消第 1 条。拍板后进入 5 秒撤销窗口，反悔还来得及。\n"
-                'PLAN{"op":"cancel","id":"1"}')
+    if "骑车" in msg or "深圳湾" in msg:
+        return ("消息里抽到：周六上午在深圳湾骑车，活动/时间/地点都齐了。"
+                "建议现在建守护盯住这条，拍板即生效。\n"
+                'PLAN{"op":"create","text":"周六上午去深圳湾骑车","activity":"骑车",'
+                '"slot_day":"周六","slot_part":"上午","place":"深圳湾","people":"","bill_total":""}')
     return "ECHO: " + (msg.strip().splitlines()[-1] if msg.strip() else "")
 
 

@@ -1628,18 +1628,28 @@ fn butler_send(){
 }
 
 // === 决赛 S3：PLAN{...} 提案解析 ===
-// 找 "PLAN{" → 取 {…} 段 → json_field 逐字段（扁平字符串，天然兼容手写解析）→
-// 槽位词归一（norm_day/norm_part，词表外的值一律清空——no-facts 铁律的解析端落点）→
-// build_plan_lines() 预构建提案卡逐行内容并做合法性校验。
+// 决赛 S4b 兼容修：宿主字符串方法表没有 index_of/last_index_of（Rinx vendored makepad
+//   6cf0385 实测 "method index_of not found on string" 崩掉整段回调；最新 card-host 的
+//   string.rs 方法表同样没有——该路径此前从未被任何宿主真正执行过）。改用 split 原语
+//   （新旧两代方法表都有）实现：协议保证 PLAN 为单行、扁平全字符串字段。
 fn plan_parse(reply){
     plan_pending = "no"
     let raw = "" + reply
-    let pk = raw.index_of("PLAN{")
-    if pk < 0 { return }
-    let lb = pk + 4
-    let rb = raw.last_index_of("}")
-    if rb <= lb { return }
-    let js = raw[lb:rb+1]
+    // 按 "PLAN{" 切分定位提案；协议保证每回复至多一个 PLAN
+    let parts = raw.split("PLAN{")
+    if parts.len() < 2 { return }
+    let tail = parts[1]
+    // 提案 JSON 到行尾；行内取到最后一个 }（扁平无嵌套，值内若含 } 会拼回原位）
+    let lines = tail.split("\n")
+    let body = lines[0]
+    let segs = body.split("}")
+    if segs.len() < 2 { return }
+    let inner = ""
+    for si in segs.len() - 1 {
+        if si > 0 { inner = inner + "}" }
+        inner = inner + segs[si]
+    }
+    let js = "{" + inner + "}"
     let op = json_field(js, "op")
     if op == "" { return }
     plan_op = op
@@ -1652,7 +1662,7 @@ fn plan_parse(reply){
     plan_people = trim24(json_field(js, "people"))
     plan_bill = trim24(json_field(js, "bill_total"))
     // 摘要 = PLAN 行之前的话（≤60 字）；没有则中性兜底文案（不编造）
-    let head = raw[0:pk]
+    let head = parts[0]
     head = head.trim()
     plan_summary = trim_n(head, 60)
     if plan_summary == "" { plan_summary = "按消息原文整理的提案（见下方字段）" }
@@ -1673,9 +1683,23 @@ fn norm_part(p){
 
 // trim_n：截到 ≤n 字（trim24 泛化版；两界切片，决赛改进① 范式）
 fn trim_n(s, n){
-    let r = "" + s
-    if r.len() > n { r = r[0:n] }
-    return r
+    // 决赛 S4b 兼容定论：旧宿主(Rinx vendored makepad 6cf0385)不支持字符串索引/切片
+    //   （s[a:b] 编译为 index 指令，字符串接收者直接 "cannot index" 崩渲染；to_chars 是
+    //   码点数组也不能拼回字符串）。两侧交集原语只有 split——用 split("") 逐字重建截断：
+    //   split("") 产生 [""，字…，""]，取 cs[1..=chars]。len() 字节计（CJK 保守触发），
+    //   循环上限钳到实际字数（cs.len()-2），绝不越界。
+    let tq = "" + s
+    if tq.len() <= n { return tq }
+    let cs = tq.split("")
+    let chars = cs.len() - 2
+    if chars <= 0 { return tq }
+    let cnt = n
+    if cnt > chars { cnt = chars }
+    let out = ""
+    for i in cnt {
+        out = out + cs[i + 1]
+    }
+    return out
 }
 
 // 展示兜底：空字段显「（未抽取到）」——no-facts 的展示端落点
@@ -1921,40 +1945,26 @@ fn create_case_from_plan(){
 
 // === #37 辅助：trim24 截到 ≤24 字 + json_field 提字段 ===
 fn trim24(s){
-    let r = "" + s
-    if r.len() > 24 { r = r[0:24] }
-    return r
+    return trim_n(s, 24)
 }
 fn json_field(js, key){
-    let kq = "\"" + key + "\""
-    let idx = js.index_of(kq)
-    if idx < 0 { return "" }
-    // 决赛改进①：切片一律两界写法（开放式 [x:] 在最新 card-host/makepad 解析失败，初赛评审指出）
-    let rest = js[idx + kq.len():js.len()]
-    let colon = rest.index_of(":")
-    if colon < 0 { return "" }
-    let after = rest[colon+1:rest.len()]
-    // 跳过空白
-    let start = 0
-    while start < after.len() {
-        let ch = after[start:start+1]
-        if ch != " " && ch != "\n" && ch != "\t" { break }
-        start = start + 1
+    // 决赛 S4b 兼容修：同 plan_parse——index_of 不在宿主方法表，split 实现。
+    //   协议保证扁平全字符串字段、值内禁双引号；兼容 "key":"v" 与 "key": "v" 两种间隔。
+    let kq = "\"" + key + "\":\""
+    let parts = js.split(kq)
+    let rest = ""
+    if parts.len() >= 2 {
+        rest = parts[1]
+    } else {
+        let kq2 = "\"" + key + "\": \""
+        let parts2 = js.split(kq2)
+        if parts2.len() < 2 { return "" }
+        rest = parts2[1]
     }
-    after = after[start:after.len()]
-    // 字符串值
-    if after.len() > 0 && after[0:1] == "\"" {
-        let end = after.index_of("\"", 1)
-        if end < 0 { return "" }
-        return after[1:end]
-    }
-    // 非字符串（罕见），截到 ,/}/空白
-    let end = after.len()
-    for ci in after.len() {
-        let ch = after[ci:ci+1]
-        if ch == "," || ch == "}" || ch == " " || ch == "\n" { end = ci; break }
-    }
-    return after[0:end]
+    // 值到下一个 " 结束（值内禁双引号，协议约束）
+    let ends = rest.split("\"")
+    if ends.len() < 1 { return "" }
+    return ends[0]
 }
 
 // === #37 publish_glance：向 glance 屏发「今晚聚会 T-X 提醒」L0卡 ===

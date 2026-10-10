@@ -119,9 +119,9 @@ def frame_close(i):
     rows = [
         ("verified", "内核直连 PLAN：mock + MiniMax-M3 真模型（tools/qx-kernel-turn.py）", GREEN),
         ("verified", "card-host 回归 16/16（14 步原路径 + 管家降级 2 步）", GREEN),
-        ("verified", "Rinx 真宿主：bundle 准入 Review → Run → app 完整运行", GREEN),
+        ("verified", "Rinx 真宿主 e2e：mock create/reschedule + MiniMax-M3 create/confirm 四轮落盘", GREEN),
         ("verified", "hub check PASSED：qianxian 0.3.0，agent read-only 最小权限", GREEN),
-        ("blocked", "Rinx 内 turn 端到端：宿主 broker×内核 peer 记账不兼容（官方测试同错定性）", ACCENT),
+        ("boundary", "旧宿主同上下文第二回合事件偶丢→每 Run 一回合；演示用去 agent 块同源变体（提交包完整契约）", ACCENT),
         ("", "证据：evidence/s4-real-host-20261010.md · 回归：app/qianxian/tools/qx-verify-v2.py", SECOND),
     ]
     y = 160
@@ -145,8 +145,10 @@ def main():
     frame_term(n, "证据②：MiniMax-M3 真模型理解 PLAN 协议", "同一提示词，真 LLM（内环同款 minimax-cn 通路）回复中生成 PLAN", "/tmp/s4-real.out", tail=8); n += 1
     frame_shot(n, "app：把群消息丢给管家（主入口）", "card-host 实跑控件树重绘（本机 WSLg 无头 /g 抓帧超时，如实标注非宿主像素）", f"{SHOTS}/s1-main.png"); n += 1
     frame_shot(n, "无 AI 宿主时的诚实降级", "card-host 无 octos 服务 → 明示降级本地规则；「建守护」路径完整可用", f"{SHOTS}/s2-chat.png"); n += 1
-    frame_shot(n, "Rinx 真宿主内运行同一 bundle", "Rinx(Mini apps) 准入 → Run → 管家 CTA/AI 标签/列表完整渲染", f"{SHOTS}/s5-rinx-app.png",
-               "边界如实：该宿主 broker×本机内核 peer 记账不兼容，turn 中断于宿主侧（官方 standalone_local 测试同错；提交包保持完整契约，演示用去 agent 块同源变体）"); n += 1
+    frame_shot(n, "Rinx 真宿主 × MiniMax-M3：真模型提案卡", "「跟现有 #1 撞时段了」——真模型读守护快照主动预警冲突，并按协议给出 PLAN 提案卡", f"{SHOTS}/s6-realmodel-proposal.png",
+               "真机链路：交给管家 → octos 内核真回合 → MiniMax-M3 → PLAN 提案卡 → 人点「拍板执行」；宿主为 Rinx(Mini apps)，完整四轮矩阵见 evidence/s4"); n += 1
+    frame_shot(n, "拍板之后：真模型 confirm 轮落盘", "#1 status=Confirmed、回执就位——六操作白名单动作全部由 agent 提案驱动", f"{SHOTS}/s7-after-approve.png",
+               "四轮实测：mock create/reschedule + 真模型 create/confirm，全部「提案→拍板→cases.json 落盘断言」通过"); n += 1
     frame_shot(n, "守护状态机：冲突检测", "两条同时段守护互标冲突（规则分诊同样服务降级路径）", f"{SHOTS}/s3-conflict.png"); n += 1
     frame_shot(n, "拍板后的回执", "组织者确认 → 回执快照 + T-24h 提醒文案（no-facts：未抽取到明示）", f"{SHOTS}/s4-receipt.png"); n += 1
     frame_close(n); n += 1

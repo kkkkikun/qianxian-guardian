@@ -16,8 +16,10 @@
 - **拍板**：提案卡上一次点击执行；校验（溯源原文/目标存在/必填值）不过即拒。
 - **真模型证据**：真实 octos 内核 × **MiniMax-M3** 返回合规 PLAN（mock 亦验）——
   `tools/qx-kernel-turn.py`，见 [s4-real-host-20261010.md](s4-real-host-20261010.md)。
-- **边界（如实）**：Rinx 宿主内 turn 端到端因宿主 broker×本机内核 peer 记账不兼容受阻
-  （官方 standalone_local 测试同错定性）；bundle 准入/运行/请求分发均真机验过。
+- **真宿主端到端（Rinx×MiniMax-M3）**：四轮实测 create/reschedule/confirm 全链
+  「提案→拍板→落盘」；真模型跨轮读快照主动预警冲突。宿主旧 broker 的 peer 撞名经
+  内核重建（octos #2734）解决；剩余边界（同上下文第二回合事件偶丢）与复现脚本见
+  [s4-real-host-20261010.md](s4-real-host-20261010.md)。
 
 ## 做了什么（对齐官方「日历」场景）
 

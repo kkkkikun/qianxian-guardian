@@ -8,8 +8,9 @@
 
 - **决赛迭代（v0.3.0 管家模式）**：**agent 驱动全流程，人只做最终拍板**——
   粘贴群消息点「交给管家」→ agent 分诊/查冲突/出 **PLAN 机器提案** → 提案卡上点「拍板」→
-  白名单动作执行 + 回执。真模型已验证：MiniMax-M3 在真实 octos 内核上按协议返回 PLAN
-  （[evidence/s4-real-host-20261010.md](evidence/s4-real-host-20261010.md)）
+  白名单动作执行 + 回执。**Rinx 真宿主 × MiniMax-M3 真模型四轮端到端实测**：
+  create/reschedule/confirm 全链落盘，真模型主动预警「与 #1 撞时段」并在确认时提示
+  「#2 同期无人」（[evidence/s4-real-host-20261010.md](evidence/s4-real-host-20261010.md)）
 - **主场景**：日历（时间收敛、**冲突检测**、待定 vs 已确认）
   → 与官方「日历」场景四步演示的逐条对齐见
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
@@ -23,10 +24,11 @@
 |---|---|---|
 | ![主界面](bundle/screenshots/01-main.png) | ![详情](bundle/screenshots/02-expanded.png) | ![冲突](bundle/screenshots/03-conflict.png) |
 
-> 来源标注（诚实）：本开发机 WSLg 会话无头（`/g` 抓帧超时），三张截图与视频帧为
-> `tools/snap-to-png.py` 按**运行时真实控件树**重绘（文字/层级/坐标/状态色来自
-> card-host 实际运行，v0.1.0 同款先例）。Rinx 真宿主运行帧见
-> `evidence/shots-v3/s5-rinx-app.png`；评审可用 `tools/octo shot` 复核。
+> 来源标注（诚实）：本开发机 WSLg 会话无头（`/g` 抓帧超时），截图与视频帧为
+> `tools/snap-to-png.py` / Rinx 帧渲染器按**运行时真实控件树**重绘（文字/层级/坐标/
+> 状态色来自实际运行，v0.1.0 同款先例）。**真模型提案卡与拍板后的实况帧**见
+> `evidence/shots-v3/s6-realmodel-proposal.png` / `s7-after-approve.png`；评审可用
+> `tools/octo shot` 复核。
 
 ## 它做什么
 
@@ -72,7 +74,9 @@ app 把角色提示词与当前守护快照嵌入 turn 文本——不依赖宿�
 - **ops**：`create / confirm / reschedule / cancel / add_people / set_bill`——app 的全部状态变更操作都可由 agent 提案驱动。
 - **合法性前置校验**：create 必须带消息原文（溯源）、目标 id 必须存在、改期/加人必须有值——非法提案拍板即拒并给拒绝文案。
 - **双处一致**：`bundle/AGENT.md` v3（官方四段式）与 app 内提示词同文；agent 工具最小权限（read-only + `ask_user_question`）。
-- **真模型实证**：真实 `octos serve` 内核 × MiniMax-M3 回复生成合规 PLAN（mock 剧本模型亦验）→ `tools/qx-kernel-turn.py`。
+- **真宿主真模型实证**：Rinx（Mini apps 宿主）内四轮端到端——mock create/reschedule +
+  **MiniMax-M3 真模型 create/confirm**，全部「PLAN 提案→人拍板→cases.json 落盘断言」；
+  真模型跨轮读取守护快照做冲突预警。另有内核直连双证（mock + 真模型）→ `tools/qx-kernel-turn.py`。
 
 ## 无 AI 也完整可用
 
