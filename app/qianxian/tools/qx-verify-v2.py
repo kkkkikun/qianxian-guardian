@@ -30,9 +30,9 @@ A5 方法论（#33）：
   - 每步打印 [step] W=N HINT=[…]，PASS/FAIL 落到 stderr。
   - 结束时打印 DRIVE-V2-DONE。
 """
-import json, re, sys, time, urllib.request, urllib.parse
+import json, os, re, sys, time, urllib.request, urllib.parse
 
-BASE = "http://127.0.0.1:8146"
+BASE = "http://127.0.0.1:" + os.environ.get("QX_PORT", "8146")
 
 
 def get(path, timeout=10):
@@ -210,9 +210,9 @@ d = snap()
 ws = d.get("s", [])
 R("base", ws)
 
-# R01：示例填充
-ws = click_text(ws, "用示例试试", "Button") or ws
-rec(1, "示例填充可见", find(ws, "用示例试试", "Button") is None or any("已填" in t for t, r in labels(ws)), "示例点击后 hint 或草稿变化")
+# R01：示例填充（S3 起按钮文案缩为「示例」）
+ws = click_text(ws, "示例", "Button") or ws
+rec(1, "示例填充可见", find(ws, "示例", "Button") is None or any("已填" in t for t, r in labels(ws)), "示例点击后 hint 或草稿变化")
 
 # R02：建守护 #1
 ws = click_text(ws, "建守护", "Button") or ws
@@ -402,8 +402,37 @@ time.sleep(1.0)
 ws = snap()["s"]
 rec(14, "清空后重建卡可见", any(title_re(k).search(t) and "唱歌" in t for k in (1, 2, 3, 4, 5, 6) for t, r in labels(ws)), "列表含 #N · 唱歌 标题卡")
 
+# R15（S3）：交给管家 —— card-host 无 octos 服务 → 诚实降级进聊天视图（me 气泡在架，
+#   不误建守护；host.has 只证注册，请求实测失败后 sys 气泡+标签明示降级）
+ws = type_text(ws, "周六上午去深圳湾骑车")
+bj = find(ws, "交给管家", "Button")
+if bj:
+    x, y = center(bj)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(2.2)
+    ws = snap()["s"]
+    in_chat = find(ws, "回到守护列表", "Button") is not None
+    me_bubble = any(t.startswith("我：") for t, r in labels(ws))
+    no_new_case = not any(title_re(k).search(t) and "骑车" in t for k in (1, 2, 3, 4, 5, 6) for t, r in labels(ws))
+    rec(15, "交给管家降级路径", in_chat and me_bubble and no_new_case,
+        f"chat={in_chat} me气泡={me_bubble} 未误建={no_new_case}")
+else:
+    rec(15, "交给管家按钮可见", False, "未找到「交给管家」按钮")
+
+# R16（S3）：回到守护列表
+bb = find(ws, "回到守护列表", "Button")
+if bb:
+    x, y = center(bb)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(1.6)
+    ws = snap()["s"]
+    rec(16, "回到守护列表生效", is_list_mode(ws) and not find(ws, "回到守护列表", "Button"),
+        "列表模式判据成立且聊天视图撤下")
+else:
+    rec(16, "回到守护列表按钮可见", False, "聊天视图内未找到按钮")
+
 # ---- 收尾 ----
-print("\n=== 14 项回归汇总（v2，新路径） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v3：14 步原路径 + S3 管家 2 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):

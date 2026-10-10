@@ -31,6 +31,30 @@ let ai_pending = "no"                  // #32：AI 回合进行中（回调可�
 let ai_seq = 0                         // 决赛改进②：AI 回合代际序号——迟到回调按序号丢弃，不覆盖降级提示
 let people_draft = ""                  // #31f：参与人输入草稿（on_render 内输入行走草稿，免具名绑定）
 let bill_draft = ""                    // #31f：AA总额输入草稿
+
+// === 决赛 S3：管家模式（agent 驱动全流程，人只拍板）状态 ===
+// 对话 transcript 用双扁平数组（on_render 只读字符串数组，#4/#5 硬约束）：
+//   chat_role[i] = "me"（用户）/ "ai"（管家）/ "sys"（系统提示，居中灰字）
+let chat_role = []
+let chat_text = []
+// 待拍板提案（一次至多一个；管家回复尾部的 PLAN{...} 解析结果）。
+//   plan_op: create/confirm/reschedule/cancel/add_people/set_bill
+//   plan_id: 目标守护 id 字符串（create 为空）
+//   plan_src: create 时的消息原文（no-facts 溯源；空则拒绝执行）
+//   plan_summary: 管家给人看的一句说明（PLAN 行之前的话）
+//   plan_lines: 提案卡逐行展示内容（函数上下文预构建，on_render 只读）
+let plan_pending = "no"
+let plan_op = ""
+let plan_id = ""
+let plan_src = ""
+let plan_summary = ""
+let plan_activity = ""
+let plan_day = ""
+let plan_part = ""
+let plan_place = ""
+let plan_people = ""
+let plan_bill = ""
+let plan_lines = []
 fn set_people_draft(s){
     people_draft = s
 }
@@ -184,30 +208,13 @@ fn status_bar_color(st){
     return #xc9bfb2  // Proposing / 兜底
 }
 
-// === #42 新增：AI 解析结果"建议卡"展示态（不直接写入输入框） ===
-//   外环范式：官方 AI-SERVICES 强制模型文本只填文本槽、绝不参与动作接线；
-//   shells 侧 kit 会自动画 sparkle+AI 眉标（OctoScript#53/#68），但本仓库 pinned runtime
-//   （card-host）的 L0 checker 不认识——所以诚实降级形态 = app 自己画「✨ AI 生成」眉标。
-//   ai_card_visible="yes" → on_render 列表分支顶部渲染「✨ AI 生成」建议卡
-//     + BodyLine 汇总（活动/时间/地点，空字段显"未给出"）
-//     + 「采纳到输入框」按钮（accent 蓝）→ 调 ai_adopt()，guard 后用既有 parse_apply 写入 msg_input
-//     + 「忽略」按钮（灰 flat）→ 调 ai_dismiss()，仅翻标记 + 重渲染。
-//   ai_act/ai_day/ai_part/ai_place = trim24 后的结构化字段，采纳时直接喂 parse_apply。
-//   字符串标记（与 cancel_pending_flag / undo_show_flag2 同源；本 runtime 函数返回布尔在
-//   调用点 == false 比较不可靠，黑板 #13 实证）。
-let ai_card_visible = "no"
-let ai_act = ""
-let ai_day = ""
-let ai_part = ""
-let ai_place = ""
-// AI 眉标配色（紫调）：底 #xfbe9e5（淡紫）/ 字 #xc7402f（深紫）
-// 照 status_badge_bg/fg 范式，draw_bg.color 期望颜色字面量（#x…），不能返回字符串
-fn ai_badge_bg(){
-    return #xfbe9e5
-}
-fn ai_badge_fg(){
-    return #xc7402f
-}
+// === 决赛 S3：#42 旧「AI 建议卡」机制整体退役（ai_card_visible/ai_act/ai_day/ai_part/
+//   ai_place/ai_badge_bg/ai_badge_fg 全部移除，配套 ai_parse/ai_adopt/ai_dismiss/parse_apply
+//   一并退役）——由管家模式取代：
+//   单通道 octos.turn.start 对话（Rinx 宿主仅接受 {text} 单参数，契约实测），
+//   回复尾部 PLAN{...} 机器提案 → 待拍板卡 → 人点「拍板」才走白名单动作。
+//   LLM 依旧不直接碰状态机（评审红线不变），且「拍板」比旧「采纳到输入框」更进一步：
+//   一次点击完成核对+执行，人工点击数从 3 次降到 1 次。
 
 // === #43 D 切片：回执模板三档可切换（standard/brief/emoji）+ pref.json 持久化 ===
 // 字符串标记（与 howto_show_flag/ai_card_visible 同源；照 #13 实证范式）。
@@ -543,6 +550,12 @@ fn load(){
     // #48b：detail_list 初始隐藏（命令式，声明里写 visible:false 会被 render() 的
     //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
     ui.detail_list.set_visible(false)
+    // S3：chat_list 同款初始隐藏 + 管家欢迎语（仅首次，重启不重复）
+    ui.chat_list.set_visible(false)
+    if chat_text.len() == 0 {
+        chat_role.push("sys")
+        chat_text.push("把群消息丢给管家：我来分诊、查冲突、出提案，你只管拍板。（无 AI 服务时自动降级本地规则）")
+    }
     // #44 外环修：根组件按钮文案在首次求值已定型（当时 receipt_style 还是 "standard"），
     //   load() 此刻读回的偏好不会反映到标签——重启后按钮显示「标准」实际却是 emoji 档
     //   （首次点击才自愈）。照 ui.hint.set_text 同范式命令式同步。
@@ -976,11 +989,13 @@ fn toggle_case(id){
 
 // === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
 fn render_views(){
-    // #48b：列表/详情双视图统一刷新口——按 ui_mode 只刷当前可见视图
-    //   （两个都刷会在单次 eval 内双倍 on_render 指令，实测超 instruction limit；
+    // #48b（S3 扩为三视图）：按 ui_mode 只刷当前可见视图
+    //   （多个都刷会在单次 eval 内成倍 on_render 指令，实测超 instruction limit；
     //    且此处若递归调用自身=无限循环，黑板 #48 引以为戒）
     if ui_mode == "detail" {
         ui.detail_list.render()
+    } else if ui_mode == "chat" {
+        ui.chat_list.render()
     } else {
         ui.case_list.render()
     }
@@ -1003,6 +1018,7 @@ fn on_tap_card(id){
     ui_mode = "detail"
     rebuild_lines()
     ui.case_list.set_visible(false)
+    ui.chat_list.set_visible(false)
     ui.detail_list.set_visible(true)
     render_views()
     ui.hint.set_text("已选中 #" + "" + id + "，详情见下方；「返回列表」回到全部守护")
@@ -1012,9 +1028,26 @@ fn on_tap_card(id){
 fn back_to_list(){
     ui_mode = "list"
     ui.detail_list.set_visible(false)
+    ui.chat_list.set_visible(false)
     ui.case_list.set_visible(true)
     render_views()
     ui.hint.set_text("已返回列表；点卡片看单条详情")
+}
+
+// === 决赛 S3：管家对话视图进出 ===
+fn enter_chat(){
+    ui_mode = "chat"
+    ui.case_list.set_visible(false)
+    ui.detail_list.set_visible(false)
+    ui.chat_list.set_visible(true)
+    render_views()
+}
+fn back_from_chat(){
+    ui_mode = "list"
+    ui.chat_list.set_visible(false)
+    ui.case_list.set_visible(true)
+    render_views()
+    ui.hint.set_text("已回到守护列表；点卡片看单条详情")
 }
 
 // === #10 新增：切换筛选标签（GestureView on_tap 回调入口） ===
@@ -1485,222 +1518,400 @@ fn undo_cancel(){
     }
 }
 
-// AI 增强（可选）：双通道 #37（外环派·复赛切片，原则第2条）
-// 首选：host.has("model") → model.complete 一次性 schema 校验，输出 {activity, slot_day,
-//   slot_part, place} 四字段（字符串、长度 ≤24、无JSON残留照 #30 范式）。走 AI-SERVICES 闭环。
-// 降级：card-host 无 model → host.request("octos.turn.start", ...) 对话式peer；
-//   首次会弹"等人允许"，30s 缓冲区分授权等待 vs 实际超时（#32/#26 实证）。
-// === #46 A切片：AI capability 可见性提示（复赛方向 A 的诚实降级形态）===
-//   探测 host 端哪个 AI 通道可用，返回给小字标签显示的文案。
-//   顺序与 ai_parse() 双通道优先级一致：model.complete 优先，回落到 turn.start，再无则本地规则。
-//   仅做"探测并展示"——不参与状态机、不改 ai_parse 通道逻辑、不动 manifest。
+// === 决赛 S3：管家模式 —— agent 驱动全流程，人只拍板 ===
+// 唯一 AI 通道：octos.turn.start（Rinx 宿主仅接受 {text} 单参数，其他键直接报错——源码级核实）。
+// 回包自由文本：尾部带 PLAN{...}（单行 JSON，扁平字符串字段）即为机器提案，
+// 解析进 plan_* 全局 + plan_pending="yes"，聊天视图渲染「拍板/放弃」；
+// 人点「拍板」才走白名单动作（create/confirm/reschedule/cancel/add_people/set_bill）。
+// card-host 无服务 → 诚实降级：sys 气泡明示，本地规则路径（建守护）原样可用。
+
+// #46 A切片（S3 改版）：AI 通道可见性——只探测管家通道（turn.start）
 fn probe_ai_cap(){
-    if host.has("model") {
-        return "AI：model.complete 结构化解析可用"
-    }
     if host.has("octos.turn.start") {
-        return "AI：对话通道可用（首次需宿主允许）"
+        return "AI：管家对话通道可用（首次需宿主允许）"
     }
-    return "AI：本机无服务，本地规则兜底"
+    return "AI：本机无管家服务，本地规则兜底"
 }
 
-// LLM 不碰状态机：解析结果仅经 parse_apply 规范化写入 msg_input，hint 明示「AI 已建议
-//   活动/时间/地点，请过目后点建守护」。本地分诊仍是唯一事实源。
-// === 决赛改进②：30s 降级定时器（带代际核对）===
-//   只有「本回合仍是最新回合且仍在等待」才降级；旧回合定时器对已升级的新回合无副作用。
+// 决赛改进②（S3 改版）：30s 降级定时器，带代际核对 + 聊天面同步
 fn ai_timeout(my){
     if my == ai_seq && ai_pending == "yes" {
         ai_pending = "no"
+        chat_push("sys", "管家无响应（30 秒）——已降级本地规则，点「建守护」即可")
+        render_views()
         ui.hint.set_text("AI 无响应（30 秒），已降级本地规则——直接点「建守护」即可")
     }
 }
-fn ai_parse(){
-    // === #32 外环修：重复点防护 ===
+// 对话气泡入栈（role: "me"/"ai"/"sys"）；聊天视图可见时即时重渲染
+fn chat_push(role, text){
+    chat_role.push("" + role)
+    chat_text.push("" + text)
+    if ui_mode == "chat" {
+        ui.chat_list.render()
+    }
+}
+
+// 管家回合提示词：静态角色前导（含 PLAN 协议）+ 当前守护快照 + 用户消息。
+// Rinx 不给 mini-app 注入 AGENT.md（宿主侧 turn_input 无 guidance 分支，源码级核实），
+// 所以角色与协议必须由 app 自己嵌入 turn 文本——与 AGENT.md v3 同文，双处一致。
+fn build_agent_turn(user_text){
+    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm(id)/reschedule(id+slot_day+slot_part)/cancel(id)/add_people(id+people)/set_bill(id+bill_total)，字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒。回复中文、简短（≤120字）。"
+    let st = pre + "\n\n【当前守护】\n"
+    if cases.len() == 0 {
+        st = st + "（还没有守护）"
+    } else {
+        for i in cases.len() {
+            st = st + "#" + ("" + cases[i]["id"]) + " " + ("" + cases[i]["activity"])
+            st = st + "｜" + ("" + cases[i]["slot_day"]) + "-" + ("" + cases[i]["slot_part"])
+            st = st + "｜" + ("" + cases[i]["place"])
+            st = st + "｜" + ("" + cases[i]["status"]) + "\n"
+        }
+    }
+    return st + "\n【用户消息】\n" + user_text
+}
+
+// 管家入口：输入框文本 → 聊天视图 → turn.start（无服务则诚实降级）
+fn butler_send(){
     if ai_pending == "yes" {
-        ui.hint.set_text("AI 仍在解析中，请稍候（30 秒无响应会自动降级）")
+        ui.hint.set_text("管家还在思考，请稍候（30 秒无响应自动降级）")
         return
     }
     let text = ui.msg_input.text()
     if text == "" {
-        ui.hint.set_text("先输入一条群消息再试 AI 解析")
+        ui.hint.set_text("先粘贴一条群消息，再点「交给管家」")
         return
     }
-    ai_pending = "yes"
-    // 决赛 S1 清债：此处原有重复的 ai_seq 自增/let my 声明块（笔误，功能无害但冗余）
-    ai_seq = ai_seq + 1
-    let my = ai_seq
-    ui.hint.set_text("AI 解析中…（约 30 秒，无响应自动降级本地规则）")
-    // 30s 兜底（turn.start 首次需等"允许"，8s 太短见 #37；model.complete 通常秒级）
-    // 决赛改进②：带代际序号——旧回合的定时器不降级新回合（官方 ai-providers banner 同款代际模式）
-    start_timeout(30.0, || ai_timeout(my))
-    // === 通道 1：首选 model.complete（一次性 schema 校验）===
-    if host.has("model") {
-        host.request("model.complete", {
-            schema: {activity: "string", slot_day: "string", slot_part: "string", place: "string"},
-            prompt: "从这条聚会消息提取活动/时间/地点，字段长度 ≤24，只回 JSON：" + text
-        }, fn(r){
-            // 决赛改进②：迟到回调按序号丢弃——已降级/已被新回合取代时不动任何 UI 状态
-            if my != ai_seq { return }
-            ai_pending = "no"
-            if r.is_ok {
-                // === #42 改造：成功路径不再直接写 msg_input，先填四字段 + 翻 ai_card_visible，
-            //   让用户在「✨ AI 生成」建议卡上点「采纳到输入框」才会写到 msg_input。
-            //   字段合法性由 ai_adopt() 内 parse_apply() 兜底（活动/地点至少其一非空）。
-                let _a = "" + r.data.activity
-                let _d = "" + r.data.slot_day
-                let _p = "" + r.data.slot_part
-                let _l = "" + r.data.place
-                if _a == "" && _l == "" {
-                    ui.hint.set_text("AI 返回格式不合规，已降级为本地规则")
-                } else {
-                    ai_act = _a
-                    ai_day = _d
-                    ai_part = _p
-                    ai_place = _l
-                    ai_card_visible = "yes"
-                    render_views()
-                    ui.hint.set_text("AI 已给出建议卡，过目后点「采纳到输入框」")
-                }
-            } else {
-                ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
-                // #46b 外环补：host.has 只证"已注册"，实测失败说明无活后端——
-                //   标签同步到实测结果，别让「可用」字样留在屏上误导（诚实可见性）。
-                ui.ai_cap_label.set_text("AI：通道实测无响应，本地规则兜底")
-            }
-        })
-        return
-    }
-    // === 通道 2：降级 octos.turn.start（card-host 无 model 时）===
+    chat_push("me", text)
+    ui.msg_input.set_text("")
+    enter_chat()
     if host.has("octos.turn.start") {
-        host.request("octos.turn.start", {text: "从这条聚会消息提取活动/时间/地点，只回 JSON：" + text}, fn(r){
-            // 决赛改进②：同通道 1——迟到回调按序号丢弃
+        ai_pending = "yes"
+        ai_seq = ai_seq + 1
+        let my = ai_seq
+        chat_push("sys", "管家思考中…（约 30 秒，无响应自动降级本地规则）")
+        // 30s 兜底（turn.start 首次会等「允许」，8s 太短见 #37）；代际核对防旧回合降级新回合
+        start_timeout(30.0, || ai_timeout(my))
+        host.request("octos.turn.start", {text: build_agent_turn(text)}, fn(r){
+            // 决赛改进②：迟到回调按序号丢弃——已被新回合取代时不动任何 UI 状态
             if my != ai_seq { return }
             ai_pending = "no"
             if r.is_ok {
-                // turn.start 回包非 schema 化，走宽松抽取；不再裸 set_text r.data.text
-                let parsed = parse_loose("" + r.data.text)
-                let _a = parsed[0]
-                let _d = parsed[1]
-                let _p = parsed[2]
-                let _l = parsed[3]
-                // === #42 改造：与通道 1 同策略——成功且字段合规时填四字段 + 翻标记；
-                //   失败/字段为空仍走旧 hint，不渲染建议卡（防用户看到空卡）。
-                if _a == "" && _l == "" {
-                    ui.hint.set_text("AI 返回格式不合规，已降级为本地规则")
+                let reply = "" + r.data.text
+                if reply == "" { reply = "（管家返回了空回复）" }
+                chat_push("ai", reply)
+                plan_parse(reply)
+                if plan_pending == "yes" {
+                    ui.hint.set_text("管家出了提案——过目后点「拍板」执行")
                 } else {
-                    ai_act = _a
-                    ai_day = _d
-                    ai_part = _p
-                    ai_place = _l
-                    ai_card_visible = "yes"
-                    render_views()
-                    ui.hint.set_text("AI 已给出建议卡，过目后点「采纳到输入框」（turn.start 首次会等授权）")
+                    ui.hint.set_text("管家已回复（见对话）")
                 }
             } else {
-                ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
-                // #46b 外环补：host.has 只证"已注册"，实测失败说明无活后端——
-                //   标签同步到实测结果，别让「可用」字样留在屏上误导（诚实可见性）。
+                // #46b 诚实可见性：host.has 只证「已注册」，实测失败要把「可用」字样撤下
+                chat_push("sys", "AI 通道无响应（" + r.error + "）——已降级本地规则，点「建守护」即可")
                 ui.ai_cap_label.set_text("AI：通道实测无响应，本地规则兜底")
+                ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
             }
+            render_views()
         })
+    } else {
+        // 诚实降级：无 AI 服务（card-host 即此态）——不假装管家在听
+        chat_push("sys", "本机没有管家服务（host 无 octos.turn.start）——本地规则兜底：点「建守护」走分诊建卡")
+        ui.ai_cap_label.set_text(probe_ai_cap())
+        ui.hint.set_text("本机无 AI 服务，已降级本地规则——点「建守护」即可")
+        render_views()
+    }
+}
+
+// === 决赛 S3：PLAN{...} 提案解析 ===
+// 找 "PLAN{" → 取 {…} 段 → json_field 逐字段（扁平字符串，天然兼容手写解析）→
+// 槽位词归一（norm_day/norm_part，词表外的值一律清空——no-facts 铁律的解析端落点）→
+// build_plan_lines() 预构建提案卡逐行内容并做合法性校验。
+fn plan_parse(reply){
+    plan_pending = "no"
+    let raw = "" + reply
+    let pk = raw.index_of("PLAN{")
+    if pk < 0 { return }
+    let lb = pk + 4
+    let rb = raw.last_index_of("}")
+    if rb <= lb { return }
+    let js = raw[lb:rb+1]
+    let op = json_field(js, "op")
+    if op == "" { return }
+    plan_op = op
+    plan_id = json_field(js, "id")
+    plan_src = trim_n(json_field(js, "text"), 60)
+    plan_activity = trim24(json_field(js, "activity"))
+    plan_day = norm_day(json_field(js, "slot_day"))
+    plan_part = norm_part(json_field(js, "slot_part"))
+    plan_place = trim24(json_field(js, "place"))
+    plan_people = trim24(json_field(js, "people"))
+    plan_bill = trim24(json_field(js, "bill_total"))
+    // 摘要 = PLAN 行之前的话（≤60 字）；没有则中性兜底文案（不编造）
+    let head = raw[0:pk]
+    head = head.trim()
+    plan_summary = trim_n(head, 60)
+    if plan_summary == "" { plan_summary = "按消息原文整理的提案（见下方字段）" }
+    build_plan_lines()
+}
+
+// 槽位词归一：不在词表内的值一律清空（防模型编造时间；词表与 guess_slot_* 同源）
+fn norm_day(d){
+    let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日", "周末"]
+    for k in days { if d == k { return k } }
+    return ""
+}
+fn norm_part(p){
+    let parts = ["上午", "中午", "下午", "晚上"]
+    for k in parts { if k == p { return k } }
+    return ""
+}
+
+// trim_n：截到 ≤n 字（trim24 泛化版；两界切片，决赛改进① 范式）
+fn trim_n(s, n){
+    let r = "" + s
+    if r.len() > n { r = r[0:n] }
+    return r
+}
+
+// 展示兜底：空字段显「（未抽取到）」——no-facts 的展示端落点
+fn disp(v){
+    if v == "" { return "（未抽取到）" }
+    return "" + v
+}
+fn slot_disp(){
+    let s = "" + plan_day
+    if s != "" && plan_part != "" { return s + "-" + plan_part }
+    if s != "" { return s }
+    if plan_part != "" { return plan_part }
+    return "（未抽取到）"
+}
+fn plan_op_label(op){
+    if op == "confirm" { return "确认（出回执）" }
+    if op == "reschedule" { return "改期" }
+    if op == "cancel" { return "取消（5 秒内可撤销）" }
+    if op == "add_people" { return "加参与人" }
+    if op == "set_bill" { return "记 AA 总额" }
+    if op == "create" { return "新建守护" }
+    return op
+}
+
+// 提案卡逐行内容 + 合法性校验（函数上下文可读 cases；on_render 只读 plan_lines）
+// plan_check="ok" 才允许拍板执行；否则拍板时给出拒绝文案（agent 产生的非法提案进不了状态机）
+let plan_check = ""
+fn build_plan_lines(){
+    plan_lines = []
+    plan_check = ""
+    let op = "" + plan_op
+    if op == "create" {
+        // no-facts 校验：create 必须带消息原文（溯源），且活动/时间/地点至少其一非空
+        if plan_src == "" {
+            plan_check = "提案缺消息原文（text 字段），无法溯源——拒绝执行"
+        } else if plan_activity == "" && plan_place == "" && plan_day == "" {
+            plan_check = "提案字段全空（未抽取到内容）——拒绝执行"
+        }
+        plan_lines.push("新建守护 ｜ 原文：" + plan_src)
+        plan_lines.push("活动：" + disp(plan_activity) + " ｜ 时间：" + slot_disp() + " ｜ 地点：" + disp(plan_place))
+        plan_lines.push("参与人：" + disp(plan_people) + " ｜ AA 总额：" + disp(plan_bill))
+    } else {
+        let pid = ("" + plan_id).to_f64()
+        if pid <= 0 {
+            plan_check = "提案缺目标 id——拒绝执行"
+            plan_lines.push("op：" + plan_op_label(op) + "（目标 id 缺失）")
+        } else {
+            let found = "no"
+            for i in cases.len() {
+                if cases[i]["id"] == pid { found = "yes" }
+            }
+            if found == "no" {
+                plan_check = "目标 #" + plan_id + " 不存在——拒绝执行"
+            }
+            plan_lines.push("op：" + plan_op_label(op) + " ｜ 目标：#" + plan_id)
+            if op == "reschedule" {
+                if plan_day == "" && plan_part == "" {
+                    plan_check = "改期提案缺时间（slot_day/slot_part 均空）——拒绝执行"
+                }
+                plan_lines.push("改为：" + slot_disp())
+            }
+            if op == "add_people" {
+                if plan_people == "" {
+                    plan_check = "加人提案缺姓名（people 为空）——拒绝执行"
+                }
+                plan_lines.push("加参与人：" + plan_people)
+            }
+            if op == "set_bill" {
+                plan_lines.push("AA 总额：" + disp(plan_bill))
+            }
+        }
+    }
+    if plan_check == "" { plan_check = "ok" }
+    plan_pending = "yes"
+}
+
+// === 拍板：唯一人工确认点。校验通过才按 op 分发到白名单动作（全部复用既有函数） ===
+fn butler_approve(){
+    if plan_pending != "yes" {
+        ui.hint.set_text("没有待拍板的提案")
         return
     }
-    // 双通道皆无服务
-    ai_pending = "no"
-    ui.hint.set_text("本设备无 AI 服务（no service answers \"model/octos\"），本地规则继续可用")
-    // #46 A切片：防御性幂等——load() 已设过 ai_cap_label，此处保持一致。
-    ui.ai_cap_label.set_text(probe_ai_cap())
-}
-
-// === #42 新增：ai_adopt —— 把「✨ AI 生成」建议卡四字段采纳到 msg_input ===
-//   guard：ai_card_visible=="yes" 才执行（防 on_click 闭包被多次触发的幻读）；
-//   parse_apply 内部已经做了「活动或地点至少其一」字段合法性校验与 trim24 截断。
-//   成功：翻 ai_card_visible="no" + render + hint「已采纳 AI 建议，核对后点「建守护」」。
-//   失败（字段不全，已被 ai_parse() 上游过滤，此处为兜底）：
-//     保留卡片可见，hint「AI 建议字段不全，已保留输入框原样」（不覆盖 msg_input）。
-//   与 ai_parse() 改造配套：现在 AI 结果先停在建议卡，必须用户点按钮才落地——这是
-//   官方 AI-SERVICES「模型文本只填文本槽、绝不参与动作接线」的 App 侧落点（shells 侧 kit
-//   会画 sparkle+AI 眉标；card-host 不识别，故 App 自绘「✨ AI 生成」眉标）。
-fn ai_adopt(){
-    if ai_card_visible != "yes" { return }
-    if parse_apply(ai_act, ai_day, ai_part, ai_place) {
-        ai_card_visible = "no"
+    if plan_check != "ok" {
+        chat_push("sys", "提案被拒：" + plan_check)
+        plan_pending = "no"
         render_views()
-        ui.hint.set_text("已采纳 AI 建议，核对后点「建守护」")
+        ui.hint.set_text("提案未通过校验，已放弃（可让管家重新出）")
+        return
+    }
+    let op = "" + plan_op
+    let pid = ("" + plan_id).to_f64()
+    if op == "create" {
+        create_case_from_plan()
+        chat_push("sys", "已拍板：守护 #" + ("" + seq) + " 已建（待拍板态，详情里可确认）")
+    } else if op == "confirm" {
+        selected_id = pid
+        confirm_case()
+        chat_push("sys", "已拍板：#" + plan_id + " 已确认，回执见详情")
+    } else if op == "reschedule" {
+        selected_id = pid
+        set_slot(plan_id, plan_day, plan_part)
+        chat_push("sys", "已拍板：#" + plan_id + " 改期 " + slot_disp())
+    } else if op == "cancel" {
+        selected_id = pid
+        // 预置确认态 → cancel_case 直接走第二段（等效两次点击；人已在提案卡上拍板）
+        cancel_pending_id = pid
+        cancel_case()
+        chat_push("sys", "已拍板：#" + plan_id + " 已取消（5 秒内可撤销）")
+    } else if op == "add_people" {
+        selected_id = pid
+        add_person(plan_id, plan_people)
+        chat_push("sys", "已拍板：#" + plan_id + " 已加参与人 " + plan_people)
+    } else if op == "set_bill" {
+        selected_id = pid
+        update_bill_total(plan_id, plan_bill)
+        chat_push("sys", "已拍板：#" + plan_id + " AA 总额 " + disp(plan_bill))
     } else {
-        // 兜底分支：理论上 ai_parse() 已在通道回调内做过活动或地点非空判断，
-        // 这里 parse_apply 仍失败说明 trim24 后变成空串；保留卡让用户继续看。
-        ui.hint.set_text("AI 建议字段不全，已保留输入框原样")
+        ui.hint.set_text("未知提案类型：" + op)
+        return
     }
-}
-
-// === #42 新增：ai_dismiss —— 忽略「✨ AI 生成」建议卡，不写 msg_input ===
-//   仅翻标记 + 重渲染 + 友好 hint；不改 msg_input（用户原文原样保留在输入框）。
-fn ai_dismiss(){
-    if ai_card_visible != "yes" { return }
-    ai_card_visible = "no"
+    plan_pending = "no"
     render_views()
-    ui.hint.set_text("已忽略 AI 建议")
 }
 
-// === #37 parse_apply：把 AI 抽出的 4 字段规范化到 msg_input ===
-//   字段长度硬限 ≤24（无 JSON 残留照 #30 范式）；活动/时段/地点/星期几分别填入输入框草稿位置。
-//   msg_input 单输入框策略——按"活动 · 星期几-时段 · 地点"合成可读文本；本地分诊仍按原
-//   文本走（cases 字段以「点建守护」时的输入为事实源）。
-//   返回 true = 规范化成功，false = 字段不全或格式不合规（hint 已在外层写）。
-fn parse_apply(act, sd, sp, pl){
-    let a = trim24(act)
-    let d = trim24(sd)
-    let p = trim24(sp)
-    let l = trim24(pl)
-    // 至少要活动或地点其一
-    if a == "" && l == "" {
-        return false
-    }
-    let composed = a
-    if d != "" || p != "" {
-        composed = composed + " · " + d + "-" + p
-    }
-    if l != "" {
-        composed = composed + " · " + l
-    }
-    ui.msg_input.set_text(composed)
-    return true
+// 放弃提案（继续对话让管家改）
+fn butler_decline(){
+    if plan_pending != "yes" { return }
+    plan_pending = "no"
+    chat_push("sys", "已放弃本次提案（可继续对管家说怎么改）")
+    render_views()
+    ui.hint.set_text("已放弃提案，继续和管家聊，或点「建守护」走本地规则")
 }
 
-// === #37 parse_loose：turn.start 回包宽松抽取 ——
-    //   回包通常是自由文本含 JSON，扫首段 {…} 取四字段；取不到则按已知关键词扫描。
-    //   返回 [activity, slot_day, slot_part, place] 数组。
-fn parse_loose(raw){
-    let act = ""
-    let sd = ""
-    let sp = ""
-    let pl = ""
-    // 尝试取首段 JSON
-    let lb = raw.index_of("{")
-    let rb = raw.last_index_of("}")
-    if lb >= 0 && rb > lb {
-        let js = raw[lb:rb+1]
-        act = json_field(js, "activity")
-        sd = json_field(js, "slot_day")
-        sp = json_field(js, "slot_part")
-        pl = json_field(js, "place")
+// === S3 新增白名单动作：显式改时间（reschedule 提案的执行端；与 cycle_slot 的
+//   5 槽轮换互补——这里写入显式 day/part，词表归一由 plan_parse 前置保证）===
+let slot_save_result = "ok"
+fn set_slot(id_str, nd, np){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再改时间")
+        return
     }
-    // 兜底扫描（按本地规则词表），缺啥补啥
-    // 决赛 S1 修：原循环命中后没有给 act 赋值（死代码），活动词兜底从未生效
-    if act == "" {
-        let parts = ["聚会", "聚餐", "骑车", "徒步", "爬山", "打球", "唱歌", "电影", "桌游", "烧烤"]
-        for k in parts { if raw.contains(k) { act = k; break } }
+    let cur = -1
+    for si in cases.len() {
+        if "" + cases[si]["id"] == id_str { cur = si }
     }
-    if sd == "" {
-        let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日", "周末"]
-        for k in days { if raw.contains(k) { sd = k; break } }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
     }
-    if sp == "" {
-        let parts = ["上午", "中午", "下午", "晚上"]
-        for k in parts { if raw.contains(k) { sp = k; break } }
+    if cases[cur]["status"] == "Cancelled" {
+        ui.hint.set_text("该守护已取消，改时间无效（#" + id_str + "）")
+        return
     }
-    return [act, sd, sp, pl]
+    if nd == "" && np == "" {
+        ui.hint.set_text("改期需要时间（星期几/时段至少其一）")
+        return
+    }
+    // C4 重建数组（改 slot 两字段 + slot_init_asked 归零，其余原样保留）
+    let new_cases = []
+    for ri in cases.len() {
+        if ri == cur {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": nd, "slot_part": np,
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": ""})
+        } else {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": cases[ri]["slot_day"], "slot_part": cases[ri]["slot_part"],
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": cases[ri]["slot_init_asked"]})
+        }
+    }
+    cases = new_cases
+    mark_conflicts()
+    let my_conflict = "" + cases[cur]["conflict"]
+    rebuild_lines()
+    // 决赛 S1：统一走 save() 咽喉
+    save()
+    slot_save_result = save_result
+    render_views()
+    if slot_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（保存失败，仅在内存）")
+    } else if my_conflict == "yes" {
+        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（与另一条同时段，仍冲突）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（已无冲突）")
+    }
+}
+
+// 冲突全量重算（cycle_slot 同款逻辑抽出复用；set_slot / create_case_from_plan 共用）
+fn mark_conflicts(){
+    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" { cases[a1]["conflict"] = "no" } }
+    for a2 in cases.len() {
+        if cases[a2]["status"] == "Cancelled" { continue }
+        let d2 = "" + cases[a2]["slot_day"]
+        let p2 = "" + cases[a2]["slot_part"]
+        if d2 == "" || p2 == "" { continue }
+        for a3 in cases.len() {
+            if a3 == a2 { continue }
+            if cases[a3]["status"] == "Cancelled" { continue }
+            let d3 = "" + cases[a3]["slot_day"]
+            let p3 = "" + cases[a3]["slot_part"]
+            if d3 == "" || p3 == "" { continue }
+            if d3 == d2 && p3 == p2 {
+                cases[a2]["conflict"] = "yes"
+                cases[a3]["conflict"] = "yes"
+            }
+        }
+    }
+}
+
+// 管家 create 提案的执行端：字段由提案给定（非本地猜测），空字段保持空（no-facts）；
+// id 守卫与 build_case_from_text 同款；冲突走 mark_conflicts 全量重算
+fn create_case_from_plan(){
+    let max_existing_id = 0
+    for i in cases.len() {
+        let cid = cases[i]["id"]
+        if cid > max_existing_id { max_existing_id = cid }
+    }
+    if seq <= max_existing_id { seq = max_existing_id + 1 }
+    cases.push({"id": seq, "text": plan_src, "activity": plan_activity, "place": plan_place, "status": "Proposing", "people": plan_people, "bill_total": plan_bill, "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": plan_day, "slot_part": plan_part, "conflict": "no", "slot_init_asked": ""})
+    mark_conflicts()
+    selected_id = seq
+    ui.msg_input.set_text("")
+    rebuild_lines()
+    save()
+    render_views()
 }
 
 // === #37 辅助：trim24 截到 ≤24 字 + json_field 提字段 ===
@@ -1956,22 +2167,24 @@ let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.t
 SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.color: #xf7f2ec
     Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}
     Label{text: "群里说好的聚会，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 13}
-    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-            // #47 外环修（用户截图实锤）：占位文案 19 字在固定 44px 高输入框内折行、
-            //   第二行被裁——缩到 12 字保单行（412 宽下输入框 ~201px，~13px/字）；
+    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+            // #47（S3 复查）：占位 6 字保单行（管家+建守护+示例三键并排后输入框 ~140px）；
             //   保留「粘贴群消息」前缀（回归驱动 type_text 按此定位输入框）。
-            msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息，如：周六骑车"
+            msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息…"
             draw_bg +: {color: #xf1ece4 color_hover: #xf1ece4 color_focus: #xf1ece4 color_empty: #xf1ece4 border_radius: 10.0}
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: secondary color_empty_hover: secondary}}
-        // === #14：示例一键填充按钮（演示友好）===
-        // 放根组件静态位置——根组件 if 只在首次求值定型，这里是固定按钮；
-        // fill_example() 内部用 "cur != "" 守卫避免覆盖用户手打稿子。
-        ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 12 right: 12} on_click: || fill_example()
+        // === 决赛 S3：管家是主入口（agent 驱动全流程），朱砂主按钮 ===
+        ButtonFlat{text: "交给管家" height: 44 padding: Inset{left: 10 right: 10} on_click: || butler_send()
+            draw_bg +: {border_radius: 20.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
+        // === #14：示例一键填充（演示友好）；S3 起为省宽缩为「示例」 ===
+        ButtonFlat{text: "示例" height: 44 padding: Inset{left: 8 right: 8} on_click: || fill_example()
             draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+        // 手动路径保留（无 AI 宿主时的完整降级；本地规则分诊）
+        ButtonFlat{text: "建守护" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_case()
+            draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 1.0 border_color: #xc7402f}
             draw_text +: {color: accent color_hover: accent color_down: accent}}
-        ButtonFlat{text: "建守护" height: 44 padding: Inset{left: 16 right: 16} on_click: || add_case()
-            draw_bg +: {border_radius: 20.0 color: accent color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
     }
     // === #46 A切片：AI capability 可见性标签（次级色小字，width Fill）===
     //   根组件首次求值定型 → 静态 placeholder；load() 末尾用 probe_ai_cap() 命令式同步
@@ -1985,45 +2198,19 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             // #48b：详情已拆到 detail_list（本视图只服务列表）；占位照 #5 范式
             View{width: Fill height: 1}
         } else {
-        // === #42 新增：「✨ AI 生成」建议卡（AI 解析成功后停在列表分支顶部）——
-        //   ai_parse() 两条通道成功后填 ai_act/ai_day/ai_part/ai_place + 翻 ai_card_visible="yes"；
-        //   此处只读 ai_card_visible 字符串标记 + 四字段（闭包外已规范化，不再读 ai_pending）。
-        //   零渲染零占位（ai_card_visible=="no" 时留 1px，#5 空分支硬约束范式）。
-        //   按钮文案是静态 copy——模型文本绝不参与动作接线，只进文本槽（官方 AI-SERVICES 约束）。
-        if ai_card_visible == "yes" {
-            // 字段显示：空字段显「未给出」，避免空槽让用户疑惑（照 #34 demo 实证）。
-            let _act_disp = "" + ai_act
-            if _act_disp == "" { _act_disp = "未给出" }
-            let _day_disp = "" + ai_day
-            let _part_disp = "" + ai_part
-            let _slot_disp = ""
-            if _day_disp != "" && _part_disp != "" {
-                _slot_disp = _day_disp + "-" + _part_disp
-            } else if _day_disp != "" {
-                _slot_disp = _day_disp
-            } else if _part_disp != "" {
-                _slot_disp = _part_disp
-            } else {
-                _slot_disp = "未给出"
-            }
-            let _place_disp = "" + ai_place
-            if _place_disp == "" { _place_disp = "未给出" }
-            Card{padding: Inset{left: 12 right: 12 top: 12 bottom: 12} spacing: 8
-                Badge{show_bg: true draw_bg.color: ai_badge_bg()
-                    BadgeText{text: "✨ AI 生成" draw_text.color: ai_badge_fg() draw_text.text_style: theme.font_bold{font_size: 11}}
-                }
-                BodyLine{text: "活动：" + _act_disp + " ｜ 时间：" + _slot_disp + " ｜ 地点：" + _place_disp}
-                View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                    ButtonFlat{text: "采纳到输入框" height: 44 padding: Inset{left: 14 right: 14} on_click: || ai_adopt()
-                        draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-                        draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
-                    ButtonFlat{text: "忽略" height: 44 padding: Inset{left: 14 right: 14} on_click: || ai_dismiss()
-                        draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                        draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
-                }
-            }
+        // === 决赛 S3：待拍板提案横幅（管家出了提案、人还没拍板时出现在列表顶部）——
+        //   原则不变：模型文本不参与动作接线，这里只是「去拍板」的指路条（静态 copy）；
+        //   零渲染零占位（plan_pending=="no" 时留 1px，#5 空分支硬约束范式）。
+        if plan_pending == "yes" {
+            View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                padding: Inset{left: 12 right: 12 top: 8 bottom: 8}
+                show_bg: true draw_bg.color: #xfbe9e5 draw_bg.border_radius: 12.0
+                Label{width: Fill text: "📋 管家有提案待拍板" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 13}}
+                ButtonFlat{text: "去拍板" height: 36 padding: Inset{left: 12 right: 12} on_click: || enter_chat()
+                    draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                    draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}}
         } else {
-            // 无 AI 建议卡时 1px 占位（#5 硬约束：on_render 空分支至少一个子节点）
+            // 无待拍板提案时 1px 占位（#5 硬约束：on_render 空分支至少一个子节点）
             View{width: Fill height: 1}
         }
         // === #12 新增：搜索框（放在筛选栏之上、确认取消变体之上；
@@ -2134,10 +2321,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             //   写在 on_render 闭包里（#8/#10 实证：根组件属性不随状态重算）。
             if seq == 0 {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
-                    Label{text: "第一次用？三步起一条守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "① 粘贴群里那条聚会消息" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "② 点「建守护」，牵线分诊后生成提案" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "③ 组织者点同意，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "第一次用？把群消息丢给管家" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                    Label{text: "① 粘贴群里那条聚会消息，点「交给管家」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "② 管家分诊、查冲突、出提案——你只点「拍板」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "③ 确认后回执与提醒就位；改期/加人/记账跟管家说就行" draw_text.color: ink draw_text.text_style.font_size: 14}
                 }
             }
             // === #36：「怎么用」说明卡已移出空列表分支 → 列表模式公共尾部（见下方）。
@@ -2146,7 +2333,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             //   清空全部永远删不到数据，演示剧本 8/18/19/20 步不可执行（#34 真机复验抓到）。
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
                 Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                Label{text: "粘贴一条群消息开始（例如：周六上午去深圳湾骑车）。点建守护后，行可点选。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                Label{text: "把一条群消息丢给管家开始（例如：周六上午去深圳湾骑车）；无 AI 服务时点「建守护」走本地规则。" draw_text.color: secondary draw_text.text_style.font_size: 13}
             }
             // 空分支兜底：永远留 1px 占位，防上帧残留（ai-providers:241 注释范式）
             View{width: Fill height: 1}
@@ -2264,23 +2451,19 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             if howto_show_flag == "yes" {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
                     Label{text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "1. 粘贴群里那条聚会消息，或点「用示例试试」" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "2. 点建守护——牵线会分诊，命中时间/约定才生成提案" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "3. 点卡片展开详情，组织者点「确认这条守护」，回执与提醒就位" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    // === #42 新增：AI 解析成功会先停在建议卡上，等用户点头才落地 ——
-                    //   与上一步「点 AI 解析」配套：建议卡显示「活动/时间/地点」汇总，
-                    //   「采纳到输入框」后写回 msg_input，再点「建守护」即走分诊。
-                    //   「忽略」按钮只翻标记，msg_input 原样保留（用户原文不动）。
-                    Label{text: "4. AI 解析成功会先出「✨ AI 生成」建议卡，过目后点「采纳到输入框」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "1. 粘贴群里那条聚会消息（或点「示例」），点「交给管家」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "2. 管家分诊、查冲突、出提案；你在提案卡上点「拍板」即落地" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "3. 改期/加人/记账/取消——直接跟管家说，如「改到周日下午」" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "4. 无 AI 服务的设备自动降级本地规则：点「建守护」走分诊，功能完整" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #45 C 切片：app 不能自驱唤醒 agent（无 needs/triggers），
                     // 宿主「Ask 牵线」面板问我任何问题时，我会主动带出临期/待拍板提醒
-                    // （详见 AGENT.md "主动提示行为"小节）。
+                    // （详见 AGENT.md「主动提示行为」小节）。
                     Label{text: "5. 在宿主「Ask 牵线」面板可以问：「周六有什么安排？」——已确认的守护临期时我会主动提醒你" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #29（外环派）：低频操作折叠区 ——
                     //   原 ai_row 的 4 个按钮（改时间 / AI 解析 / 导出数据 / 清空全部）
                     //   从根组件搬到「怎么用？」说明卡内,只在卡片展开时可见。
                     //   写在 on_render 闭包里,符合硬约束 #1(根组件属性不随状态重算,
-                    //   闭包内可重渲染);on_click 直接调既有 fn(cycle_slot/ai_parse/
+                    //   闭包内可重渲染);on_click 直接调既有 fn(cycle_slot/enter_chat/
                     //   export_data/clear_all_data),无新逻辑、无新状态。
                     //   height: 44 与主区三键对齐,触控目标达 HIG 44pt 标准。
                     Label{text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
@@ -2293,7 +2476,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                         ButtonFlat{text: "改时间（5 槽）" height: 44 padding: Inset{left: 10 right: 10} on_click: || cycle_slot("" + selected_id)
                             draw_bg +: {border_radius: 16.0 color: #xa35f00 color_hover: #x8f5400 color_down: #x7d4a00 border_size: 0.0}
                             draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff}}
-                        ButtonFlat{text: "AI 解析" height: 44 padding: Inset{left: 10 right: 10} on_click: || ai_parse()
+                        ButtonFlat{text: "打开管家" height: 44 padding: Inset{left: 10 right: 10} on_click: || enter_chat()
                             draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: accent color_hover: accent color_down: accent}}
                         ButtonFlat{text: "导出数据" height: 44 padding: Inset{left: 10 right: 10} on_click: || export_data()
@@ -2363,6 +2546,62 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     }
                 }
             }
+        } else {
+            View{width: Fill height: 1}
+        }
+    }}
+    // === 决赛 S3：管家对话视图（第三 ScrollY，与 list/detail 同款互斥机制）——
+    //   气泡 = 双扁平数组 chat_role/chat_text（on_render 只读字符串数组，#4/#5 硬约束）；
+    //   me = 纸白卡右侧语义（前缀「我：」+纸白底），ai = 玉绿浅底「管家：」，sys = 居中灰小字；
+    //   待拍板提案卡（plan_pending=="yes"）：朱砂描边卡 + plan_lines 逐行 + 拍板/放弃两键。
+    //   按钮文案静态 copy——模型文本只进文本槽，动作接线全部走白名单 fn（评审红线）。
+    //   visible 初始隐藏由 load() 命令式完成（#48b 同款：声明 visible:false 会被 re-apply）。
+    chat_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
+        if ui_mode == "chat" {
+            for ci in chat_text.len() {
+                let cr = "" + chat_role[ci]
+                let ct = "" + chat_text[ci]
+                if cr == "me" {
+                    Card{show_bg: true draw_bg.color: #xfdfaf5 draw_bg.border_radius: 14.0
+                        BodyLine{text: "我：" + ct}
+                    }
+                } else if cr == "ai" {
+                    Card{show_bg: true draw_bg.color: #xeef3ea draw_bg.border_radius: 14.0
+                        BodyLine{text: "管家：" + ct}
+                    }
+                } else {
+                    MetaLine{width: Fill text: ct}
+                }
+            }
+            // 待拍板提案卡（一次至多一个）
+            if plan_pending == "yes" {
+                Card{show_bg: true draw_bg.color: #xfdf6ec draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xc7402f
+                    Badge{show_bg: true draw_bg.color: #xfbe9e5
+                        BadgeText{text: "📋 管家提案 · 待拍板" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 11}}
+                    }
+                    BodyLine{text: plan_summary}
+                    for pi in plan_lines.len() {
+                        TextLine{text: plan_lines[pi]}
+                    }
+                    if plan_check != "ok" {
+                        TextLine{text: "⚠ " + plan_check}
+                    }
+                    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                        ButtonFlat{text: "拍板执行" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_approve()
+                            draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
+                        ButtonFlat{text: "放弃" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_decline()
+                            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                    }
+                }
+            } else {
+                View{width: Fill height: 1}
+            }
+            ButtonFlat{text: "← 回到守护列表" height: 44 on_click: || back_from_chat()
+                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                draw_text +: {color: accent color_hover: accent color_down: accent}}
+            View{width: Fill height: 1}
         } else {
             View{width: Fill height: 1}
         }
