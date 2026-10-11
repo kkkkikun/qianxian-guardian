@@ -20,7 +20,7 @@
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
 - **提交形态**：OctoSense **script-app**（仓库根 `bundle/`，v**0.3.0**，`hub check — PASSED`，contract 1.10.0，agent read-only 最小权限 + AGENT.md v3）
 - **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）；初赛入围（73/100）
-- 🎥 **演示视频**：决赛 v3 70 秒（agent 主线：内核 PLAN 双证 + app 拍板 UX + 诚实降级）→ [evidence/finals-demo-v3.mp4](evidence/finals-demo-v3.mp4)；初赛 2 分 16 秒 → [Release v0.1.0](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.1.0)
+- 🎥 **演示视频**：70 秒（agent 主线）→ [evidence/finals-demo-v3.mp4](evidence/finals-demo-v3.mp4) 或 [Release v0.5.0 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.5.0)
 
 ## 界面预览
 
@@ -92,9 +92,10 @@ app 把角色提示词与当前守护快照嵌入 turn 文本——不依赖宿�
 
 **① 零门槛：直接读源码**（不需要任何构建）
 本应用是纯解释执行的脚本，核心逻辑都在一个文件里：
-`bundle/main.splash`（约 2400 行，Splash/OctoScript 方言；函数名即语义：add_case / confirm_case / cycle_slot / add_person / rebuild_lines …）。
-配套阅读：[evidence/demo-script.md](evidence/demo-script.md)（21 步操作）、
-[evidence/regression-20261001.md](evidence/regression-20261001.md)（14 项真机验证）。
+`bundle/main.splash`（约 2800 行，Splash/OctoScript 方言；函数名即语义：butler_send / plan_parse / butler_approve / confirm_case / set_slot / rebuild_lines …）。
+配套阅读：[evidence/v040-features-20261011.md](evidence/v040-features-20261011.md)（v0.4.0 特性验证）、
+[app/qianxian/tools/qx-verify-v2.py](app/qianxian/tools/qx-verify-v2.py)（**20 项真机回归**，`QX_PORT=8160 python3 …` 一键跑）、
+[evidence/s4-real-host-20261010.md](evidence/s4-real-host-20261010.md)（Rinx 真宿主×真模型端到端证据）。
 
 **② 门禁核验**（需要上游 `hub` 工具；约 5 分钟）
 > 注意：`OctoSense-App-Hub` 把 makepad / Octoscript patch 到**兄弟路径**，

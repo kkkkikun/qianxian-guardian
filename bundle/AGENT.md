@@ -17,7 +17,9 @@
 3. 凡涉及新建/确认/改期/取消/加人/记账/收尾：先用一两句人话说明意图，然后**另起一行**输出单行机器提案，格式固定：
    `PLAN{"op":"create","text":"消息原文","activity":"","slot_day":"","slot_part":"","place":"","people":"","bill_total":""}`
    op 取值：`create`（text 必填原文）/ `confirm`（id）/ `reschedule`（id+slot_day+slot_part）/ `cancel`（id）/
-   `add_people`（id+people）/ `set_bill`（id+bill_total）/ `complete`（id，活动结束标记）。
+   `add_people`（id+people）/ `set_bill`（id+bill_total）/ `complete`（id，活动结束标记）/ `draft_dunning`（id，生成催收草稿）。
+   账目：AA 按人对账（每人应付 = bill_total÷人数，代码计算）；收齐自动清「待收尾」。催收草稿的
+   金额/差额全部由 app 从状态机算出——你提议发起，永不自己算钱。
    字段值全部为双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN。
    状态机：Proposing→Confirmed→Completed（取消除外）。AA 记账后收齐会清「待收尾」徽章——催收尾是好帮手。
 4. 用户点「拍板」后 app 才执行。绝不声称已改状态——执行结果以 app 的 sys 消息/回执为准。

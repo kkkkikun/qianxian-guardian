@@ -57,3 +57,12 @@
   script-app 口径见 `acceptance-mapping.md`。
 - `ux-specs.md`（v1）与 `ux-specs-v2.md`（联网复核版）：内容有重叠，
   **v2 更新**，v1 保留作为首版对照。
+
+## 「决赛迭代（v0.2–v0.5）做了什么？」
+
+| 文件 | 回答什么 |
+|---|---|
+| [finals-v2-20261009.md](finals-v2-20261009.md) | v0.2.0 决赛第一轮（初赛评审三项 + 选中态 bug） |
+| [s4-real-host-20261010.md](s4-real-host-20261010.md) | **Rinx 真宿主 × MiniMax-M3 端到端**（含代理接力翻案、五轮矩阵、边界定性） |
+| [v040-features-20261011.md](v040-features-20261011.md) | v0.4.0 五特性（天气/日历/状态/提醒/分享）+ 平台事实 spike 定论 |
+| [../changes.md](../changes.md) | 全程变更台账（每轮做了什么/验了什么/证据路径） |

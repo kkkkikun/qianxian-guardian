@@ -24,7 +24,7 @@
     "support": "kkkkikun@foxmail.com",
     "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
   },
-  "release_notes": "v0.5.0：AI 管家模式（PLAN 机器提案协议，人只拍板；Rinx 真宿主×MiniMax-M3 端到端验证）+ 出行保障扩展（管家真调天气工具 / 确认即生成 ICS 日历 / 状态全生命周期 / T-24h 提醒三层投递 / 分享到群）+ card-ux 方法论 UI 改版。回归 20 项全绿。",
+  "release_notes": "v0.6.0：账目清零闭环——按人收款与确定性对账（每人应付=代码计算）、收齐自动清待收尾徽章、管家催收草稿（draft_dunning op，金额全部来自状态机快照）、Evidence Pack（操作审计链+确定性断言，运行时导出可离线校验）。回归 22 项全绿。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

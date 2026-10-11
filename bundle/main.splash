@@ -64,6 +64,21 @@ fn set_bill_draft(s){
 // === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
 let case_expanded = []      // 点卡片 = 选中 + 切换该条的展开/折叠
 
+// === v0.6.0 S-P2：按人收款（独立文件 payments.json，扁平数组供 on_render 只读） ===
+// records: {case_id, person, amount:字符串}；独立文件避开 cases 对象嵌套数组坑（C4/陷阱 A）
+let pay_case = []
+let pay_person = []
+let pay_amount = []
+let pay_save_result = "ok"
+// === v0.6.0 P4：操作审计日志（Evidence Pack 数据源；actor=user/agent）
+let audit_log = []
+let last_actor = "user"
+fn audit(action, detail){
+    let t = local_time()
+    let ts = ("" + t.year) + "-" + pad2(t.month) + "-" + pad2(t.day) + "T" + pad2(t.hour) + ":" + pad2(t.minute) + ":" + pad2(t.second) + "Z+8"
+    audit_log.push(ts + " | " + last_actor + " | " + action + " | " + ("" + detail))
+}
+
 // === #30 新增：AA 收账均摊（参考 evidence/probe30-float-paradigm.md 真机范式） ===
 // 总额存原样字符串，展示前再 to_f64；人数复用 people 字段逗号计数。
 //   0/负数/空/垃圾 → 由 bill_display 的 total_f > 0 正向守卫统一兜底为「未记账」。
@@ -421,19 +436,19 @@ fn rebuild_lines(){
                 } else {
                     arr.push("活动：" + ra)
                 }
-                arr.push("T-24h 提醒（本地提醒文本，需宿主定时能力）")
+                arr.push("T-24h 提醒：已登记（伴生服务投递）")
             } else if receipt_style == "emoji" {
                 // 带 emoji：4 行各加前缀（与现状✨/⚠前缀一致——emoji 不增不减）
                 arr.push("📌 活动：" + ra)
                 arr.push("📍 地点：" + rp)
                 arr.push("💬 原文：" + rt)
-                arr.push("⏰ T-24h 提醒（本地提醒文本，需宿主定时能力）")
+                arr.push("⏰ T-24h 提醒：已登记（伴生服务投递）")
             } else {
                 // standard（默认兜底；任何 receipt_style 非合法值都走这里）
                 arr.push("活动：" + ra)
                 arr.push("地点：" + rp)
                 arr.push("原文：" + rt)
-                arr.push("T-24h 提醒（本地提醒文本，需宿主定时能力）")
+                arr.push("T-24h 提醒：已登记（伴生服务投递）")
             }
             case_receipt.push(arr)
         } else {
@@ -446,6 +461,8 @@ fn rebuild_lines(){
     }
     // #31f：详情面板已并入 case_list on_render（ui_mode 分支，随 render 自动刷新），
     //   不再需要命令式 update_detail_panel（其 set_text 依赖树外静态区，已证不可靠）。
+    // v0.6.0：选中守护的确定性对账（含 bill_cleared 自动推导）
+    rebuild_selected_ledger()
 }
 
 // #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
@@ -556,6 +573,18 @@ fn load(){
     // #48b：detail_list 初始隐藏（命令式，声明里写 visible:false 会被 render() 的
     //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
     ui.detail_list.set_visible(false)
+    // v0.6.0：读 payments.json（按人收款，独立文件）
+    if fs.exists("payments.json") {
+        let praw = fs.read("payments.json")
+        let pdata = praw.to_json()
+        if pdata != nil && pdata.payments != nil {
+            for pi in pdata.payments.len() {
+                pay_case.push("" + pdata.payments[pi])
+                pay_person.push("" + pdata.persons[pi])
+                pay_amount.push("" + pdata.amounts[pi])
+            }
+        }
+    }
     // S3：chat_list 同款初始隐藏 + 管家欢迎语（仅首次，重启不重复）
     ui.chat_list.set_visible(false)
     // UI 改版：状态三键初始隐藏（列表模式下无目标语境；进详情时命令式显示）
@@ -1290,6 +1319,7 @@ fn build_case_from_text(text, level){
     //   才能在「时段未抽取」时进入二次确认：第一次点只翻标记 + 提示，第二次点
     //   才真正写入「周六-上午」初值。初值 "" 表示从未问过。
     cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "bill_total": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "slot_init_asked": "", "bill_cleared": "no"})
+    audit("create", "槽位=" + guess_slot_day(text) + "-" + guess_slot_part(text) + " level=" + level)
     // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
     // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
     // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
@@ -1342,6 +1372,7 @@ fn confirm_case(){
                 return
             }
             cases[i]["status"] = "Confirmed"
+            audit("confirm", "#" + "" + t["id"] + " slot=" + cases[i]["slot_day"] + "-" + cases[i]["slot_part"])
             rebuild_lines()
             save()   // 结果写入全局 save_result
             render_views()
@@ -1413,6 +1444,7 @@ fn cancel_case(){
             if cases[i]["id"] == target {
                 cancel_prev_status = "" + cases[i]["status"]
                 cases[i]["status"] = "Cancelled"
+                audit("cancel", "#" + "" + target)
                 // === #18 新增：取消后回执无意义，连同 receipt_done 一起清空；
                 //   若后续撤销恢复状态，下次确认时 rebuild_lines 会重新快照 ===
                 cases[i]["receipt_activity"] = ""
@@ -1576,7 +1608,7 @@ fn chat_push(role, text){
 // Rinx 不给 mini-app 注入 AGENT.md（宿主侧 turn_input 无 guidance 分支，源码级核实），
 // 所以角色与协议必须由 app 自己嵌入 turn 文本——与 AGENT.md v3 同文，双处一致。
 fn build_agent_turn(user_text){
-    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm(id)/reschedule(id+slot_day+slot_part)/cancel(id)/add_people(id+people)/set_bill(id+bill_total)/complete(id 标记活动完成)，字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字。回复中文、简短（≤120字）。"
+    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm(id)/reschedule(id+slot_day+slot_part)/cancel(id)/add_people(id+people)/set_bill(id+bill_total)/complete(id 标记活动完成)/draft_dunning(id 生成催收草稿——数字由 app 从状态计算，你只管提议)，字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字。回复中文、简短（≤120字）。"
     let st = pre + "\n\n【当前守护】\n"
     if cases.len() == 0 {
         st = st + "（还没有守护）"
@@ -1737,6 +1769,7 @@ fn plan_op_label(op){
     if op == "add_people" { return "加参与人" }
     if op == "set_bill" { return "记 AA 总额" }
     if op == "complete" { return "标记完成（收尾）" }
+    if op == "draft_dunning" { return "生成催收草稿" }
     if op == "create" { return "新建守护" }
     return op
 }
@@ -1808,6 +1841,8 @@ fn butler_approve(){
     }
     let op = "" + plan_op
     let pid = ("" + plan_id).to_f64()
+    // 审计：管家拍板链路产生的动作 actor=agent（各动作 fn 内 audit 读取）
+    last_actor = "agent"
     if op == "create" {
         create_case_from_plan()
         chat_push("sys", "已拍板：守护 #" + ("" + seq) + " 已建（待拍板态，详情里可确认）")
@@ -1837,10 +1872,50 @@ fn butler_approve(){
         selected_id = pid
         set_completed(plan_id)
         chat_push("sys", "已拍板：#" + plan_id + " 已标记完成（AA 收齐后待收尾徽章自动清）")
+    } else if op == "draft_dunning" {
+        // 确定性组稿：金额/人数/差额全部由代码从状态机算出，模型零参与数字
+        selected_id = pid
+        let ci2 = -1
+        for i in cases.len() {
+            if "" + cases[i]["id"] == plan_id { ci2 = i }
+        }
+        if ci2 < 0 {
+            ui.hint.set_text("找不到 #" + plan_id)
+            last_actor = "user"
+            return
+        }
+        let bt = "" + cases[ci2]["bill_total"]
+        let total_f = bt.to_f64()
+        let n = count_people("" + cases[ci2]["people"])
+        let paid = paid_total(ci2)
+        let out = total_f - paid
+        if bt == "" || total_f <= 0 {
+            chat_push("sys", "#" + plan_id + " 没有记过 AA 总额，无需催收")
+            last_actor = "user"
+            return
+        }
+        if out <= 0.001 {
+            chat_push("sys", "#" + plan_id + " AA 已收齐，无需催收 ✓")
+            last_actor = "user"
+            return
+        }
+        let due = 0
+        if n > 0 { due = total_f / n }
+        let act = "" + cases[ci2]["activity"]
+        if act == "" { act = "聚会" }
+        let draft = "【催收草稿】#" + plan_id + " " + act + "（" + ("" + cases[ci2]["slot_day"]) + "-" + ("" + cases[ci2]["slot_part"]) + " · " + ("" + cases[ci2]["place"]) + "）：AA 总额 ¥" + cut2(total_f) + "，按 " + ("" + n) + " 人均摊每人 ¥" + cut2(due) + "，已收 ¥" + cut2(paid) + "，还差 ¥" + cut2(out) + "。麻烦还没转的伙伴今天转一下组织者，谢谢～"
+        ui.msg_input.set_text(draft)
+        audit("draft_dunning", "#" + plan_id + " 差额 ¥" + cut2(out))
+        chat_push("sys", "催收草稿已生成（金额/差额全部由确定性代码从状态机算出）——已填入输入框，核对后复制发送即可")
+        ui.hint.set_text("催收草稿已生成——数字全部来自状态机快照，模型零参与")
+        last_actor = "user"
+        return
     } else {
         ui.hint.set_text("未知提案类型：" + op)
+        last_actor = "user"
         return
     }
+    last_actor = "user"
     plan_pending = "no"
     render_views()
 }
@@ -1944,6 +2019,139 @@ fn mark_conflicts(){
                 cases[a3]["conflict"] = "yes"
             }
         }
+    }
+}
+
+// === v0.6.0 S-P2：确定性对账（数字全部由代码从状态算出——no-facts 的计算端落点） ===
+// paid_total(ci)：该守护已收总额（f64，由字符串金额求和）
+fn paid_total(ci){
+    let id_str = "" + cases[ci]["id"]
+    let total = 0
+    for i in pay_case.len() {
+        if pay_case[i] == id_str {
+            let v = pay_amount[i].to_f64()
+            if v > 0 { total = total + v }
+        }
+    }
+    return total
+}
+// rebuild_selected_ledger()：为选中守护构建对账明细行（on_render 只读扁平数组）
+// 副作用：自动推导 bill_cleared（人人差额≤0 或 已收≥总额 且 有账）→ 原位写回 cases
+let ledger_lines = []
+let ledger_head = ""
+fn rebuild_selected_ledger(){
+    ledger_lines = []
+    ledger_head = ""
+    let ci = -1
+    for i in cases.len() {
+        if cases[i]["id"] == selected_id { ci = i }
+    }
+    if ci < 0 { return }
+    let bt = "" + cases[ci]["bill_total"]
+    if bt == "" { return }
+    let total_f = bt.to_f64()
+    if total_f <= 0 { return }
+    let ppl = "" + cases[ci]["people"]
+    let n = count_people(ppl)
+    if n <= 0 { return }
+    let due_f = total_f / n
+    let paid_all = paid_total(ci)
+    ledger_head = "对账：总额 ¥" + cut2(total_f) + " × " + ("" + n) + " 人 = 每人 ¥" + cut2(due_f) + " ｜ 已收 ¥" + cut2(paid_all)
+    // 逐人：已付 / 应付 / 差
+    for p in pay_person.len() {
+        if pay_case[p] != ("" + cases[ci]["id"]) { continue }
+        let who = pay_person[p]
+        // 同人可能多笔——求和
+        let mine = 0
+        for q in pay_person.len() {
+            if pay_case[q] == ("" + cases[ci]["id"]) && pay_person[q] == who {
+                let v = pay_amount[q].to_f64()
+                if v > 0 { mine = mine + v }
+            }
+        }
+        // 只对在参与人名单里的人出对账行（防收款记错人）
+        let in_list = "no"
+        for nm in ppl.split(",") {
+            if nm.trim() == who { in_list = "yes" }
+        }
+        if in_list != "yes" { continue }
+        let diff = due_f - mine
+        let line = ""
+        if diff > 0.001 { line = who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_f) + " / 差 ¥" + cut2(diff) }
+        else { line = who + "：已付 ¥" + cut2(mine) + " / 已付清 ✓" }
+        // 去重：同人只出一行（后续同人行跳过）
+        let dup = "no"
+        for d in ledger_lines.len() {
+            if ledger_lines[d] == line { dup = "yes" }
+        }
+        if dup == "no" { ledger_lines.push(line) }
+    }
+    // 自动清零判定：已收 ≥ 总额 → bill_cleared=yes（确定性推导，替代手动）
+    if paid_all >= total_f && cases[ci]["bill_cleared"] != "yes" {
+        cases[ci]["bill_cleared"] = "yes"
+        audit("bill_auto_cleared", "#" + ("" + cases[ci]["id"]) + " 已收 ¥" + cut2(paid_all))
+    } else if paid_all < total_f && cases[ci]["bill_cleared"] == "yes" {
+        cases[ci]["bill_cleared"] = "no"
+    }
+}
+
+// === v0.6.0 S-P2：记收款（详情面板入口；解析 "姓名 金额"） ===
+let pay_draft = ""
+fn set_pay_draft(s2){ pay_draft = s2 }
+fn add_payment(){
+    let raw = ("" + pay_draft).trim()
+    if raw == "" { ui.hint.set_text("格式：姓名 金额（如：阿明 150）"); return }
+    // 取最后一个空格分段：前段=姓名，后段=金额
+    let sp = raw.split(" ")
+    if sp.len() < 2 { ui.hint.set_text("格式：姓名 金额（如：阿明 150）"); return }
+    let amt = sp[sp.len() - 1]
+    let who = ""
+    for i in sp.len() - 1 {
+        if i > 0 { who = who + " " }
+        who = who + sp[i]
+    }
+    who = who.trim()
+    let amt_f = amt.to_f64()
+    if who == "" || amt_f <= 0 { ui.hint.set_text("金额要大于 0（格式：姓名 金额）"); return }
+    let id_str = "" + selected_id
+    let ci = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { ci = i }
+    }
+    if ci < 0 { ui.hint.set_text("先选中一条守护再记收款"); return }
+    pay_case.push(id_str)
+    pay_person.push(who)
+    pay_amount.push("" + amt_f)
+    let r = fs.write("payments.json", {payments: pay_case, persons: pay_person, amounts: pay_amount}.to_json())
+    pay_save_result = "ok"
+    if r != nil { pay_save_result = "fail" }
+    audit("payment", "#" + id_str + " " + who + " ¥" + cut2(amt_f))
+    rebuild_lines()
+    save()
+    render_views()
+    ui.hint.set_text("已记收款：" + who + " ¥" + cut2(amt_f) + "（差额见对账行；收齐自动清待收尾）")
+}
+
+// === v0.6.0 P4：Evidence Pack 导出（case 快照 + 审计链 + 确定性断言） ===
+fn export_evidence(id_str){
+    let ci = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { ci = i }
+    }
+    if ci < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    // 确定性断言：应付 = bill_total/人数，已收 = 收款求和，差 = 应付-已收
+    let bt = "" + cases[ci]["bill_total"]
+    let total_f = bt.to_f64()
+    let n = count_people("" + cases[ci]["people"])
+    let paid = paid_total(ci)
+    let due = 0
+    if n > 0 { due = total_f / n }
+    let ev = {case: cases[ci], ledger: {total: bt, people_count: ("" + n), due_per_person: cut2(due), paid_total: cut2(paid), outstanding: cut2(total_f - paid)}, assertion: {rule: "due_per_person = bill_total / count_people; paid_total = sum(payments); outstanding = bill_total - paid_total", bill_total: bt, people_count: ("" + n), paid_total: cut2(paid), computed_outstanding: cut2(total_f - paid)}, audit: audit_log}
+    let r = fs.write("evidence/case-" + id_str + ".json", ev.to_json())
+    if r == nil {
+        ui.hint.set_text("证据包已导出：evidence/case-" + id_str + ".json（快照+审计链+确定性断言，可离线校验）")
+    } else {
+        ui.hint.set_text("证据包导出失败：" + ("" + r))
     }
 }
 
@@ -2091,6 +2299,7 @@ fn set_completed(id_str){
         return
     }
     cases[cur]["status"] = "Completed"
+    audit("complete", "#" + id_str + "（" + last_actor + "）")
     // 活动结束：冲突解除
     mark_conflicts()
     rebuild_lines()
@@ -2805,6 +3014,23 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                     // === v0.4.0 S5/S6：日历 ICS 与提醒登记行（已确认态）===
                     if case_status_text[sel] == "已确认" {
                         BodyLine{text: "日历：ICS 已生成（calendar/qianxian-" + case_ids[sel] + ".ics）｜ 提醒：T-24h 已登记"}
+                    }
+                    // === v0.6.0 S-P2：确定性对账（有账才显示；数字全部由代码算出）===
+                    if ledger_head != "" {
+                        SectionLabel{text: ledger_head}
+                        for li in ledger_lines.len() {
+                            ReceiptLine{text: "  · " + ledger_lines[li]}
+                        }
+                        View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                            TextInput{width: Fill height: 40 empty_text: "收款：姓名 金额（如 阿明 150）"
+                                on_change: |txt| set_pay_draft("" + txt)}
+                            ButtonFlat{text: "记收款" height: 40 padding: Inset{left: 10 right: 10} on_click: || add_payment()
+                                draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
+                                draw_text +: {color: #xffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "导出证据" height: 40 padding: Inset{left: 10 right: 10} on_click: || export_evidence("" + selected_id)
+                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                        }
                     }
                     // === v0.4.0 S4/S6：完成/收尾/分享按钮（确认态才显示）===
                     if case_status_text[sel] == "已确认" {

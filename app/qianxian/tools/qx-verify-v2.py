@@ -611,8 +611,169 @@ else:
     rec(19, "跳过（依赖 R17）", False, "R17 未执行")
     rec(20, "跳过（依赖 R17）", False, "R17 未执行")
 
+# ===== v0.6.0 新增：R21 账目清零闭环（按人收款→对账→自动清零）、R22 证据包+离线校验 =====
+import subprocess as _sp
+t21 = None
+for _ in range(4):
+    t21 = find(ws, "唱歌", "Label")
+    if t21:
+        break
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=500")
+    time.sleep(1.0)
+if t21:
+    x, y = center(t21)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(2.0)
+    ws = snap()["s"]
+    # 加参与人（滚找）
+    okp = False
+    for _ in range(6):
+        pin = find(ws, "加参与人", "TextInput")
+        if pin:
+            x, y = center(pin)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(0.8)
+            get("/t?t=" + urllib.parse.quote("阿明,小红"))
+            time.sleep(0.8)
+            ab = find(ws, "添加", "Button")
+            if ab:
+                x, y = center(ab)
+                get(f"/click?x={x}&y={y}")
+                time.sleep(1.5)
+            okp = True
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(1.0)
+        ws = snap()["s"]
+    # 确认（若未确认——R20 后该卡是已完成？R20 用的是同一张唱歌卡 → 已 Completed。
+    # 对账不要求确认态，直接可用。）
+    # 记 AA 300（滚找）
+    okaa = False
+    for _ in range(6):
+        ws = snap()["s"]
+        aain = find(ws, "记 AA 总额", "TextInput")
+        if aain:
+            x, y = center(aain)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(0.8)
+            get("/t?t=300")
+            time.sleep(0.8)
+            jb = find(ws, "记一笔", "Button")
+            if jb:
+                x, y = center(jb)
+                get(f"/click?x={x}&y={y}")
+                time.sleep(1.5)
+            okaa = True
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(1.0)
+    # 对账头出现（每人 ¥150.00）
+    head_ok = False
+    for _ in range(4):
+        ws = snap()["s"]
+        head_ok = any("每人 ¥150.00" in t for t, r in labels(ws))
+        if head_ok:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=250")
+        time.sleep(1.0)
+    # 收款 阿明 200 → 差额行
+    pay1 = False
+    for _ in range(6):
+        ws = snap()["s"]
+        pin = find(ws, "收款：姓名", "TextInput")
+        if pin:
+            x, y = center(pin)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(0.8)
+            get("/t?t=" + urllib.parse.quote("阿明 100"))
+            time.sleep(0.8)
+            rb = find(ws, "记收款", "Button")
+            if rb:
+                x, y = center(rb)
+                get(f"/click?x={x}&y={y}")
+                time.sleep(1.5)
+            pay1 = True
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(1.0)
+    # 差额行断言必须在第二笔收款前（收齐后该行变「已付清 ✓」）
+    diff_ok = False
+    for _ in range(4):
+        ws = snap()["s"]
+        diff_ok = any("阿明：已付 ¥100.00" in t and "差 ¥50.00" in t for t, r in labels(ws))
+        if diff_ok:
+            break
+        if _ == 2:
+            print("[R21-DEBUG]", [t[:60] for t, r in labels(ws) if "阿明" in t or "对账" in t or "已付" in t], flush=True)
+        time.sleep(1.0)
+    # 收款 小红 100 → 收齐自动清零
+    pay2 = False
+    for _ in range(6):
+        ws = snap()["s"]
+        pin = find(ws, "收款：姓名", "TextInput")
+        if pin:
+            x, y = center(pin)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(0.8)
+            get("/t?t=" + urllib.parse.quote("小红 200"))
+            time.sleep(0.8)
+            rb = find(ws, "记收款", "Button")
+            if rb:
+                x, y = center(rb)
+                get(f"/click?x={x}&y={y}")
+                time.sleep(1.5)
+            pay2 = True
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(1.0)
+    import json as _json
+    cj = JAIL / "cases.json"
+    cleared = None
+    if cj.exists():
+        cleared = [c.get("bill_cleared") for c in _json.loads(cj.read_text())["cases"]
+                   if c.get("bill_total") == "300"]
+    allclear = False
+    for _ in range(4):
+        ws = snap()["s"]
+        allclear = any("已收 ¥300.00" in t for t, r in labels(ws))
+        if allclear:
+            break
+        time.sleep(1.0)
+    rec(21, "账目清零闭环（对账/收款/自动清零）",
+        head_ok and pay1 and diff_ok and pay2 and allclear and bool(cleared) and cleared[0] == "yes",
+        f"参与人={okp} 记AA={okaa} 对账头={head_ok} 差额行={diff_ok} 两笔={pay1 and pay2} 已收¥300={allclear} 自动清零={cleared}")
+
+    # R22：导出证据包 + 离线校验脚本
+    eb = None
+    for _ in range(6):
+        ws = snap()["s"]
+        eb = find(ws, "导出证据", "Button")
+        if eb:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(1.0)
+    ev_ok = False
+    if eb:
+        x, y = center(eb)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(2.0)
+        evf = JAIL / "evidence" / "case-1.json"
+        ev_ok = evf.exists()
+        if ev_ok:
+            r = _sp.run([sys.executable, "tools/qx-evidence-check.py", str(evf)],
+                        capture_output=True, text=True, cwd=".")
+            ev_ok = (r.returncode == 0)
+            rec(22, "证据包导出 + 离线校验", ev_ok, f"checker={r.stdout.strip().splitlines()[:1]}")
+        else:
+            rec(22, "证据包导出", False, "evidence/case-1.json 未生成")
+    else:
+        rec(22, "导出证据按钮可见", False, "详情内未找到按钮")
+else:
+    rec(21, "唱歌卡可见", False, "未找到卡片")
+    rec(22, "跳过（依赖 R21）", False, "R21 未执行")
+
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v4：16 步既有 + v0.4.0 生命周期 4 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v5：20 步既有 + v0.6.0 账目/证据 2 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):
