@@ -24,7 +24,7 @@
     "support": "kkkkikun@foxmail.com",
     "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
   },
-  "release_notes": "v0.4.0 出行保障扩展：天气（管家回合内真调内核工具，拒绝编造）、日历（确认即生成标准 ICS，可导入任意日历软件）、状态全生命周期（待拍板→已确认→已完成 + AA 待收尾徽章）、主动提醒（确认即登记 T-24h，伴生守护进程经 Matrix 真投递）、分享到群（Rinx 宿主真发）。回归 20 项全绿。",
+  "release_notes": "v0.5.0：AI 管家模式（PLAN 机器提案协议，人只拍板；Rinx 真宿主×MiniMax-M3 端到端验证）+ 出行保障扩展（管家真调天气工具 / 确认即生成 ICS 日历 / 状态全生命周期 / T-24h 提醒三层投递 / 分享到群）+ card-ux 方法论 UI 改版。回归 20 项全绿。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }
