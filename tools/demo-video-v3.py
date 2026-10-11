@@ -24,6 +24,7 @@ INK = (43, 39, 34)
 ACCENT = (199, 64, 47)
 SECOND = (110, 103, 94)
 GREEN = (47, 125, 79)
+ORANGE = (163, 95, 0)
 CARD = (241, 236, 228)
 LINE = (223, 216, 205)
 DARK = (30, 28, 25)
@@ -186,6 +187,95 @@ def frame_table(n, title, sub, header, rows, colw, rowcolors=None):
     img.save(f"{OUT}/{n:03d}.png")
 
 
+
+# === Rinx 实机演示帧渲染（app-only 过滤 + 宽幅原样呈现）===
+CHROME = {"Welcome to Rinx!", "Chats", "File Transfer", "Found no\njoined spaces.",
+          "No joined or invited rooms found.", "Mini apps", "R",
+          "Filter rooms & spaces..."}
+
+def load_live(name):
+    return json.load(open(f"/tmp/qx-live-{name}.json"))
+
+def filter_app(ws):
+    out = []
+    for w in ws:
+        t = str(w.get("t", "") or "")
+        r = w.get("r", [0, 0, 0, 0])
+        if r[1] < 32 or r[0] < 6 or r[0] > 1272:
+            continue
+        if t in CHROME or t.startswith("Running · Back closes"):
+            continue
+        if len(t) > 160:  # splash 源码查看器大 Label
+            continue
+        out.append(w)
+    return out
+
+def render_live(n, step, title, sub, name, note=None):
+    ws = filter_app(load_live(name))
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, W, 8], fill=ACCENT)
+    d.text((W - 340, H - 38), "github.com/kkkkikun/qianxian-guardian", fill=SECOND, font=font(13))
+    # 步题带
+    d.rounded_rectangle([40, 24, 40 + d.textlength(step, font=font(15, True)) + 24, 52], radius=8, fill=ACCENT)
+    d.text((52, 29), step, fill=(255, 255, 255), font=font(15, True))
+    d.text((180, 28), title, fill=INK, font=font(19, True))
+    d.text((W - 40 - d.textlength(sub, font=font(14)), 31), sub, fill=SECOND, font=font(14))
+    # app 区域：以 app 标题为顶，原样宽幅呈现（Rinx 真窗 1280×800）
+    y0 = 118
+    for w in ws:
+        if str(w.get("t", "")) == "牵线 · 聚会守护":
+            y0 = min(y0, w["r"][1] - 12)
+    ay = 64
+    d.rounded_rectangle([0, ay, W, H], radius=0, fill=BG)
+    d.rectangle([0, ay, W, ay + 2], fill=LINE)
+    f_body, f_small = font(14), font(12)
+    for w in ws:
+        ty = w.get("ty")
+        t = str(w.get("t", "") or "").strip().replace("📋", "")  # wqy 无该字形
+        x, y, ww, hh = w.get("r", [0, 0, 0, 0])
+        yy = y - y0 + ay
+        if yy < ay + 2 or yy > H - 30 or ww <= 0:
+            continue
+        if not t:
+            continue
+        if ty == "Button":
+            fill = {"交给管家": ACCENT, "拍板执行": ACCENT, "添加": ACCENT,
+                    "确认这条守护": GREEN, "重新收敛": ORANGE}.get(t)
+            if fill:
+                d.rounded_rectangle([x, yy, x + ww, yy + hh], radius=10, fill=fill)
+                col = (255, 255, 255)
+            else:
+                d.rounded_rectangle([x, yy, x + ww, yy + hh], radius=10, fill=CARD)
+                col = ACCENT if t in ("建守护", "用示例试试", "回到守护列表", "返回列表", "怎么用？") or t.startswith("风格：") else SECOND
+            d.text((x + min(10, ww // 8), yy + hh // 2 - 9), t[:26], fill=col, font=f_body)
+        elif ty == "TextInput":
+            d.rounded_rectangle([x, yy, x + ww, yy + hh], radius=10, fill=(255, 255, 255), outline=LINE, width=1)
+            val = str(w.get("val", "") or "")
+            shown = val if val else t
+            d.text((x + 10, yy + hh // 2 - 9), shown[:60], fill=(INK if val else SECOND), font=f_body)
+        else:
+            if t.startswith(("AI：", "已", "把群消息", "管家思考", "①", "②", "③", "粘贴群消息，点", "改期/", "在宿主", "还没有", "← ")) or t.startswith("把一条群消息"):
+                col = SECOND
+            elif len(t) <= 16 and ("冲突" in t or "·" in t and t.startswith(("#", "▸", "▶", ">"))):
+                col = ACCENT
+            elif t.startswith(("时间冲突", "⚠")) or "PLAN{" in t:
+                col = GREEN if "PLAN{" in t else ACCENT
+            else:
+                col = INK
+            sz = f_body if hh <= 30 else font(16)
+            yy2 = yy
+            for ln in wrap_lines(d, t, sz, max(200, ww - 8)):
+                if yy2 > H - 30:
+                    break
+                d.text((x + 4, yy2), ln, fill=col, font=sz)
+                yy2 += 22
+    if note:
+        d.rounded_rectangle([40, H - 64, W - 40, H - 30], radius=8, fill=CARD)
+        d.text((56, H - 57), note, fill=SECOND, font=font(14))
+    img.save(f"{OUT}/{n:03d}.png")
+
+
 def mock_rows():
     """从 /tmp/s4-mock.out 解析 ASSISTANT_TEXT 段（tools/qx-kernel-turn.py 完整输出）。"""
     txt = ""
@@ -213,9 +303,8 @@ def main():
     # 000 标题
     img, d = base("牵线 · 聚会筹办守护 v0.3.0", "决赛迭代：agent 驱动全流程，人只做最终拍板")
     d.text((48, 200), "把群消息丢给管家", fill=INK, font=font(44, True))
-    d.text((48, 264), "管家分诊 · 查冲突 · 出提案 —— 你只点「拍板」", fill=ACCENT, font=font(24))
-    d.text((48, 332), "本片全部来自真实运行：octos 内核直连 ×2 · Rinx 真宿主 × MiniMax-M3 四轮 e2e · 回归 16/16",
-           fill=SECOND, font=font(17))
+    d.text((48, 264), "AI 管家实机演示 —— Rinx 真宿主 × MiniMax-M3 真模型", fill=ACCENT, font=font(24))
+    d.text((48, 332), "以下每一帧都是真实运行中的控件树实况：真模型回复 · 提案卡 · 拍板 · 落盘", fill=SECOND, font=font(17))
     img.save(f"{OUT}/{n:03d}.png"); n += 1
 
     # 001 协议
@@ -229,70 +318,35 @@ def main():
                 [210, 1010],
                 [[INK, INK], [INK, INK], [ACCENT, ACCENT], [INK, INK], [GREEN, GREEN]]); n += 1
 
-    # 002 内核直连 × mock（解析真实产物）
-    reply, plan = mock_rows()
-    rows = [("$", "tools/qx-kernel-turn.py —— 真实 octos serve --stdio 内核直连，提示词与 app 内管家同款", GREEN),
-            ("用户", "周六上午去深圳湾骑车", (222, 216, 205)),
-            ("管家", reply or "（解析失败）", (222, 216, 205))]
-    if plan:
-        rows.append((None, plan, (140, 220, 160)))
-    rows.append((None, "✓ 回包含 PLAN —— 提示词 → 内核 → 模型 → 提案形态，全链成立", (140, 220, 160)))
-    frame_transcript(n, "证据 ①：octos 内核直连（剧本模型）", "tools/qx-kernel-turn.py 运行产物逐字转写（assistant_delta 累积）", rows); n += 1
+    # 002-007 实机演示（Rinx 真宿主 × MiniMax-M3，每帧 = 运行中 /snap 实况）
+    render_live(n, "实机 ①", "Rinx 真宿主内运行「牵线」", "Mini apps 导入 → Review → Run（真模型 MiniMax-M3）", "01-main",
+                "宿主原生窗口实况（控件树重绘；App 内界面随窗口宽度自适应拉伸）"); n += 1
+    render_live(n, "实机 ②", "粘贴一条群消息", "「周五晚上去大学城吃火锅，然后唱K」—— 只说了周五，没给具体日子", "02-typed",
+                "输入框实况（真键盘注入）"); n += 1
+    render_live(n, "实机 ③", "点「交给管家」→ 管家思考中", "octos.turn.start 真回合发给内核 → 内核调 MiniMax-M3", "03-thinking",
+                "此时 app 已发出回合请求；30 秒无响应会自动降级本地规则（诚实可见）"); n += 1
+    render_live(n, "实机 ④", "真模型回复 + PLAN 提案卡", "真模型逐字实录：「只说了周五没给具体日子，对不上日历，先建个草案你拍板？」", "05-proposal",
+                "模型主动指出信息不足仍给出可拍板草案——抽取全来自原文，槽位词表归一"); n += 1
+    render_live(n, "实机 ⑤", "人点「拍板执行」", "唯一人工确认点——白名单动作 create 落地，LLM 自身无执行权", "06-approved",
+                "sys 回执：「已拍板：守护 #1 已建（待拍板态，详情里可确认）」"); n += 1
+    render_live(n, "实机 ⑥", "回到守护列表：#1 在册", "cases.json 落盘断言：activity=吃火锅+唱K ｜ slot=周五-晚上 ｜ place=大学城 ｜ Proposing", "07-list",
+                "拍板后计数「共 1 / 1 条」——同一状态同时呈现在 UI 与 jail 落盘文件"); n += 1
 
-    # 003 Rinx × MiniMax 实况（第 3 轮逐字实录）
-    frame_chat(n, "证据 ②：Rinx 真宿主 × MiniMax-M3 真模型", "第 3 轮实况逐字实录——真模型读取守护快照，主动预警冲突",
-               [("me", "周日下午去莲花山爬山，顺便野餐"),
-                ("ai", "跟现有 #1「周日-下午·骑车·深圳湾」撞时段了，下午这个档只能去一处👀"),
-                ("plan", 'PLAN{"op":"create","text":"周日下午去莲花山爬山，顺便野餐","activity":"爬山+野餐","slot_day":"周日","slot_part":"下午","place":"莲花山",…}'),
-                ("sys", "提案卡在下方（拍板执行 / 放弃）→ 人点「拍板执行」→ #2 落盘")],
-               "文本逐字取自 Rinx e2e 第 3 轮运行输出（evidence/s4 翻案段）；气泡按 app 样式重绘"); n += 1
-
-    # 004 四轮矩阵
-    frame_table(n, "Rinx 真宿主端到端：四轮全部「提案 → 拍板 → 落盘」", "cases.json 落盘断言逐轮核对（evidence/s4-real-host-20261010.md）",
+    # 008 四轮矩阵
+    frame_table(n, "同一通路四轮端到端（含本轮）", "cases.json 落盘断言逐轮核对（evidence/s4-real-host-20261010.md）",
                 ["轮", "模型", "提案 op", "拍板后落盘（断言）"],
                 [["1", "剧本 mock", "create #1", "#1 建卡：周六-上午 · 骑车 · 深圳湾 · 待拍板"],
                  ["2", "剧本 mock", "reschedule", "#1 → 周日-下午，冲突全量重算"],
-                 ["3", "MiniMax-M3", "create #2", "#2 落盘 · 莲花山；真模型主动预警「撞时段」，#1/#2 互标冲突"],
+                 ["3", "MiniMax-M3", "create #2", "#2 落盘 · 莲花山；真模型主动预警撞时段，#1/#2 互标冲突"],
                  ["4", "MiniMax-M3", "confirm #1", "#1 → Confirmed，回执就位；真模型提示「#2 同期无人」"]],
                 [60, 180, 180, 860]); n += 1
-
-    # 005 主界面
-    frame_phone(n, "STEP 1", "把群消息丢给管家",
-                ["输入框粘贴群消息（或点「示例」一键填充）",
-                 "「交给管家」是主入口——分诊、查冲突、出提案一步到位",
-                 "无 AI 宿主时自动降级，本地规则路径完整可用"],
-                f"{SHOTS}/s1-main.png", "屏上实况", "AI：管家对话通道可用（首次需宿主允许）"); n += 1
-
-    # 006 降级
-    frame_phone(n, "STEP 2", "无 AI 服务的设备：诚实降级",
-                ["card-host 无 octos 服务 → sys 气泡明示原因，不假装管家在听",
-                 "能力标签同步「通道实测无响应」——不误导",
-                 "「建守护」本地规则路径功能完整（评分维度：失败状态）"],
-                f"{SHOTS}/s2-chat.png", "sys 气泡原文",
-                'AI 通道无响应（no service answers "octos" on this device）——已降级本地规则'); n += 1
-
-    # 007 冲突
-    frame_phone(n, "STEP 3", "守护状态机：冲突检测",
-                ["两条同时段守护互相标记「·冲突」徽章",
-                 "冲突卡列出双方：要改期还是取消？矛盾交人裁决",
-                 "管家提案同样先查冲突——真模型轮已实证预警"],
-                f"{SHOTS}/s3-conflict.png", "冲突卡原文",
-                "两条同时段守护互标「待拍板·冲突」，冲突卡列出双方（要改期还是取消？）"); n += 1
-
-    # 008 回执
-    frame_phone(n, "STEP 4", "拍板之后：回执就位",
-                ["组织者确认 → Confirmed + 回执快照（活动/地点/原文/T-24h）",
-                 "改期/加人/记账/取消都可让管家提案，拍板即执行",
-                 "取消两段式 + 5 秒撤销；抽不到的字段明示「未抽取到」"],
-                f"{SHOTS}/s4-receipt.png", "回执实况",
-                "↳ 活动：骑车 ｜ 地点：深圳湾 ｜ 原文：周六上午去深圳湾骑车 ｜ T-24h 提醒"); n += 1
 
     # 009 收官
     img, d = base("验证级别（如实标注）", "全部证据可复现：命令见 run.md D 节")
     rows = [("verified", "内核直连 PLAN：剧本模型 + MiniMax-M3 真模型（tools/qx-kernel-turn.py）", GREEN),
-            ("verified", "Rinx 真宿主 e2e 四轮：create/reschedule/confirm 落盘断言全过", GREEN),
+            ("verified", "Rinx 真宿主 e2e 五轮：create/reschedule/confirm 落盘断言全过", GREEN),
             ("verified", "card-host 回归 16/16 · hub check PASSED（0.3.0，agent read-only）", GREEN),
-            ("boundary", "旧宿主同上下文第二回合事件偶丢 → 每 Run 一回合；界面帧为控件树重绘", ACCENT)]
+            ("boundary", "旧宿主同上下文第二回合事件偶丢 → 每 Run 一回合；实机帧为运行中控件树重绘", ACCENT)]
     y = 180
     for k, v, c in rows:
         d.rounded_rectangle([48, y - 2, 48 + d.textlength(k, font=font(15, True)) + 20, y + 26], radius=6, fill=c)
