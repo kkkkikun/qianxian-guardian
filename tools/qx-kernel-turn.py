@@ -83,14 +83,23 @@ class Kernel:
         raise TimeoutError(method)
 
     def wait_reply(self, secs=120):
+        """收集 assistant_delta 累积文本；见到 PLAN 后再等静默期排空剩余分片。"""
         deadline = time.time() + secs
+        text = ""
+        seen_plan_at = None
         while time.time() < deadline:
+            cur = ""
             for e in list(self.events):
-                s = json.dumps(e, ensure_ascii=False)
-                if "PLAN{" in s:
-                    return s
-            time.sleep(0.5)
-        return None
+                p = (e.get("params") or {}).get("payload") or {}
+                if e.get("method") == "projection/envelope" and p.get("type") == "assistant_delta":
+                    cur += p.get("data", {}).get("text", "")
+            if cur and cur != text:
+                text = cur
+                seen_plan_at = time.time() if "PLAN{" in text else None
+            elif seen_plan_at and time.time() - seen_plan_at > 5:
+                break  # 5s 静默：分片已排空
+            time.sleep(0.4)
+        return text
 
 
 def main():
@@ -109,9 +118,11 @@ def main():
                                "input": [{"kind": "text", "text": turn_text("周六上午去深圳湾骑车")}], "turn_id": str(uuid.uuid4())})
     print("[turn/start]", str(r2)[:120])
     out = k.wait_reply()
-    print("=== 回包含 PLAN ===" if out else "=== 无 PLAN（超时）===")
-    if out:
-        print(out[:600])
+    print("=== 回包含 PLAN ===" if "PLAN{" in out else "=== 无 PLAN（超时）===")
+    print("ASSISTANT_TEXT_BEGIN")
+    print(out)
+    print("ASSISTANT_TEXT_END")
+    time.sleep(1)
     k.p.kill()
 
 
