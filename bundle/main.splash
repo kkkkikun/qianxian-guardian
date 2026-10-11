@@ -1714,6 +1714,7 @@ fn plan_parse(reply){
     head = head.trim()
     plan_summary = trim_n(head, 60)
     if plan_summary == "" { plan_summary = "按消息原文整理的提案（见下方字段）" }
+    build_plan_src_marked()
     build_plan_lines()
 }
 
@@ -1727,6 +1728,33 @@ fn norm_part(p){
     let parts = ["上午", "中午", "下午", "晚上"]
     for k in parts { if k == p { return k } }
     return ""
+}
+
+// === v0.7.0 P5（创意/UI）：提案出处高亮 ===
+// 把提案字段在消息原文中的出现用【】标出——「字段是从原文哪里来的」一眼可验
+// （no-facts 的展示端闭环；纯 split 原语，无 index_of/切片）。
+fn mark_one(src, needle){
+    if needle == "" { return src }
+    let parts = src.split(needle)
+    if parts.len() < 2 { return src }   // 原文中找不到该字段——不标（不硬凑）
+    // 首次出现标【】，其余出现原样拼回（首版把 needle 重复拼了——实机抓出）
+    let out = parts[0] + "【" + needle + "】" + parts[1]
+    for i in parts.len() - 2 {
+        out = out + needle + parts[i + 2]
+    }
+    return out
+}
+let plan_src_marked = ""
+fn build_plan_src_marked(){
+    // 顺序：活动→地点→日期词→时段词→参与人→AA（只标非空且能在原文找到的）
+    let m = "" + plan_src
+    if plan_activity != "" { m = mark_one(m, plan_activity) }
+    if plan_place != "" { m = mark_one(m, plan_place) }
+    if plan_day != "" { m = mark_one(m, plan_day) }
+    if plan_part != "" { m = mark_one(m, plan_part) }
+    if plan_people != "" { m = mark_one(m, plan_people) }
+    if plan_bill != "" { m = mark_one(m, plan_bill) }
+    plan_src_marked = m
 }
 
 // trim_n：截到 ≤n 字（trim24 泛化版；两界切片，决赛改进① 范式）
@@ -1788,7 +1816,7 @@ fn build_plan_lines(){
         } else if plan_activity == "" && plan_place == "" && plan_day == "" {
             plan_check = "提案字段全空（未抽取到内容）——拒绝执行"
         }
-        plan_lines.push("新建守护 ｜ 原文：" + plan_src)
+        plan_lines.push("新建守护 ｜ 原文（【】=字段出处）：" + plan_src_marked)
         plan_lines.push("活动：" + disp(plan_activity) + " ｜ 时间：" + slot_disp() + " ｜ 地点：" + disp(plan_place))
         plan_lines.push("参与人：" + disp(plan_people) + " ｜ AA 总额：" + disp(plan_bill))
     } else {

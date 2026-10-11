@@ -24,7 +24,7 @@
     "support": "kkkkikun@foxmail.com",
     "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
   },
-  "release_notes": "v0.6.0：账目清零闭环——按人收款与确定性对账（每人应付=代码计算）、收齐自动清待收尾徽章、管家催收草稿（draft_dunning op，金额全部来自状态机快照）、Evidence Pack（操作审计链+确定性断言，运行时导出可离线校验）。回归 22 项全绿。",
+  "release_notes": "v0.7.0：提案出处高亮——PLAN 提案字段在消息原文中的位置以【】标出，「字段从哪来」一眼可验（no-facts 展示端闭环）；snap-to-png 工具回馈官方 App-Flow 开发链（PR #190）；App Hub 提交 issue 版本跟进。回归 22 项全绿。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }
