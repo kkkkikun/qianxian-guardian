@@ -8,9 +8,13 @@
 
 - **决赛迭代（v0.3.0 管家模式）**：**agent 驱动全流程，人只做最终拍板**——
   粘贴群消息点「交给管家」→ agent 分诊/查冲突/出 **PLAN 机器提案** → 提案卡上点「拍板」→
-  白名单动作执行 + 回执。**Rinx 真宿主 × MiniMax-M3 真模型四轮端到端实测**：
-  create/reschedule/confirm 全链落盘，真模型主动预警「与 #1 撞时段」并在确认时提示
-  「#2 同期无人」（[evidence/s4-real-host-20261010.md](evidence/s4-real-host-20261010.md)）
+  白名单动作执行 + 回执。**Rinx 真宿主 × MiniMax-M3 真模型端到端实测**：
+  create/reschedule/confirm 全链落盘，真模型主动预警「与 #1 撞时段」（[evidence/s4-real-host-20261010.md](evidence/s4-real-host-20261010.md)）
+- **v0.4.0 出行保障扩展**：**天气**（管家回合内真调内核 get_forecast 工具，诚实拒绝编造）/
+  **日历**（确认即生成标准 ICS 可导入任意日历；官方 device_calendar 通路按平台边界记档）/
+  **状态全生命周期**（待拍板→已确认→已完成 + AA 待收尾徽章）/ **主动提醒**（确认即登记
+  T-24h，伴生守护进程经 Matrix 真投递）/ **分享到群**（Rinx 宿主真发群消息）
+  （[evidence/v040-features-20261011.md](evidence/v040-features-20261011.md)）
 - **主场景**：日历（时间收敛、**冲突检测**、待定 vs 已确认）
   → 与官方「日历」场景四步演示的逐条对齐见
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**

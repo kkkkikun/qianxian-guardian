@@ -16,7 +16,8 @@
   },
   "capabilities": [
     "storage",
-    "octos.turn.start"
+    "octos.turn.start",
+    "matrix.send_message"
   ],
   "compute": {
     "instruction_budget": null,
@@ -24,7 +25,7 @@
   },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "6a17dc9db321aa44d8368ed945f28bfaada5745745a8c6c75f197040442eefb0"
+    "bundle_blake3": "53ed079f7efe392bc4269c8209de1c7571e65087683431fea224b13687c279c2"
   },
   "name": "牵线",
   "network": {
@@ -34,5 +35,5 @@
   "storage": {
     "max_bytes": null
   },
-  "version": "0.3.0"
+  "version": "0.4.0"
 }

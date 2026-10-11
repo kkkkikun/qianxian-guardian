@@ -210,6 +210,17 @@ d = snap()
 ws = d.get("s", [])
 R("base", ws)
 
+# 暖场（事件泵热身）：开合「怎么用」各一次——首次交互效果偶发滞后一拍（平台已知）
+ws0 = snap()["s"]
+_hb = find(ws0, "怎么用？", "Button")
+if _hb:
+    x, y = center(_hb)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(1.2)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(1.0)
+ws = snap()["s"]
+
 # R01：示例填充（S3 起按钮文案缩为「示例」）
 ws = click_text(ws, "示例", "Button") or ws
 rec(1, "示例填充可见", find(ws, "示例", "Button") is None or any("已填" in t for t, r in labels(ws)), "示例点击后 hint 或草稿变化")
@@ -431,8 +442,177 @@ if bb:
 else:
     rec(16, "回到守护列表按钮可见", False, "聊天视图内未找到按钮")
 
+# ===== v0.4.0 新增：R17 完成态/ICS、R18 待收尾徽章、R19 分享降级、R20 完成标记 =====
+import pathlib
+JAIL = pathlib.Path("/tmp/octosense-card-apps/qianxian")
+
+# R17：打开唱歌卡详情 → 确认 → 断言 ICS 文件落盘 + 详情「日历：ICS 已生成」行
+t17 = None
+for _ in range(4):
+    t17 = find(ws, "唱歌", "Label")
+    if t17:
+        break
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=600")
+    time.sleep(1.0)
+if t17:
+    x, y = center(t17)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(2.0)
+    ws = snap()["s"]
+    cbtn = find(ws, "确认这条守护", "Button")
+    if cbtn:
+        x, y = center(cbtn)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(2.2)
+    ws = snap()["s"]
+    ics_line = any("日历：ICS 已生成" in t for t, r in labels(ws))
+    ics_file = (JAIL / "calendar").exists() and any((JAIL / "calendar").glob("*.ics"))
+    rec(17, "确认后 ICS 自动生成 + 详情行可见", ics_line and ics_file,
+        f"详情行={ics_line} jail文件={ics_file}")
+
+    # R18：记 AA（详情内，行在回执下方——滚动物化）→ 返回列表 → 待收尾徽章 → 再进详情收齐
+    aain = None
+    for _ in range(5):
+        ws = snap()["s"]
+        aain = find(ws, "记 AA 总额", "TextInput")
+        if aain:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(1.0)
+    ws = snap()["s"]
+    if aain:
+        x, y = center(aain)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(0.8)
+        get("/t?t=300")
+        time.sleep(0.8)
+        # 输入验证重试（虚拟化/焦点偶发丢）：重按输入框再敲一次
+        ws2 = snap()["s"]
+        if not any(str(w.get("t", "")) == "300" for w in ws2 if w.get("ty") == "TextInput"):
+            aain2 = find(ws2, "记 AA 总额", "TextInput")
+            if aain2:
+                x, y = center(aain2)
+                get(f"/click?x={x}&y={y}")
+                time.sleep(0.8)
+                get("/t?t=300")
+                time.sleep(0.8)
+        ws2 = snap()["s"]
+        jb = find(ws2, "记一笔", "Button")
+        if jb:
+            x, y = center(jb)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(1.8)
+        ws2 = snap()["s"]
+    # 详情滚顶——返回列表在卡首，AA 阶段已滚到卡底（虚拟化会截掉它）
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-4000")
+    time.sleep(1.2)
+    ws = snap()["s"]
+    # 回列表看徽章（徽章在列表折叠卡上，不在详情）
+    bb = find(ws, "返回列表", "Button")
+    if bb:
+        x, y = center(bb)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(2.0)
+    # 徽章在卡首行——回列表后滚顶，防视口虚拟化截掉徽章行（A5 方法论）
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-4000")
+    time.sleep(1.2)
+    # 抗抖轮询（渲染/事件投递偶发滞后一拍，#48b 家族）
+    tail_badge = False
+    for _ in range(4):
+        ws = snap()["s"]
+        tail_badge = any("待收尾" in t for t, r in labels(ws))
+        if tail_badge:
+            break
+        time.sleep(1.2)
+    # 再进详情收齐 AA
+    t18 = None
+    for _ in range(3):
+        t18 = find(ws, "唱歌", "Label")
+        if t18:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=500")
+        time.sleep(1.0)
+    if t18:
+        x, y = center(t18)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(2.0)
+        ws = snap()["s"]
+        # 滚到详情底部找「AA 已收齐」（新按钮行在视口下方，需滚动物化）
+        cbtn = None
+        for _ in range(5):
+            cbtn = find(ws, "AA 已收齐", "Button")
+            if cbtn:
+                break
+            get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+            time.sleep(1.0)
+        if cbtn:
+            x, y = center(cbtn)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(1.8)
+    ws = snap()["s"]
+    gone = not any("待收尾" in t for t, r in labels(ws))
+    rec(18, "AA 待收尾徽章出现且收齐后清除", tail_badge and gone,
+        f"记AA后徽章={tail_badge} 收齐后徽章消失={gone}")
+
+    # R19：分享到群 → card-host 诚实降级 hint（按钮在详情底部，继续滚动找）
+    sbtn = None
+    for _ in range(5):
+        ws = snap()["s"]
+        sbtn = find(ws, "分享到群", "Button")
+        if sbtn:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+        time.sleep(1.0)
+    ws = snap()["s"]
+    if sbtn:
+        x, y = center(sbtn)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(2.2)
+        degrade = False
+        seen_hint = ""
+        for _ in range(4):
+            ws = snap()["s"]
+            hs = [t for t, r in labels(ws) if "群分享" in t or "matrix" in t]
+            seen_hint = hs[0] if hs else seen_hint
+            degrade = any(("no service answers" in t or "宿主无 matrix 服务" in t) and "群分享失败" in t for t, r in labels(ws))
+            if degrade:
+                break
+            time.sleep(1.2)
+        rec(19, "分享到群：无服务宿主诚实降级（真实错误透出）", degrade, f"实见={seen_hint[:90]}")
+    else:
+        rec(19, "分享到群按钮可见", False, "详情内未找到按钮")
+
+    # R20：标记完成 → 状态行变 已完成（先滚顶防虚拟化，再向下找）
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-4000")
+    time.sleep(1.2)
+    fbtn = None
+    for _ in range(5):
+        ws = snap()["s"]
+        fbtn = find(ws, "标记完成", "Button")
+        if fbtn:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+        time.sleep(1.0)
+    if fbtn:
+        x, y = center(fbtn)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(1.8)
+        # 内容缩短（ICS 行/按钮行消失）→ 滚顶再断言（虚拟化截断防护）
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=-4000")
+        time.sleep(1.2)
+        ws = snap()["s"]
+        done = any("已完成" in t for t, r in labels(ws))
+        rec(20, "标记完成 → 已完成态", done, f"状态行含已完成={done}")
+    else:
+        rec(20, "标记完成按钮可见", False, "详情内未找到按钮")
+else:
+    rec(17, "唱歌卡可见", False, "未找到卡片")
+    rec(18, "跳过（依赖 R17）", False, "R17 未执行")
+    rec(19, "跳过（依赖 R17）", False, "R17 未执行")
+    rec(20, "跳过（依赖 R17）", False, "R17 未执行")
+
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v3：14 步原路径 + S3 管家 2 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v4：16 步既有 + v0.4.0 生命周期 4 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):

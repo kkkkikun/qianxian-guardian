@@ -102,6 +102,13 @@ rm -rf /tmp/qx-kernel-data && python3 tools/qx-kernel-turn.py --real   # MiniMax
 # 3) Rinx 真宿主（Mini apps 导入 → Review → Run；注意 9-26 基线宿主不认识 agent 块，
 #    演示用同源变体 /tmp/qx-demo-bundle——仅删 manifest.agent，见 evidence/s4 文档披露）
 ../../run-rinx.sh    # RINX_DATA_DIR/RINX_OCTOS_BIN/MAKEPAD_REMOTE 用法见 tools/qx-rinx-drive.py 头注
+
+# 4) 天气（管家工具路线，v0.4.0）：内核 skill 部署到 octos 可执行旁，代理走内核 env
+(cd ../repos/octos && cargo build --release -p weather -p clock   && cp target/release/{weather,clock} target/release/)
+#    Rinx 启动时 export https_proxy=http://127.0.0.1:10808（内核继承）→ 管家回合内真调 get_forecast
+
+# 5) T-24h 提醒伴生守护进程（L3，真发 Matrix）：
+python3 tools/qx-reminder-bridge.py --jail <card-host或Rinx的jail>/qianxian   --room '<!roomid:server>' --interval 60        # 到期自动真发；--dry-run 可预演
 ```
 
 ## 双账号全流程复现（P0-C / 验收条件 12）

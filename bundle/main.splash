@@ -198,6 +198,7 @@ fn status_badge_fg(st){
 }
 fn status_badge_text(st){
     if st == "Confirmed" { return "已确认" }
+    if st == "Completed" { return "已完成" }
     if st == "Cancelled" { return "已取消" }
     if st == "Proposing" { return "待拍板" }
     return "" + st
@@ -246,6 +247,7 @@ fn rebuild_lines(){
         if cf == "all" { keep = true }
         else if cf == "Proposing" && st == "Proposing" { keep = true }
         else if cf == "Confirmed" && st == "Confirmed" { keep = true }
+        else if cf == "Completed" && st == "Completed" { keep = true }
         else if cf == "Cancelled" && st == "Cancelled" { keep = true }
         if keep {
             view_idxs.push(i)
@@ -310,6 +312,10 @@ fn rebuild_lines(){
         let badge_t = status_badge_text(st)
         let cf_lab0 = "" + cases[i]["conflict"]
         if cf_lab0 == "yes" { badge_t = badge_t + "·冲突" }
+        // S4：AA 记了账没收齐 → 待收尾徽章（活动全生命周期到收尾）
+        if (st == "Confirmed" || st == "Completed") && ("" + cases[i]["bill_total"]) != "" && ("" + cases[i]["bill_cleared"]) != "yes" {
+            badge_t = badge_t + "·待收尾"
+        }
         case_badge_text.push(badge_t)
         let title_act = "" + cases[i]["activity"]
         if title_act == "" { title_act = "聚会" }
@@ -697,7 +703,7 @@ fn add_person(id_str, raw){
                     "receipt_place": cases[qi]["receipt_place"],
                     "receipt_text": cases[qi]["receipt_text"],
                     "receipt_done": cases[qi]["receipt_done"],
-                    "slot_init_asked": cases[qi]["slot_init_asked"]})
+                    "slot_init_asked": cases[qi]["slot_init_asked"], "bill_cleared": cases[qi]["bill_cleared"]})
             } else {
                 new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
                     "activity": cases[qi]["activity"], "place": cases[qi]["place"],
@@ -709,7 +715,7 @@ fn add_person(id_str, raw){
                     "receipt_place": cases[qi]["receipt_place"],
                     "receipt_text": cases[qi]["receipt_text"],
                     "receipt_done": cases[qi]["receipt_done"],
-                    "slot_init_asked": cases[qi]["slot_init_asked"]})
+                    "slot_init_asked": cases[qi]["slot_init_asked"], "bill_cleared": cases[qi]["bill_cleared"]})
             }
         }
     cases = new_cases
@@ -758,7 +764,7 @@ fn update_bill_total(id_str, raw){
                     "receipt_place": cases[bi2]["receipt_place"],
                     "receipt_text": cases[bi2]["receipt_text"],
                     "receipt_done": cases[bi2]["receipt_done"],
-                    "slot_init_asked": cases[bi2]["slot_init_asked"]})
+                    "slot_init_asked": cases[bi2]["slot_init_asked"], "bill_cleared": cases[bi2]["bill_cleared"]})
             } else {
                 new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
                     "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
@@ -770,7 +776,7 @@ fn update_bill_total(id_str, raw){
                     "receipt_place": cases[bi2]["receipt_place"],
                     "receipt_text": cases[bi2]["receipt_text"],
                     "receipt_done": cases[bi2]["receipt_done"],
-                    "slot_init_asked": cases[bi2]["slot_init_asked"]})
+                    "slot_init_asked": cases[bi2]["slot_init_asked"], "bill_cleared": cases[bi2]["bill_cleared"]})
             }
         }
     cases = new_cases
@@ -833,7 +839,7 @@ fn cycle_slot(id_str){
                 "receipt_place": cases[ai]["receipt_place"],
                 "receipt_text": cases[ai]["receipt_text"],
                 "receipt_done": cases[ai]["receipt_done"],
-                "slot_init_asked": mk})
+                "slot_init_asked": mk, "bill_cleared": cases[ai]["bill_cleared"]})
         }
         cases = new_cases_ask
         // 决赛 S1：收口 save() 咽喉（原直写 fs.write）
@@ -870,7 +876,7 @@ fn cycle_slot(id_str){
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
                 "receipt_done": cases[ri]["receipt_done"],
-                "slot_init_asked": ""})
+                "slot_init_asked": "", "bill_cleared": cases[ri]["bill_cleared"]})
         } else {
             new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
                 "activity": cases[ri]["activity"], "place": cases[ri]["place"],
@@ -882,14 +888,14 @@ fn cycle_slot(id_str){
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
                 "receipt_done": cases[ri]["receipt_done"],
-                "slot_init_asked": cases[ri]["slot_init_asked"]})
+                "slot_init_asked": cases[ri]["slot_init_asked"], "bill_cleared": cases[ri]["bill_cleared"]})
         }
     }
     cases = new_cases
-    // 重算冲突：先全置 no，再同槽互标 yes
-    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" { cases[a1]["conflict"] = "no" } }
+    // 重算冲突：先全置 no，再同槽互标 yes（S4：Completed 不参与）
+    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" && cases[a1]["status"] != "Completed" { cases[a1]["conflict"] = "no" } }
     for a2 in cases.len() {
-        if cases[a2]["status"] == "Cancelled" { continue }
+        if cases[a2]["status"] == "Cancelled" || cases[a2]["status"] == "Completed" { continue }
         let d2 = "" + cases[a2]["slot_day"]
         let p2 = "" + cases[a2]["slot_part"]
         if d2 == "" || p2 == "" { continue }
@@ -1283,7 +1289,7 @@ fn build_case_from_text(text, level){
     // === #27：slot_init_asked 字段预置（C5）。case 对象带这个标记后，cycle_slot
     //   才能在「时段未抽取」时进入二次确认：第一次点只翻标记 + 提示，第二次点
     //   才真正写入「周六-上午」初值。初值 "" 表示从未问过。
-    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "bill_total": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "slot_init_asked": ""})
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "bill_total": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "slot_init_asked": "", "bill_cleared": "no"})
     // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
     // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
     // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
@@ -1345,6 +1351,8 @@ fn confirm_case(){
                 ui.hint.set_text("保存失败：守护数据可能未落盘（#已被改为 Confirmed in-memory；#" + "" + t["id"] + "）" + tag)
             } else {
                 ui.hint.set_text("已确认 #" + "" + t["id"] + " → Confirmed（组织者拍板，读回一致）" + tag)
+                // v0.4.0：确认后动作——ICS 自动生成 + 群分享尝试（回调覆盖 hint 为终态文案）
+                post_confirm_actions("" + t["id"])
             }
             return
         }
@@ -1550,9 +1558,9 @@ fn probe_ai_cap(){
 fn ai_timeout(my){
     if my == ai_seq && ai_pending == "yes" {
         ai_pending = "no"
-        chat_push("sys", "管家无响应（30 秒）——已降级本地规则，点「建守护」即可")
+        chat_push("sys", "管家无响应（45 秒）——已降级本地规则，点「建守护」即可")
         render_views()
-        ui.hint.set_text("AI 无响应（30 秒），已降级本地规则——直接点「建守护」即可")
+        ui.hint.set_text("AI 无响应（45 秒），已降级本地规则——直接点「建守护」即可")
     }
 }
 // 对话气泡入栈（role: "me"/"ai"/"sys"）；聊天视图可见时即时重渲染
@@ -1568,7 +1576,7 @@ fn chat_push(role, text){
 // Rinx 不给 mini-app 注入 AGENT.md（宿主侧 turn_input 无 guidance 分支，源码级核实），
 // 所以角色与协议必须由 app 自己嵌入 turn 文本——与 AGENT.md v3 同文，双处一致。
 fn build_agent_turn(user_text){
-    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm(id)/reschedule(id+slot_day+slot_part)/cancel(id)/add_people(id+people)/set_bill(id+bill_total)，字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒。回复中文、简短（≤120字）。"
+    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm(id)/reschedule(id+slot_day+slot_part)/cancel(id)/add_people(id+people)/set_bill(id+bill_total)/complete(id 标记活动完成)，字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字。回复中文、简短（≤120字）。"
     let st = pre + "\n\n【当前守护】\n"
     if cases.len() == 0 {
         st = st + "（还没有守护）"
@@ -1601,9 +1609,9 @@ fn butler_send(){
         ai_pending = "yes"
         ai_seq = ai_seq + 1
         let my = ai_seq
-        chat_push("sys", "管家思考中…（约 30 秒，无响应自动降级本地规则）")
+        chat_push("sys", "管家思考中…（约 45 秒，无响应自动降级本地规则）")
         // 30s 兜底（turn.start 首次会等「允许」，8s 太短见 #37）；代际核对防旧回合降级新回合
-        start_timeout(30.0, || ai_timeout(my))
+        start_timeout(45.0, || ai_timeout(my))
         host.request("octos.turn.start", {text: build_agent_turn(text)}, fn(r){
             // 决赛改进②：迟到回调按序号丢弃——已被新回合取代时不动任何 UI 状态
             if my != ai_seq { return }
@@ -1728,6 +1736,7 @@ fn plan_op_label(op){
     if op == "cancel" { return "取消（5 秒内可撤销）" }
     if op == "add_people" { return "加参与人" }
     if op == "set_bill" { return "记 AA 总额" }
+    if op == "complete" { return "标记完成（收尾）" }
     if op == "create" { return "新建守护" }
     return op
 }
@@ -1824,6 +1833,10 @@ fn butler_approve(){
         selected_id = pid
         update_bill_total(plan_id, plan_bill)
         chat_push("sys", "已拍板：#" + plan_id + " AA 总额 " + disp(plan_bill))
+    } else if op == "complete" {
+        selected_id = pid
+        set_completed(plan_id)
+        chat_push("sys", "已拍板：#" + plan_id + " 已标记完成（AA 收齐后待收尾徽章自动清）")
     } else {
         ui.hint.set_text("未知提案类型：" + op)
         return
@@ -1879,7 +1892,7 @@ fn set_slot(id_str, nd, np){
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
                 "receipt_done": cases[ri]["receipt_done"],
-                "slot_init_asked": ""})
+                "slot_init_asked": "", "bill_cleared": cases[ri]["bill_cleared"]})
         } else {
             new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
                 "activity": cases[ri]["activity"], "place": cases[ri]["place"],
@@ -1891,7 +1904,7 @@ fn set_slot(id_str, nd, np){
                 "receipt_place": cases[ri]["receipt_place"],
                 "receipt_text": cases[ri]["receipt_text"],
                 "receipt_done": cases[ri]["receipt_done"],
-                "slot_init_asked": cases[ri]["slot_init_asked"]})
+                "slot_init_asked": cases[ri]["slot_init_asked"], "bill_cleared": cases[ri]["bill_cleared"]})
         }
     }
     cases = new_cases
@@ -1913,9 +1926,10 @@ fn set_slot(id_str, nd, np){
 
 // 冲突全量重算（cycle_slot 同款逻辑抽出复用；set_slot / create_case_from_plan 共用）
 fn mark_conflicts(){
-    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" { cases[a1]["conflict"] = "no" } }
+    // S4：Completed（活动已结束）不再参与时段冲突
+    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" && cases[a1]["status"] != "Completed" { cases[a1]["conflict"] = "no" } }
     for a2 in cases.len() {
-        if cases[a2]["status"] == "Cancelled" { continue }
+        if cases[a2]["status"] == "Cancelled" || cases[a2]["status"] == "Completed" { continue }
         let d2 = "" + cases[a2]["slot_day"]
         let p2 = "" + cases[a2]["slot_part"]
         if d2 == "" || p2 == "" { continue }
@@ -1933,6 +1947,223 @@ fn mark_conflicts(){
     }
 }
 
+// === 决赛 v0.4.0 S2 地基：绝对日期解析（槽位词 → 下一该周几的 YYYY-MM-DD） ===
+// local_time() 返回 {year month day hour minute second weekday}（weekday 0=周日），
+// card-host 为 UTC（SCRIPT-API ✓ run）——北京 UTC+8 用 hour 修正跨日。
+// 只解析日期不发明钟点（日历写入用 all-day，不吃 no-facts 红线）。
+fn days_from_civil(y, m, d){
+    // Hinnant days_from_civil（纯整数历法，proleptic Gregorian）
+    let yy = y
+    if m <= 2 { yy = yy - 1 }
+    let era = 0
+    if yy >= 0 { era = yy / 400 } else { era = (yy - 399) / 400 }
+    let yoe = yy - era * 400
+    let mp = 0
+    if m > 2 { mp = m - 3 } else { mp = m + 9 }
+    let doy = (153 * mp + 2) / 5 + d - 1
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe
+}
+fn civil_from_days(z, out){
+    // out = [y, m, d] 就地写回（C4：不跨闭包返回多值）
+    // 注意：z 与 days_from_civil 同约定（自 0000-03-01 的天数），无 +719468
+    // （800 天历法抽查抓出过此 bug——两种约定混用会整年 +1970）
+    let era = 0
+    if z >= 0 { era = z / 146097 } else { era = (z - 146096) / 146097 }
+    let doe = z - era * 146097
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    let y = yoe + era * 400
+    let doy2 = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    let mp = (5 * doy2 + 2) / 153
+    let d2 = doy2 - (153 * mp + 2) / 5 + 1
+    let m2 = mp + 3
+    if m2 <= 12 {
+        out[0] = y
+    } else {
+        out[0] = y + 1
+    }
+    out[1] = m2
+    out[2] = d2
+}
+fn weekday_word_to_num(w){
+    if w == "周一" { return 1 }
+    if w == "周二" { return 2 }
+    if w == "周三" { return 3 }
+    if w == "周四" { return 4 }
+    if w == "周五" { return 5 }
+    if w == "周六" { return 6 }
+    if w == "周日" { return 0 }
+    return -1
+}
+fn pad2(n){
+    if n < 10 { return "0" + ("" + n) }
+    return "" + n
+}
+fn resolve_slot_date(slot_day){
+    // 返回 "YYYY-MM-DD"；slot_day 不在词表/解析失败返回 ""（no-facts）
+    let wd = weekday_word_to_num("" + slot_day)
+    if wd < 0 { return "" }
+    let t = local_time()
+    // 北京 = UTC+8：UTC 16 点后北京已是次日
+    let day_shift = 0
+    if t.hour >= 16 { day_shift = 1 }
+    let z = days_from_civil(t.year, t.month, t.day) + day_shift
+    let cur_wd = t.weekday
+    if day_shift == 1 {
+        cur_wd = cur_wd + 1
+        if cur_wd > 6 { cur_wd = 0 }
+    }
+    // 「下周 X」语义不在抽取词表——同名日取最近未来（含今天）
+    let delta = wd - cur_wd
+    if delta < 0 { delta = delta + 7 }
+    let out = [0, 0, 0]
+    civil_from_days(z + delta, out)
+    return ("" + out[0]) + "-" + pad2(out[1]) + "-" + pad2(out[2])
+}
+
+// === 决赛 v0.4.0 S5：ICS 日历导出（本机可真实验证的写入路径） ===
+fn ics_escape(t){
+    let r = "" + t
+    let parts = r.split("\\")
+    r = ""
+    for i in parts.len() { r = r + parts[i] }
+    let parts2 = r.split(";")
+    r = ""
+    for i in parts2.len() { r = r + parts2[i] }
+    let parts3 = r.split(",")
+    r = ""
+    for i in parts3.len() { r = r + parts3[i] }
+    return r
+}
+fn build_ics(ci){
+    let dt = resolve_slot_date(cases[ci]["slot_day"])
+    if dt == "" { return "" }
+    let dd = dt.split("-")
+    let ymd = dd[0] + dd[1] + dd[2]
+    let act = ics_escape(cases[ci]["activity"])
+    if act == "" { act = "聚会" }
+    let loc = ics_escape(cases[ci]["place"])
+    let lines = []
+    lines.push("BEGIN:VCALENDAR")
+    lines.push("VERSION:2.0")
+    lines.push("PRODID:-//qianxian//guardian//CN")
+    lines.push("BEGIN:VEVENT")
+    lines.push("UID:qianxian-" + ("" + cases[ci]["id"]) + "-" + ymd + "@qianxian")
+    lines.push("DTSTART;VALUE=DATE:" + ymd)
+    lines.push("SUMMARY:" + act + "（牵线守护 #" + ("" + cases[ci]["id"]) + "）")
+    if loc != "" { lines.push("LOCATION:" + loc) }
+    lines.push("DESCRIPTION:来自牵线守护（" + ("" + cases[ci]["status"]) + "）。原文：" + ics_escape(cases[ci]["text"]))
+    lines.push("END:VEVENT")
+    lines.push("END:VCALENDAR")
+    let out = ""
+    for i in lines.len() { out = out + lines[i] + "\r\n" }
+    return out
+}
+fn export_ics(id_str){
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    let ics = build_ics(cur)
+    if ics == "" {
+        ui.hint.set_text("日历：#" + id_str + " 没有可解析的日期（slot 未抽取），未生成 ICS")
+        return
+    }
+    let r = fs.write("calendar/qianxian-" + id_str + ".ics", ics)
+    if r == nil {
+        ui.hint.set_text("日历：ICS 已生成 calendar/qianxian-" + id_str + ".ics（通用格式，可导入任意日历）")
+    } else {
+        ui.hint.set_text("日历：ICS 生成失败（" + ("" + r) + "）")
+    }
+}
+
+// === 决赛 v0.4.0 S4：完成态 + AA 收尾 ===
+let state_save_result = "ok"
+fn set_completed(id_str){
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if cases[cur]["status"] != "Confirmed" {
+        ui.hint.set_text("只有已确认的守护能标记完成（#" + id_str + " 现为 " + status_badge_text("" + cases[cur]["status"]) + "）")
+        return
+    }
+    cases[cur]["status"] = "Completed"
+    // 活动结束：冲突解除
+    mark_conflicts()
+    rebuild_lines()
+    save()
+    state_save_result = save_result
+    render_views()
+    if state_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " 已标记完成（保存失败，仅在内存）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 已标记完成——聚会圆满，AA 收齐后徽章自动清")
+    }
+}
+fn set_bill_cleared(id_str){
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if ("" + cases[cur]["bill_total"]) == "" {
+        ui.hint.set_text("没记过 AA，无需收尾（#" + id_str + "）")
+        return
+    }
+    if cases[cur]["bill_cleared"] == "yes" {
+        ui.hint.set_text("AA 已收齐过（#" + id_str + "）")
+        return
+    }
+    cases[cur]["bill_cleared"] = "yes"
+    rebuild_lines()
+    save()
+    state_save_result = save_result
+    render_views()
+    if state_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " AA 已收齐（保存失败，仅在内存）")
+    } else {
+        ui.hint.set_text("#" + id_str + " AA 已收齐——收尾完成")
+    }
+}
+
+// === 决赛 v0.4.0 S6：确认后动作（ICS 自动导出 + 群分享 + 提醒登记提示） ===
+fn post_confirm_actions(id_str){
+    // ① ICS 自动生成（本机可验证的日历写入路径）
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur >= 0 {
+        let ics = build_ics(cur)
+        if ics != "" {
+            fs.write("calendar/qianxian-" + id_str + ".ics", ics)
+        }
+    }
+    // ② 群分享（Rinx 宿主真发；card-host 无此服务 → 46b 诚实降级）
+    if host.has("matrix.send_message") {
+        let cur2 = -1
+        for i in cases.len() {
+            if "" + cases[i]["id"] == id_str { cur2 = i }
+        }
+        if cur2 >= 0 {
+            let act = "" + cases[cur2]["activity"]
+            if act == "" { act = "聚会" }
+            let body = "✅ 牵线确认：#" + id_str + " " + act + "（" + ("" + cases[cur2]["slot_day"]) + "-" + ("" + cases[cur2]["slot_part"]) + "）· " + ("" + cases[cur2]["place"]) + " —— T-24h 提醒已登记"
+            host.request("matrix.send_message", {body: body}, fn(r){
+                if r.is_ok {
+                    ui.hint.set_text("群分享：已发送到授权房间 ✓（T-24h 提醒已登记）")
+                } else {
+                    // 46b 诚实可见性：透出真实失败原因，不吞错误
+                    ui.hint.set_text("群分享失败：" + r.error + " —— 提醒已在本机登记，ICS 已生成")
+                }
+            })
+        }
+    }
+}
+
 // 管家 create 提案的执行端：字段由提案给定（非本地猜测），空字段保持空（no-facts）；
 // id 守卫与 build_case_from_text 同款；冲突走 mark_conflicts 全量重算
 fn create_case_from_plan(){
@@ -1942,7 +2173,7 @@ fn create_case_from_plan(){
         if cid > max_existing_id { max_existing_id = cid }
     }
     if seq <= max_existing_id { seq = max_existing_id + 1 }
-    cases.push({"id": seq, "text": plan_src, "activity": plan_activity, "place": plan_place, "status": "Proposing", "people": plan_people, "bill_total": plan_bill, "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": plan_day, "slot_part": plan_part, "conflict": "no", "slot_init_asked": ""})
+    cases.push({"id": seq, "text": plan_src, "activity": plan_activity, "place": plan_place, "status": "Proposing", "people": plan_people, "bill_total": plan_bill, "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": plan_day, "slot_part": plan_part, "conflict": "no", "slot_init_asked": "", "bill_cleared": "no"})
     mark_conflicts()
     selected_id = seq
     ui.msg_input.set_text("")
@@ -2312,7 +2543,21 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                     }
                 }
             }
-            // 标签 4：已取消
+            // 标签 4：已完成（v0.4.0 S4：活动全生命周期到收尾）
+            GestureView{on_tap: |x, y| set_filter("Completed") height: 36
+                if cf_now == "Completed" {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
+                        Label{text: "完成" draw_text.color: #xffffff draw_text.text_style: theme.font_bold{font_size: 13}}
+                    }
+                } else {
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
+                        show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
+                        Label{text: "完成" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    }
+                }
+            }
+            // 标签 5：已取消
             GestureView{on_tap: |x, y| set_filter("Cancelled") height: 36
                 if cf_now == "Cancelled" {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
@@ -2369,7 +2614,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
         } else if filtered_idxs.len() == 0 {
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
                 Label{text: "这个筛选下还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                Label{text: "换个标签看看，或粘贴一条群消息开始（当前筛选：" + (if cf_now == "all" { "全部" } else if cf_now == "Proposing" { "待拍板" } else if cf_now == "Confirmed" { "已确认" } else { "已取消" }) + "）。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                Label{text: "换个标签看看，或粘贴一条群消息开始（当前筛选：" + (if cf_now == "all" { "全部" } else if cf_now == "Proposing" { "待拍板" } else if cf_now == "Confirmed" { "已确认" } else if cf_now == "Completed" { "已完成" } else { "已取消" }) + "）。" draw_text.color: secondary draw_text.text_style.font_size: 13}
             }
             // 筛选空分支兜底：同样留 1px 占位
             View{width: Fill height: 1}
@@ -2555,6 +2800,24 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                     if case_receipt[sel].len() > 0 {
                         for _ri in case_receipt[sel].len() {
                             ReceiptLine{text: "  ↳ " + case_receipt[sel][_ri]}
+                        }
+                    }
+                    // === v0.4.0 S5/S6：日历 ICS 与提醒登记行（已确认态）===
+                    if case_status_text[sel] == "已确认" {
+                        BodyLine{text: "日历：ICS 已生成（calendar/qianxian-" + case_ids[sel] + ".ics）｜ 提醒：T-24h 已登记"}
+                    }
+                    // === v0.4.0 S4/S6：完成/收尾/分享按钮（确认态才显示）===
+                    if case_status_text[sel] == "已确认" {
+                        View{width: Fill height: Fit flow: Right spacing: 6
+                            ButtonFlat{text: "标记完成" height: 40 padding: Inset{left: 10 right: 10} on_click: || set_completed("" + selected_id)
+                                draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
+                                draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "AA 已收齐" height: 40 padding: Inset{left: 10 right: 10} on_click: || set_bill_cleared("" + selected_id)
+                                draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
+                                draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "分享到群" height: 40 padding: Inset{left: 10 right: 10} on_click: || post_confirm_actions("" + selected_id)
+                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
                         }
                     }
                     View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}

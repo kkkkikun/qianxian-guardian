@@ -24,7 +24,7 @@
     "support": "kkkkikun@foxmail.com",
     "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
   },
-  "release_notes": "v0.3.0 决赛迭代：管家模式——agent 驱动全流程，人只拍板。PLAN 单行机器提案协议（create/confirm/reschedule/cancel/add_people/set_bill 六操作，槽位词表归一+合法性前置校验）；octos.turn.start 单通道对话，角色提示词与守护快照自嵌 turn 文本；AGENT.md v3 四段式+agent read-only 最小权限；真模型实证（octos 内核×MiniMax-M3 返回合规 PLAN）；无 AI 宿主诚实降级，本地规则路径完整可用；状态层收口 save() 唯一咽喉；回归 16/16。",
+  "release_notes": "v0.4.0 出行保障扩展：天气（管家回合内真调内核工具，拒绝编造）、日历（确认即生成标准 ICS，可导入任意日历软件）、状态全生命周期（待拍板→已确认→已完成 + AA 待收尾徽章）、主动提醒（确认即登记 T-24h，伴生守护进程经 Matrix 真投递）、分享到群（Rinx 宿主真发）。回归 20 项全绿。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }
