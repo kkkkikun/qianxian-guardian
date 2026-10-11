@@ -552,6 +552,8 @@ fn load(){
     ui.detail_list.set_visible(false)
     // S3：chat_list 同款初始隐藏 + 管家欢迎语（仅首次，重启不重复）
     ui.chat_list.set_visible(false)
+    // UI 改版：状态三键初始隐藏（列表模式下无目标语境；进详情时命令式显示）
+    ui.action_row.set_visible(false)
     if chat_text.len() == 0 {
         chat_role.push("sys")
         chat_text.push("把群消息丢给管家：我来分诊、查冲突、出提案，你只管拍板。（无 AI 服务时自动降级本地规则）")
@@ -1025,6 +1027,9 @@ fn on_tap_card(id){
     ui.case_list.set_visible(false)
     ui.chat_list.set_visible(false)
     ui.detail_list.set_visible(true)
+    // UI 改版（card-ux：操作就近分组）：状态三键只在详情模式显示——
+    //   列表/聊天模式下「确认这条守护」没有目标语境，隐藏而非常驻
+    ui.action_row.set_visible(true)
     render_views()
     ui.hint.set_text("已选中 #" + "" + id + "，详情见下方；「返回列表」回到全部守护")
 }
@@ -1035,6 +1040,7 @@ fn back_to_list(){
     ui.detail_list.set_visible(false)
     ui.chat_list.set_visible(false)
     ui.case_list.set_visible(true)
+    ui.action_row.set_visible(false)
     render_views()
     ui.hint.set_text("已返回列表；点卡片看单条详情")
 }
@@ -1045,12 +1051,14 @@ fn enter_chat(){
     ui.case_list.set_visible(false)
     ui.detail_list.set_visible(false)
     ui.chat_list.set_visible(true)
+    ui.action_row.set_visible(false)
     render_views()
 }
 fn back_from_chat(){
     ui_mode = "list"
     ui.chat_list.set_visible(false)
     ui.case_list.set_visible(true)
+    ui.action_row.set_visible(false)
     render_views()
     ui.hint.set_text("已回到守护列表；点卡片看单条详情")
 }
@@ -2179,25 +2187,23 @@ let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_te
 let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 14}
 let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
 
-SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.color: #xf7f2ec
-    Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}
-    Label{text: "群里说好的聚会，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 13}
-    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-            // #47（S3 复查）：占位 6 字保单行（管家+建守护+示例三键并排后输入框 ~140px）；
-            //   保留「粘贴群消息」前缀（回归驱动 type_text 按此定位输入框）。
-            msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息…"
+SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.color: #xf7f2ec
+    // === UI 方法论改版（App Flow card-ux skill：一屏一主行动 / 操作就近分组）===
+    //   标题紧凑化（26→19）：首屏纵向空间让给守护列表这一核心内容
+    Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 19}}
+    Label{text: "把群消息丢给管家，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 12}
+    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+            // UI 改版：输入行只留两键——「交给管家」唯一主行动，「建守护」次级描边；
+            //   「示例」移入空态首用卡（低频演示入口不占一级行）。占位恢复 12 字单行。
+            msg_input := TextInput{width: Fill height: 44 empty_text: "粘贴群消息，如：周六骑车"
             draw_bg +: {color: #xf1ece4 color_hover: #xf1ece4 color_focus: #xf1ece4 color_empty: #xf1ece4 border_radius: 10.0}
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: secondary color_empty_hover: secondary}}
         // === 决赛 S3：管家是主入口（agent 驱动全流程），朱砂主按钮 ===
-        ButtonFlat{text: "交给管家" height: 44 padding: Inset{left: 10 right: 10} on_click: || butler_send()
+        ButtonFlat{text: "交给管家" height: 44 padding: Inset{left: 14 right: 14} on_click: || butler_send()
             draw_bg +: {border_radius: 20.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
             draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
-        // === #14：示例一键填充（演示友好）；S3 起为省宽缩为「示例」 ===
-        ButtonFlat{text: "示例" height: 44 padding: Inset{left: 8 right: 8} on_click: || fill_example()
-            draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
-        // 手动路径保留（无 AI 宿主时的完整降级；本地规则分诊）
-        ButtonFlat{text: "建守护" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_case()
+        // 手动路径保留（无 AI 宿主时的完整降级；本地规则分诊），次级视觉：描边
+        ButtonFlat{text: "建守护" height: 44 padding: Inset{left: 12 right: 12} on_click: || add_case()
             draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 1.0 border_color: #xc7402f}
             draw_text +: {color: accent color_hover: accent color_down: accent}}
     }
@@ -2241,7 +2247,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                 on_change: |t| set_query("" + t)}
             // 清空按钮：有词才显示（用 q_now 字面量作可见性条件，闭包内可读全局字符串）
             if q_now != "" {
-                GestureView{on_tap: |x, y| set_query("") height: 32
+                GestureView{on_tap: |x, y| set_query("") height: 36
                     RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 6 bottom: 6}
                         show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
                         Label{text: "× 清空" draw_text.color: secondary draw_text.text_style.font_size: 13}
@@ -2265,7 +2271,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
         let cf_now = "" + current_filter
         View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
             // 标签 1：全部
-            GestureView{on_tap: |x, y| set_filter("all") height: 32
+            GestureView{on_tap: |x, y| set_filter("all") height: 36
                 if cf_now == "all" {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
                         show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
@@ -2279,7 +2285,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                 }
             }
             // 标签 2：待拍板
-            GestureView{on_tap: |x, y| set_filter("Proposing") height: 32
+            GestureView{on_tap: |x, y| set_filter("Proposing") height: 36
                 if cf_now == "Proposing" {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
                         show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
@@ -2293,7 +2299,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                 }
             }
             // 标签 3：已确认
-            GestureView{on_tap: |x, y| set_filter("Confirmed") height: 32
+            GestureView{on_tap: |x, y| set_filter("Confirmed") height: 36
                 if cf_now == "Confirmed" {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
                         show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
@@ -2307,7 +2313,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                 }
             }
             // 标签 4：已取消
-            GestureView{on_tap: |x, y| set_filter("Cancelled") height: 32
+            GestureView{on_tap: |x, y| set_filter("Cancelled") height: 36
                 if cf_now == "Cancelled" {
                     RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 6 bottom: 6}
                         show_bg: true draw_bg.color: accent draw_bg.border_radius: 16.0
@@ -2337,18 +2343,25 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             if seq == 0 {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
                     Label{text: "第一次用？把群消息丢给管家" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "① 粘贴群里那条聚会消息，点「交给管家」" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "② 管家分诊、查冲突、出提案——你只点「拍板」" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "③ 确认后回执与提醒就位；改期/加人/记账跟管家说就行" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "管家分诊、查冲突、出提案——你只点「拍板」；改期/加人/记账跟管家说就行。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    View{width: Fill height: Fit flow: Right
+                        ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 14 right: 14} on_click: || fill_example()
+                            draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                            draw_text +: {color: accent color_hover: accent color_down: accent}}
+                    }
                 }
             }
             // === #36：「怎么用」说明卡已移出空列表分支 → 列表模式公共尾部（见下方）。
             //   #29 把 4 个低频键（改时间/AI解析/导出/清空全部）折叠进本卡后，
             //   卡却只在本空态分支渲染——「有守护在册」时四键全部不可达：
             //   清空全部永远删不到数据，演示剧本 8/18/19/20 步不可执行（#34 真机复验抓到）。
-            Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
-                Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                Label{text: "把一条群消息丢给管家开始（例如：周六上午去深圳湾骑车）；无 AI 服务时点「建守护」走本地规则。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+            //   UI 改版（card-ux：去重复）：首用引导卡在场（seq==0）时通用空态卡隐藏——
+            //   两卡文案同为「从一条消息开始」，同屏重复。
+            if seq > 0 {
+                Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
+                    Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                    Label{text: "把一条群消息丢给管家开始（例如：周六上午去深圳湾骑车）；无 AI 服务时点「建守护」走本地规则。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                }
             }
             // 空分支兜底：永远留 1px 占位，防上帧残留（ai-providers:241 注释范式）
             View{width: Fill height: 1}
@@ -2466,14 +2479,12 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             if howto_show_flag == "yes" {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
                     Label{text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "1. 粘贴群里那条聚会消息（或点「示例」），点「交给管家」" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "2. 管家分诊、查冲突、出提案；你在提案卡上点「拍板」即落地" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "3. 改期/加人/记账/取消——直接跟管家说，如「改到周日下午」" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "4. 无 AI 服务的设备自动降级本地规则：点「建守护」走分诊，功能完整" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "粘贴群消息，点「交给管家」；管家出提案，你在提案卡上点「拍板」即落地。" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "改期/加人/记账/取消直接跟管家说（如「改到周日下午」）；无 AI 服务的设备自动降级——点「建守护」走本地规则，功能完整。" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #45 C 切片：app 不能自驱唤醒 agent（无 needs/triggers），
                     // 宿主「Ask 牵线」面板问我任何问题时，我会主动带出临期/待拍板提醒
                     // （详见 AGENT.md「主动提示行为」小节）。
-                    Label{text: "5. 在宿主「Ask 牵线」面板可以问：「周六有什么安排？」——已确认的守护临期时我会主动提醒你" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{text: "在宿主「Ask 牵线」面板可以问：「周六有什么安排？」——已确认的守护临期时我会主动提醒你" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #29（外环派）：低频操作折叠区 ——
                     //   原 ai_row 的 4 个按钮（改时间 / AI 解析 / 导出数据 / 清空全部）
                     //   从根组件搬到「怎么用？」说明卡内,只在卡片展开时可见。
@@ -2532,14 +2543,15 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                 Card{
                     let slot_now = case_slot_day[sel] + "-" + case_slot_part[sel]
                     if slot_now == "-" { slot_now = "未抽取" }
+                    // UI 改版（card-ux：返回行为明确）：返回列表置顶——详情卡总高必须
+                    //   ≤ case_list 盒高（~480px），超出部分零布局（#31 实测机制）；
+                    //   置顶保证任何深度下出口可见。
+                    ButtonFlat{text: "← 返回列表" height: 40 on_click: || back_to_list()
+                        draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                        draw_text +: {color: accent color_hover: accent color_down: accent}}
                     BodyLine{text: "状态：" + case_status_text[sel] + " ｜ 时间：" + slot_now}
                     BodyLine{text: "参与人：" + case_people_line[sel] + " ｜ AA：" + case_bill_split_text[sel]}
                     BodyLine{text: "活动：" + case_activity_lines[sel] + " ｜ 地点：" + case_place_full[sel]}
-                    // #31g：原文行删（回执与折叠摘要已含）；返回列表上移——详情卡总高必须
-                    //   ≤ case_list 盒高（~480px），超出部分零布局（#31 实测机制）。
-                    ButtonFlat{text: "← 返回列表" height: 44 on_click: || back_to_list()
-                        draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                        draw_text +: {color: accent color_hover: accent color_down: accent}}
                     if case_receipt[sel].len() > 0 {
                         for _ri in case_receipt[sel].len() {
                             ReceiptLine{text: "  ↳ " + case_receipt[sel][_ri]}
@@ -2573,6 +2585,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     //   visible 初始隐藏由 load() 命令式完成（#48b 同款：声明 visible:false 会被 re-apply）。
     chat_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
         if ui_mode == "chat" {
+            // UI 改版（card-ux：返回行为明确）：出口置顶——长对话滚到底也能一眼看到
+            ButtonFlat{text: "← 回到守护列表" height: 40 on_click: || back_from_chat()
+                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                draw_text +: {color: accent color_hover: accent color_down: accent}}
             for ci in chat_text.len() {
                 let cr = "" + chat_role[ci]
                 let ct = "" + chat_text[ci]
@@ -2604,7 +2620,7 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
                     View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                         ButtonFlat{text: "拍板执行" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_approve()
                             draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
+                            draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
                         ButtonFlat{text: "放弃" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_decline()
                             draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
@@ -2613,9 +2629,6 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
             } else {
                 View{width: Fill height: 1}
             }
-            ButtonFlat{text: "← 回到守护列表" height: 44 on_click: || back_from_chat()
-                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                draw_text +: {color: accent color_hover: accent color_down: accent}}
             View{width: Fill height: 1}
         } else {
             View{width: Fill height: 1}
@@ -2646,20 +2659,14 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 12 draw_bg.co
     //   主区只留高频三键（确认/重新收敛/取消 + 怎么用？开关），ScrollYView 不再被挤压溢出。
     // ai_row 兜底占位（1px），与 on_render 空分支的 #5 硬约束范式对齐（ai-providers:241）。
     View{width: Fill height: 1}
-    // === #16 新增：首屏底部可点「怎么用？」—— 放在 ai_row 下方、整屏最底 ===
-    // 文本按钮（次级灰底 + accent 蓝字，视觉弱化但不抢眼）；
-    // 点击触发 toggle_howto() 翻转 howto_show_flag，再走 render_views() 重渲染说明卡。
-    // 根组件属性只在首次求值定型——但按钮本身的 on_click 是事件回调，不依赖 if 重算；
-    //   说明卡的显隐走 on_render 闭包内的 howto_show_flag 判断，符合硬约束 #1。
-    ButtonFlat{text: "怎么用？" height: 44 padding: Inset{left: 14 right: 14} on_click: || toggle_howto()
-        draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-        draw_text +: {color: accent color_hover: accent color_down: accent}}
-    // === #43 D 切片：底部「风格：X」按钮（与「怎么用？」同行，文字按钮样式）===
-    //   具名 style_btn → ui.style_btn.set_text(...) 命令式更新（根组件 if 只在首次定型，
-    //   on_render 重算不可靠——实证范式见 ui.hint.set_text line 493/504 等，已多次回归通过）。
-    //   文案随 receipt_style 变（标准/简短/带emoji），on_click 走 set_receipt_style()
-    //   循环切换。详见 set_receipt_style 内调用 ui.style_btn.set_text(...)。
-    style_btn := ButtonFlat{text: "风格：" + style_label_for(receipt_style) height: 44 padding: Inset{left: 14 right: 14} on_click: || set_receipt_style()
-        draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-        draw_text +: {color: accent color_hover: accent color_down: accent}}
+    // === #16 + #43（UI 改版合并）：「怎么用？」与「风格：X」并入一行文字按钮 ——
+    //   两个低频入口不再各占一行，省出的纵向空间给守护列表这一核心内容。
+    View{width: Fill height: Fit flow: Right spacing: 8
+        ButtonFlat{text: "怎么用？" height: 40 padding: Inset{left: 14 right: 14} on_click: || toggle_howto()
+            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+            draw_text +: {color: accent color_hover: accent color_down: accent}}
+        style_btn := ButtonFlat{text: "风格：" + style_label_for(receipt_style) height: 40 padding: Inset{left: 14 right: 14} on_click: || set_receipt_style()
+            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+            draw_text +: {color: accent color_hover: accent color_down: accent}}
+    }
 }
