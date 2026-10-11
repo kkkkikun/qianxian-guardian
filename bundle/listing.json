@@ -24,7 +24,7 @@
     "support": "kkkkikun@foxmail.com",
     "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
   },
-  "release_notes": "v0.7.0：提案出处高亮——PLAN 提案字段在消息原文中的位置以【】标出，「字段从哪来」一眼可验（no-facts 展示端闭环）；snap-to-png 工具回馈官方 App-Flow 开发链（PR #190）；App Hub 提交 issue 版本跟进。回归 22 项全绿。",
+  "release_notes": "v0.8.0：提案卡 diff 化（旧值──▶新值+冲突预演）；全员余额列表+垫付建议；梯度催收四段式；守护灯常驻条；沉默留痕（考虑过但没说的事可回看）；三级提醒+天气主动复核；device_calendar 系统日历写链（原生面板物理确认）；Kimi 真模型管家。回归 25/25。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

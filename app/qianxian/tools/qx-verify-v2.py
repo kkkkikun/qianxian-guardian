@@ -237,6 +237,11 @@ rec(3, "建守护 #2 可见", any("#2 ·" in t for t, r in labels(ws)), "列表�
 conf = [t for t, r in labels(ws) if "冲突" in t]
 rec(4, "冲突标签可见", len(conf) >= 1, f"conflict-labels={conf[:2]}")
 
+# R23（v0.8.0 W4）：守护灯常驻条 —— 列表顶部确定性摘要行
+light = [t for t, r in labels(ws) if t.startswith("🛡 守护中")]
+rec(23, "守护灯常驻条（确定性摘要）", len(light) >= 1 and "共 2 条守护" in light[0] and "⚡2 冲突" in light[0],
+    f"guard-light={light[:1]}")
+
 # ---- 进入详情模式（新路径核心） ----
 ws = click_title(ws, 2) or ws
 # #46 外环修正：软渲染重渲染有延迟——轮询等详情就绪（最多 ~6s），不靠单次 snap。
@@ -667,11 +672,11 @@ if t21:
             break
         get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
         time.sleep(1.0)
-    # 对账头出现（每人 ¥150.00）
+    # 对账头出现（v0.8.0 W2 新文案：按分取整；旧「每人 ¥150.00」头已升级为全员余额行）
     head_ok = False
     for _ in range(4):
         ws = snap()["s"]
-        head_ok = any("每人 ¥150.00" in t for t, r in labels(ws))
+        head_ok = any("应付按分取整" in t and "已收 ¥" in t for t, r in labels(ws))
         if head_ok:
             break
         get("/m?k=scroll&x=200&y=500&dx=0&dy=250")
@@ -696,16 +701,23 @@ if t21:
             break
         get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
         time.sleep(1.0)
-    # 差额行断言必须在第二笔收款前（收齐后该行变「已付清 ✓」）
+    # 差额行断言必须在第二笔收款前（收齐后该行变「已付清 ✓」）；v0.8.0 W2 全员余额
+    # 行：阿明（已付100/应付150/欠50）+ 小红（已付0/应付150/欠150）两行都要在；
+    # 同一时刻「谁该付下一笔」垫付建议行必须指向当前垫付最少者（小红 ¥0）
     diff_ok = False
+    tip_ok = False
     for _ in range(4):
         ws = snap()["s"]
-        diff_ok = any("阿明：已付 ¥100.00" in t and "差 ¥50.00" in t for t, r in labels(ws))
+        txts = [t for t, r in labels(ws)]
+        diff_ok = (any("阿明：已付 ¥100.00" in t and "欠 ¥50.00" in t for t in txts)
+                   and any("小红：已付 ¥0.00" in t and "欠 ¥150.00" in t for t in txts))
+        tip_ok = any("下次垫付建议：小红" in t and "¥0.00" in t for t in txts)
         if diff_ok:
             break
         if _ == 2:
             print("[R21-DEBUG]", [t[:60] for t, r in labels(ws) if "阿明" in t or "对账" in t or "已付" in t], flush=True)
         time.sleep(1.0)
+    rec(24, "谁该付下一笔（垫付最少者建议）", tip_ok, f"tip={tip_ok}")
     # 收款 小红 100 → 收齐自动清零
     pay2 = False
     for _ in range(6):
@@ -772,8 +784,33 @@ else:
     rec(21, "唱歌卡可见", False, "未找到卡片")
     rec(22, "跳过（依赖 R21）", False, "R21 未执行")
 
+# R25（v0.8.0 W5）：沉默留痕区 —— 无伴生进程时诚实空态（暂无留痕记录）。
+#   放全套末尾：进聊天视图会切 ui_mode/清选中态，插在中间会打断 R17-R22 的剧本链。
+#   区块在聊天视图最底（提案卡之后）——ScrollYView 虚拟化，先滚到底再断言。
+ws = snap()["s"]
+ws = type_text(ws, "在吗")
+bj2 = find(ws, "交给管家", "Button")
+if bj2:
+    x, y = center(bj2)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(2.2)
+    silent_head = False
+    silent_empty = False
+    for _ in range(8):
+        get("/m?k=scroll&x=200&y=700&dx=0&dy=400")
+        time.sleep(0.8)
+        ws = snap()["s"]
+        silent_head = any("沉默留痕" in t for t, r in labels(ws))
+        silent_empty = any("暂无留痕记录" in t for t, r in labels(ws))
+        if silent_head and silent_empty:
+            break
+    rec(25, "沉默留痕区（诚实空态）", silent_head and silent_empty,
+        f"区块标题={silent_head} 空态文案={silent_empty}")
+else:
+    rec(25, "交给管家按钮可见", False, "列表模式未找到按钮")
+
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v5：20 步既有 + v0.6.0 账目/证据 2 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v6：22 步既有 + v0.8.0 守护灯/垫付建议/沉默留痕 3 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):

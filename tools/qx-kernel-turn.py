@@ -25,8 +25,9 @@ PREAMBLE = ("你是「牵线」聚会守护管家，帮组织者把群消息变�
             "时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，"
             "然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\","
             "\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\","
-            "\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm(id)/reschedule(id+slot_day+"
-            "slot_part)/cancel(id)/add_people(id+people)/set_bill(id+bill_total)，字段值全部双引号字符串，"
+            "\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm/reschedule/cancel/"
+            "add_people/set_bill——除 create 外都必须包含 \"id\":\"<目标守护数字>\"（例 "
+            "{\"op\":\"confirm\",\"id\":\"2\"}），缺 id 会被拒，字段值全部双引号字符串，"
             "值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点"
             "「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒。回复中文、简短（≤120字）。")
 
@@ -35,14 +36,25 @@ def turn_text(user_msg):
     return PREAMBLE + "\n\n【当前守护】\n（还没有守护）\n\n【用户消息】\n" + user_msg
 
 
-def prep_profile(base_url, model, key=""):
+def prep_profile(base_url, model, key="", family=None):
     os.makedirs(f"{DATA}/profiles", exist_ok=True)
     now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
-    family = "local" if base_url else "minimax-cn"
-    route = {"api_key_env": "MINIMAX_CN_API_KEY"} if not base_url else {"api_key_env": "LOCAL_API_KEY", "base_url": base_url}
+    if base_url:
+        family = "local"
+        route = {"api_key_env": "LOCAL_API_KEY", "base_url": base_url}
+        env_vars = {"LOCAL_API_KEY": key} if key else {}
+    else:
+        # family 由调用方显式指定：minimax-cn / moonshot-coding（Kimi Coding Plan，
+        # registry/moonshot_coding.rs：https://api.kimi.com/coding/v1，OpenAI 兼容）
+        if family == "moonshot-coding":
+            route = {"api_key_env": "KIMI_CODING_API_KEY"}
+            env_vars = {"KIMI_CODING_API_KEY": key}
+        else:
+            route = {"api_key_env": "MINIMAX_CN_API_KEY"}
+            env_vars = {}
     prof = {"id": "_main", "name": "test", "enabled": True, "created_at": now, "updated_at": now,
             "config": {"llm": {"primary": {"family_id": family, "model_id": model, "route": route}},
-                       "env_vars": ({"LOCAL_API_KEY": key} if key else {})}}
+                       "env_vars": env_vars}}
     json.dump(prof, open(f"{DATA}/profiles/_main.json", "w"), indent=2)
 
 
@@ -104,7 +116,15 @@ class Kernel:
 
 def main():
     real = "--real" in sys.argv
-    if real:
+    kimi = "--kimi" in sys.argv
+    if kimi:
+        # Kimi Coding Plan 真模型（用户提供 key，.secrets/ 不入库；2026-10-11 实测
+        # PLAN 协议合规 + get_weather function calling，5-10s 出全量回复）。
+        # 注意：key 只进 profile env_vars——ambient 环境变量会让内核把 kimi-* 模型
+        # 误探测到普通 moonshot family（api.moonshot.ai），coding key 被拒 → 启动失败。
+        key = open("/home/kikun/MyProject/Agentic-octos/.secrets/kimi-api-key").read().strip()
+        prep_profile(None, "kimi-for-coding", key=key, family="moonshot-coding")
+    elif real:
         # 内环同款：内核原生 minimax-cn provider（scripts/qx-dispatch.sh 通路，网络实测可达）
         key = open("/home/kikun/MyProject/Agentic-octos/.secrets/minimax_cn.key").read().strip()
         os.environ["MINIMAX_CN_API_KEY"] = key

@@ -17,7 +17,8 @@
   "capabilities": [
     "storage",
     "octos.turn.start",
-    "matrix.send_message"
+    "matrix.send_message",
+    "device_calendar"
   ],
   "compute": {
     "instruction_budget": null,
@@ -25,7 +26,7 @@
   },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "b829df939900c820a5e57b694892e438e9dd0348defe679dd4a6aada6d291657"
+    "bundle_blake3": "8675f25d81ebf5143ce411261f2bc578ae8912fd884621c0effe993d538c7e21"
   },
   "name": "牵线",
   "network": {
@@ -35,5 +36,5 @@
   "storage": {
     "max_bytes": null
   },
-  "version": "0.7.0"
+  "version": "0.8.0"
 }

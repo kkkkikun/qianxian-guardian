@@ -55,6 +55,13 @@ let plan_place = ""
 let plan_people = ""
 let plan_bill = ""
 let plan_lines = []
+// === v0.8.0 W1（调研报告 P0）：拍板反馈回路 —— 拒绝不是死路，是改道入口 ===
+//   decline_prompt: 两段式理由选择态（第一次点「放弃」先问理由，8 秒不选自动收回）
+//   decline_feedback: 一次性反馈（【上次提案被拒：…】随下一轮管家 turn 注入后清空）
+//   三级拍板作用域只取两档——「仅此次」（默认）与「拒绝并改写」；「同类放行」与
+//   「人只拍板」红线冲突，诚实不做（Copilot CLI 三档在案的取舍，理由记 evidence）。
+let decline_prompt = "no"
+let decline_feedback = ""
 fn set_people_draft(s){
     people_draft = s
 }
@@ -245,6 +252,7 @@ let pref_save_result = "ok"
 
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
 // 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
+let guard_light = ""
 fn rebuild_lines(){
     // === #10/#12 新增：筛选下标数组 + 计数串在这里重建（filter 逻辑放函数上下文，不进 on_render） ===
     // #12 叠加：先用 current_filter 过一遍得到「标签总数 M」与候选 idxs；
@@ -292,6 +300,27 @@ fn rebuild_lines(){
                 n = n + 1
             }
         }
+    }
+    // === v0.8.0 W4（调研报告 P1）：守护灯常驻条——主动信息的固定入口 ===
+    //   灵动岛同款「家」：全部待办一眼可见，防 Google Now 式「主动卡片没有家而消亡」。
+    //   全部确定性推导（与徽章/筛选同源语义），零 AI 参与；异常缺失时明说「无异常」。
+    let light_proposing = 0
+    let light_conflict = 0
+    let light_tailing = 0
+    for li2 in cases.len() {
+        let st2 = "" + cases[li2]["status"]
+        if st2 == "Proposing" { light_proposing = light_proposing + 1 }
+        if ("" + cases[li2]["conflict"]) == "yes" && st2 != "Cancelled" && st2 != "Completed" { light_conflict = light_conflict + 1 }
+        if (st2 == "Confirmed" || st2 == "Completed") && ("" + cases[li2]["bill_total"]) != "" && ("" + cases[li2]["bill_cleared"]) != "yes" {
+            light_tailing = light_tailing + 1
+        }
+    }
+    guard_light = "🛡 守护中 · 共 " + ("" + cases.len()) + " 条守护"
+    if light_proposing > 0 { guard_light = guard_light + " · " + ("" + light_proposing) + " 待拍板" }
+    if light_conflict > 0 { guard_light = guard_light + " · ⚡" + ("" + light_conflict) + " 冲突" }
+    if light_tailing > 0 { guard_light = guard_light + " · " + ("" + light_tailing) + " 待收尾" }
+    if light_proposing == 0 && light_conflict == 0 && light_tailing == 0 {
+        guard_light = guard_light + " · 无异常"
     }
     filter_count_str = "" + n
     case_ids.clear()
@@ -574,9 +603,11 @@ fn load(){
     //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
     ui.detail_list.set_visible(false)
     // v0.6.0：读 payments.json（按人收款，独立文件）
+    // v0.8.0 修真实 bug：这里原写成 to_json()（字符串→json 字符串），payments 字段
+    //   取不到 → 重启后收款记录静默丢失、对账归零。与 cases.json 同款 parse_json。
     if fs.exists("payments.json") {
         let praw = fs.read("payments.json")
-        let pdata = praw.to_json()
+        let pdata = praw.parse_json()
         if pdata != nil && pdata.payments != nil {
             for pi in pdata.payments.len() {
                 pay_case.push("" + pdata.payments[pi])
@@ -1081,8 +1112,58 @@ fn back_to_list(){
 }
 
 // === 决赛 S3：管家对话视图进出 ===
+// === v0.8.0 W5（调研报告 P1）：沉默留痕——「AI 考虑过但没说的事，你都能回看」 ===
+//   守护伴生进程（qx-group-butler）每轮检查后，把「条件未满足、决定不打扰」的决策
+//   追加进 jail 的 suppressed.json；app 进聊天视图时读回展示。全场独有的差异化：
+//   别的 agent 炫耀做了什么，这里的 agent 能交代「为什么没做」（arXiv 2605.06717
+//   「被压下的候选推送也要记录，事后可审计」）。解析失败/缺文件 → 诚实显示暂无留痕。
+let suppressed_lines = []
+let suppressed_count = 0
+fn suppressed_kind_label(k){
+    if k == "weather_ok" { return "☀ 天气复核：无雨，未发预警" }
+    if k == "weather_unknown" { return "☁ 天气复核：未查到，提醒照发不带天气" }
+    if k == "not_due" { return "⏳ 提醒未到期" }
+    if k == "dunning" { return "💰 催收未到档" }
+    if k == "conflict_watch" { return "👀 冲突观察" }
+    return k
+}
+fn load_suppressed(){
+    suppressed_lines = []
+    suppressed_count = 0
+    if fs.exists("suppressed.json") {
+        let raw = fs.read("suppressed.json")
+        let v = raw.parse_json()
+        if v != nil {
+            // v = {"entries":[{ts,kind,detail},…]}（bridge 追加写；对象包裹与 cases.json
+            // 同范式——parse_json 只吃对象。只展示最近 5 条防列表撑爆）
+            let arr = v["entries"]
+            if arr == nil { arr = [] }
+            let n5 = arr.len()
+            let start = 0
+            if n5 > 5 { start = n5 - 5 }
+            for i in n5 {
+                if i >= start {
+                    let e = arr[i]
+                    if e != nil {
+                        let dt = "" + e["detail"]
+                        if dt != "" {
+                            suppressed_lines.push(("" + e["ts"]) + " ｜ " + suppressed_kind_label("" + e["kind"]) + " ｜ " + dt)
+                            suppressed_count = suppressed_count + 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // 空态占位行统一在这里保证（含文件缺失/解析失败的所有早退路径——闭包只做
+    // 无条件 for，防闭包内 if/else+嵌套 for 组合的 pop_stack 渲染崩）
+    if suppressed_count == 0 {
+        suppressed_lines.push("暂无留痕记录——伴生守护进程运行后，未触发的提醒/预警都会记在这里")
+    }
+}
 fn enter_chat(){
     ui_mode = "chat"
+    load_suppressed()
     ui.case_list.set_visible(false)
     ui.detail_list.set_visible(false)
     ui.chat_list.set_visible(true)
@@ -1608,7 +1689,7 @@ fn chat_push(role, text){
 // Rinx 不给 mini-app 注入 AGENT.md（宿主侧 turn_input 无 guidance 分支，源码级核实），
 // 所以角色与协议必须由 app 自己嵌入 turn 文本——与 AGENT.md v3 同文，双处一致。
 fn build_agent_turn(user_text){
-    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm(id)/reschedule(id+slot_day+slot_part)/cancel(id)/add_people(id+people)/set_bill(id+bill_total)/complete(id 标记活动完成)/draft_dunning(id 生成催收草稿——数字由 app 从状态计算，你只管提议)，字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字。回复中文、简短（≤120字）。"
+    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm/reschedule/cancel/add_people/set_bill/complete/draft_dunning——除 create 外每个 op 的 PLAN 都必须包含 \"id\":\"<目标守护数字>\" 字段（例：{\"op\":\"confirm\",\"id\":\"2\"}；{\"op\":\"reschedule\",\"id\":\"1\",\"slot_day\":\"周日\",\"slot_part\":\"下午\"}；{\"op\":\"add_people\",\"id\":\"1\",\"people\":\"张三\"}；{\"op\":\"set_bill\",\"id\":\"1\",\"bill_total\":\"300\"}），缺 id 的提案会被拒；字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字；7)若本回合带【上次提案被拒】，必须按该理由调整方案，不许原样重提。回复中文、简短（≤120字）。"
     let st = pre + "\n\n【当前守护】\n"
     if cases.len() == 0 {
         st = st + "（还没有守护）"
@@ -1617,8 +1698,18 @@ fn build_agent_turn(user_text){
             st = st + "#" + ("" + cases[i]["id"]) + " " + ("" + cases[i]["activity"])
             st = st + "｜" + ("" + cases[i]["slot_day"]) + "-" + ("" + cases[i]["slot_part"])
             st = st + "｜" + ("" + cases[i]["place"])
-            st = st + "｜" + ("" + cases[i]["status"]) + "\n"
+            st = st + "｜" + ("" + cases[i]["status"])
+            // v0.8.0 W1 快照富化：管家能看到人与账，才能答「张三交了吗」这类问题
+            st = st + "｜人:" + ("" + cases[i]["people"])
+            st = st + "｜账:" + ("" + cases[i]["bill_total"])
+            if ("" + cases[i]["bill_cleared"]) == "yes" { st = st + "(已收齐)" }
+            if ("" + cases[i]["conflict"]) == "yes" { st = st + "｜⚡冲突" }
+            st = st + "\n"
         }
+    }
+    // v0.8.0 W1：拍板反馈回路——拒绝理由一次性注入（调用方 build 后立即清空）
+    if decline_feedback != "" {
+        st = st + "\n【上次提案被拒】" + decline_feedback
     }
     return st + "\n【用户消息】\n" + user_text
 }
@@ -1642,9 +1733,11 @@ fn butler_send(){
         ai_seq = ai_seq + 1
         let my = ai_seq
         chat_push("sys", "管家思考中…（约 45 秒，无响应自动降级本地规则）")
-        // 30s 兜底（turn.start 首次会等「允许」，8s 太短见 #37）；代际核对防旧回合降级新回合
+        // v0.8.0 W1：拒绝理由一次性反馈——先注入进 turn 文本再清空（只影响本回合）
+        let turn_text = build_agent_turn(text)
+        decline_feedback = ""
         start_timeout(45.0, || ai_timeout(my))
-        host.request("octos.turn.start", {text: build_agent_turn(text)}, fn(r){
+        host.request("octos.turn.start", {text: turn_text}, fn(r){
             // 决赛改进②：迟到回调按序号丢弃——已被新回合取代时不动任何 UI 状态
             if my != ai_seq { return }
             ai_pending = "no"
@@ -1821,32 +1914,71 @@ fn build_plan_lines(){
         plan_lines.push("参与人：" + disp(plan_people) + " ｜ AA 总额：" + disp(plan_bill))
     } else {
         let pid = ("" + plan_id).to_f64()
+        let ci = -1
+        for i in cases.len() {
+            if cases[i]["id"] == pid { ci = i }
+        }
         if pid <= 0 {
             plan_check = "提案缺目标 id——拒绝执行"
             plan_lines.push("op：" + plan_op_label(op) + "（目标 id 缺失）")
-        } else {
-            let found = "no"
-            for i in cases.len() {
-                if cases[i]["id"] == pid { found = "yes" }
-            }
-            if found == "no" {
-                plan_check = "目标 #" + plan_id + " 不存在——拒绝执行"
-            }
+        } else if ci < 0 {
+            plan_check = "目标 #" + plan_id + " 不存在——拒绝执行"
             plan_lines.push("op：" + plan_op_label(op) + " ｜ 目标：#" + plan_id)
+        } else {
+            // === v0.8.0 W1（调研报告 P0）：提案卡 diff 化——拍板前看清「变了什么」 ===
+            //   旧值从 cases 现取，新值从 PLAN 取（Cursor diff 审批同款语义）；
+            //   改期类附冲突预演：纯试算不改状态，改后撞不撞一眼可见。
+            plan_lines.push("op：" + plan_op_label(op) + " ｜ 目标：#" + plan_id + " " + ("" + cases[ci]["activity"]))
+            if op == "confirm" {
+                plan_lines.push("状态：" + status_badge_text("" + cases[ci]["status"]) + " ──▶ 已确认（回执+日历+群通知）")
+            }
             if op == "reschedule" {
                 if plan_day == "" && plan_part == "" {
                     plan_check = "改期提案缺时间（slot_day/slot_part 均空）——拒绝执行"
                 }
-                plan_lines.push("改为：" + slot_disp())
+                let old_disp = ("" + cases[ci]["slot_day"]) + "-" + ("" + cases[ci]["slot_part"])
+                let same_tag = ""
+                if ("" + cases[ci]["slot_day"]) == plan_day && ("" + cases[ci]["slot_part"]) == plan_part {
+                    same_tag = "（与当前相同，无实际改动）"
+                }
+                plan_lines.push("时间：" + old_disp + " ──▶ " + slot_disp() + same_tag)
+                // 冲突预演（纯试算）：目标槽位上还有几条活跃守护（不含自身）
+                let hits = 0
+                let hit_ids = ""
+                for k in cases.len() {
+                    if k == ci { continue }
+                    let st2 = "" + cases[k]["status"]
+                    if st2 == "Cancelled" || st2 == "Completed" { continue }
+                    if plan_day != "" && plan_part != "" {
+                        if ("" + cases[k]["slot_day"]) == plan_day && ("" + cases[k]["slot_part"]) == plan_part {
+                            hits = hits + 1
+                            if hit_ids != "" { hit_ids = hit_ids + "、" }
+                            hit_ids = hit_ids + "#" + ("" + cases[k]["id"])
+                        }
+                    }
+                }
+                if hits > 0 {
+                    plan_lines.push("冲突预演：⚡改后与 " + hit_ids + " 撞" + plan_day + plan_part + "（仍可拍板，由你权衡）")
+                } else {
+                    plan_lines.push("冲突预演：✓ 改后无冲突")
+                }
+            }
+            if op == "cancel" {
+                plan_lines.push("状态：" + status_badge_text("" + cases[ci]["status"]) + " ──▶ 已取消（拍板后 5 秒内可撤销）")
+            }
+            if op == "complete" {
+                plan_lines.push("状态：" + status_badge_text("" + cases[ci]["status"]) + " ──▶ 已完成（AA 收齐后待收尾徽章自动清）")
             }
             if op == "add_people" {
                 if plan_people == "" {
                     plan_check = "加人提案缺姓名（people 为空）——拒绝执行"
                 }
-                plan_lines.push("加参与人：" + plan_people)
+                plan_lines.push("参与人：" + disp("" + cases[ci]["people"]) + " ──▶ +" + plan_people)
             }
             if op == "set_bill" {
-                plan_lines.push("AA 总额：" + disp(plan_bill))
+                let old_bill = "" + cases[ci]["bill_total"]
+                if old_bill == "" { old_bill = "未记账" }
+                plan_lines.push("AA 总额：" + old_bill + " ──▶ " + disp(plan_bill))
             }
         }
     }
@@ -1931,11 +2063,74 @@ fn butler_approve(){
         if n > 0 { due = total_f / n }
         let act = "" + cases[ci2]["activity"]
         if act == "" { act = "聚会" }
-        let draft = "【催收草稿】#" + plan_id + " " + act + "（" + ("" + cases[ci2]["slot_day"]) + "-" + ("" + cases[ci2]["slot_part"]) + " · " + ("" + cases[ci2]["place"]) + "）：AA 总额 ¥" + cut2(total_f) + "，按 " + ("" + n) + " 人均摊每人 ¥" + cut2(due) + "，已收 ¥" + cut2(paid) + "，还差 ¥" + cut2(out) + "。麻烦还没转的伙伴今天转一下组织者，谢谢～"
+        let head2 = "【催收草稿】#" + plan_id + " " + act + "（" + ("" + cases[ci2]["slot_day"]) + "-" + ("" + cases[ci2]["slot_part"]) + " · " + ("" + cases[ci2]["place"]) + "）：AA 总额 ¥" + cut2(total_f) + "，已收 ¥" + cut2(paid) + "，还差 ¥" + cut2(out) + "。"
+        // === v0.8.0 W3（调研报告 P0）：梯度催收四段式——档位由代码按 target_date 与
+        //   今天（北京）算出，确定性选档；永不公示名单（微信收款公示争议是前车之鉴）。
+        //   事前=垫付建议（账本区 ledger_tip）；T+1 系统口吻不点名；T+3 私发名单（给人
+        //   看的私聊草稿，非群发）；T+7 最后一催+「结束账单」体面出口（Settle Up/Splitwise
+        //   /微信群收款三种行业答案的组合）。
+        let tier = "basic"
+        let td = "" + cases[ci2]["target_date"]
+        if td != "" {
+            let dt = td.split("-")
+            if dt.len() == 3 {
+                let ty = dt[0].to_f64()
+                let tm = dt[1].to_f64()
+                let tdd = dt[2].to_f64()
+                let t = local_time()
+                let shift = 0
+                if t.hour >= 16 { shift = 1 }
+                let today_z = days_from_civil(t.year, t.month, t.day) + shift
+                let target_z = days_from_civil(ty, tm, tdd)
+                let ds = today_z - target_z
+                if ds < 1 { tier = "pre" }
+                else if ds < 3 { tier = "t1" }
+                else if ds < 7 { tier = "t3" }
+                else { tier = "t7" }
+            }
+        }
+        let draft = ""
+        if tier == "pre" {
+            draft = head2 + "活动还没开始，先不动员；活动次日起新梯度提醒会跟上。"
+        } else if tier == "t1" {
+            draft = head2 + "麻烦还没转的伙伴这两天转一下组织者，谢谢～（系统口吻，不点名）"
+        } else if tier == "t3" {
+            // 私发名单：逐人欠款只给组织者本人，请 TA 逐个私聊——不公示
+            let name_list = ""
+            let ppl2 = "" + cases[ci2]["people"]
+            let idx3 = 0
+            for nm3 in ppl2.split(",") {
+                let who3 = nm3.trim()
+                if who3 == "" { continue }
+                let due3 = due_for_idx(total_f, n, idx3)
+                let mine3 = 0
+                for q3 in pay_person.len() {
+                    if pay_case[q3] == ("" + cases[ci2]["id"]) && pay_person[q3] == who3 {
+                        let v3 = pay_amount[q3].to_f64()
+                        if v3 > 0 { mine3 = mine3 + v3 }
+                    }
+                }
+                let diff3 = due3 - mine3
+                if diff3 > 0.005 {
+                    if name_list != "" { name_list = name_list + "；" }
+                    name_list = name_list + who3 + " 差 ¥" + cut2(diff3)
+                }
+                idx3 = idx3 + 1
+            }
+            if name_list == "" {
+                draft = head2 + "差额集中在多垫的人身上，收齐时找齐即可。"
+            } else {
+                draft = "【私发提醒名单】" + act + " AA 还差 ¥" + cut2(out) + "：" + name_list + "。请逐个私聊提醒（勿在群里公示）——数字由 app 按账本算出。"
+            }
+        } else if tier == "t7" {
+            draft = head2 + "【最后一催】还没转的伙伴今天转一下；实在收不齐，就在详情里点「AA 已收齐」体面结账，差额线下算清——别让一场聚会伤了和气。"
+        } else {
+            draft = head2 + "按 " + ("" + n) + " 人均摊每人约 ¥" + cut2(due) + "。麻烦还没转的伙伴今天转一下组织者，谢谢～"
+        }
         ui.msg_input.set_text(draft)
-        audit("draft_dunning", "#" + plan_id + " 差额 ¥" + cut2(out))
-        chat_push("sys", "催收草稿已生成（金额/差额全部由确定性代码从状态机算出）——已填入输入框，核对后复制发送即可")
-        ui.hint.set_text("催收草稿已生成——数字全部来自状态机快照，模型零参与")
+        audit("draft_dunning", tier + " #" + plan_id + " 差额 ¥" + cut2(out))
+        chat_push("sys", "催收草稿已生成（梯度 " + tier + " 档，按活动日期确定性选档；金额/差额全部由代码从状态机算出）——已填入输入框，核对后复制发送即可")
+        ui.hint.set_text("催收草稿已生成（" + tier + " 档）——数字全部来自状态机快照，模型零参与")
         last_actor = "user"
         return
     } else {
@@ -1948,14 +2143,44 @@ fn butler_approve(){
     render_views()
 }
 
-// 放弃提案（继续对话让管家改）
+// === v0.8.0 W1：放弃提案（两段式 + 理由反馈回路） ===
+// 第一次点「放弃」→ 理由快捷项（8 秒不选自动收回，照 cancel_pending 的 start_timeout
+// 同源机制）；选「时间不对/地点不对/理解错了」→ 理由挂 decline_feedback，下一轮管家
+// turn 自动注入【上次提案被拒】——agent 从被拒中改道的闭环；「我自己来」= 纯放弃不注。
 fn butler_decline(){
     if plan_pending != "yes" { return }
-    plan_pending = "no"
-    chat_push("sys", "已放弃本次提案（可继续对管家说怎么改）")
-    render_views()
-    ui.hint.set_text("已放弃提案，继续和管家聊，或点「建守护」走本地规则")
+    if decline_prompt != "yes" {
+        decline_prompt = "yes"
+        start_timeout(8.0, || decline_timeout())
+        render_views()
+        return
+    }
+    decline_finish("", "")
 }
+fn decline_timeout(){
+    if decline_prompt == "yes" {
+        decline_prompt = "no"
+        render_views()
+    }
+}
+fn decline_finish(reason_label, feedback){
+    decline_prompt = "no"
+    plan_pending = "no"
+    decline_feedback = feedback
+    if reason_label == "self" {
+        chat_push("sys", "已放弃——你在详情里自己动手即可")
+    } else if reason_label == "" {
+        chat_push("sys", "已放弃本次提案（可继续对管家说怎么改）")
+    } else {
+        chat_push("sys", "已拒绝（理由已记录：「" + reason_label + "」）——下一轮管家会带着这个理由改方案")
+    }
+    render_views()
+    ui.hint.set_text("提案已处理")
+}
+fn decline_reason_time(){ decline_finish("时间不对", "时间不对——请重新收敛时段（拿不准可先问用户具体哪天）") }
+fn decline_reason_place(){ decline_finish("地点不对", "地点不对——请重新确认地点") }
+fn decline_reason_intent(){ decline_finish("理解错了", "理解错了意图——请重读消息原文重新收敛") }
+fn decline_reason_self(){ decline_finish("self", "") }
 
 // === S3 新增白名单动作：显式改时间（reschedule 提案的执行端；与 cycle_slot 的
 //   5 槽轮换互补——这里写入显式 day/part，词表归一由 plan_parse 前置保证）===
@@ -2066,10 +2291,42 @@ fn paid_total(ci){
 // rebuild_selected_ledger()：为选中守护构建对账明细行（on_render 只读扁平数组）
 // 副作用：自动推导 bill_cleared（人人差额≤0 或 已收≥总额 且 有账）→ 原位写回 cases
 let ledger_lines = []
+let ledger_diff = []    // v0.8.0 W2 平行色标："due"（还欠，琥珀）/"ok"（已清，玉绿）
 let ledger_head = ""
+let ledger_tip = ""     // v0.8.0 W2「谁该付下一笔」垫付建议（Settle Up 同款事前消解）
+// v0.8.0 W2：正数 f64 取整（to_chars 扫整数位，不依赖 math.floor——两代宿主方法表
+// 有差异，main.splash 既有代码全部手工字符扫描，同源零新依赖）。
+fn ifloor(x){
+    let s = "" + x
+    let cs = s.to_chars()
+    let dot = -1
+    for i in cs.len() {
+        if cs[i] == 46 { dot = i }
+    }
+    if dot < 0 { return x }
+    let out = ""
+    for i in dot {
+        if cs[i] == 45 { out = out + "-" } else { out = out + ("" + (cs[i] - 48)) }
+    }
+    return out.to_f64()
+}
+// v0.8.0 W2：按分取整的每人应付（舍入规则写死——blueprint 口径）：
+//   总额×100 取整为总分数 tc；base = floor(tc÷n)；前 rem = tc−base×n 人各 +1 分；
+//   尾差落在名单末位之前——总计恒等于总额，永不超收/少收（Tricount 同款语义，
+//   Splitwise「从不改变任何人的总余额」）。数字全部由代码算出，模型零参与。
+fn due_for_idx(total_f, n, idx){
+    let tc = ifloor(total_f * 100.0 + 0.5)
+    let base = ifloor(tc / n)
+    let rem = tc - base * n
+    let mine = base
+    if idx < rem { mine = base + 1 }
+    return mine / 100.0
+}
 fn rebuild_selected_ledger(){
     ledger_lines = []
+    ledger_diff = []
     ledger_head = ""
+    ledger_tip = ""
     let ci = -1
     for i in cases.len() {
         if cases[i]["id"] == selected_id { ci = i }
@@ -2082,13 +2339,14 @@ fn rebuild_selected_ledger(){
     let ppl = "" + cases[ci]["people"]
     let n = count_people(ppl)
     if n <= 0 { return }
-    let due_f = total_f / n
     let paid_all = paid_total(ci)
-    ledger_head = "对账：总额 ¥" + cut2(total_f) + " × " + ("" + n) + " 人 = 每人 ¥" + cut2(due_f) + " ｜ 已收 ¥" + cut2(paid_all)
-    // 逐人：已付 / 应付 / 差
-    for p in pay_person.len() {
-        if pay_case[p] != ("" + cases[ci]["id"]) { continue }
-        let who = pay_person[p]
+    ledger_head = "对账：总额 ¥" + cut2(total_f) + " × " + ("" + n) + " 人 ｜ 已收 ¥" + cut2(paid_all) + " ｜ 应付按分取整，尾差落末位"
+    // v0.8.0 W2：全员余额列表——每人一行 应付/已付/差额（Splitwise 绿橙方向色惯例）
+    let idx = 0
+    for nm in ppl.split(",") {
+        let who = nm.trim()
+        if who == "" { continue }
+        let due_i = due_for_idx(total_f, n, idx)
         // 同人可能多笔——求和
         let mine = 0
         for q in pay_person.len() {
@@ -2097,22 +2355,43 @@ fn rebuild_selected_ledger(){
                 if v > 0 { mine = mine + v }
             }
         }
-        // 只对在参与人名单里的人出对账行（防收款记错人）
-        let in_list = "no"
-        for nm in ppl.split(",") {
-            if nm.trim() == who { in_list = "yes" }
+        let diff = due_i - mine
+        if diff > 0.005 {
+            ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 欠 ¥" + cut2(diff))
+            ledger_diff.push("due")
+        } else if diff < -0.005 {
+            ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 多垫 ¥" + cut2(0 - diff) + "（收齐时找齐）")
+            ledger_diff.push("ok")
+        } else {
+            ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 已付清 ✓")
+            ledger_diff.push("ok")
         }
-        if in_list != "yes" { continue }
-        let diff = due_f - mine
-        let line = ""
-        if diff > 0.001 { line = who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_f) + " / 差 ¥" + cut2(diff) }
-        else { line = who + "：已付 ¥" + cut2(mine) + " / 已付清 ✓" }
-        // 去重：同人只出一行（后续同人行跳过）
-        let dup = "no"
-        for d in ledger_lines.len() {
-            if ledger_lines[d] == line { dup = "yes" }
+        idx = idx + 1
+    }
+    // v0.8.0 W2：「谁该付下一笔」——当前垫付最少的成员先补（事前压低欠款概率）
+    if paid_all < total_f {
+        let min_paid = -1
+        let min_who = ""
+        let idx2 = 0
+        for nm2 in ppl.split(",") {
+            let who2 = nm2.trim()
+            if who2 == "" { continue }
+            let mine2 = 0
+            for q2 in pay_person.len() {
+                if pay_case[q2] == ("" + cases[ci]["id"]) && pay_person[q2] == who2 {
+                    let v2 = pay_amount[q2].to_f64()
+                    if v2 > 0 { mine2 = mine2 + v2 }
+                }
+            }
+            if min_paid < 0 || mine2 < min_paid {
+                min_paid = mine2
+                min_who = who2
+            }
+            idx2 = idx2 + 1
         }
-        if dup == "no" { ledger_lines.push(line) }
+        if min_who != "" {
+            ledger_tip = "下次垫付建议：" + min_who + "（当前垫付最少 ¥" + cut2(min_paid) + "）——收款先找 TA"
+        }
     }
     // 自动清零判定：已收 ≥ 总额 → bill_cleared=yes（确定性推导，替代手动）
     if paid_all >= total_f && cases[ci]["bill_cleared"] != "yes" {
@@ -2161,6 +2440,7 @@ fn add_payment(){
 }
 
 // === v0.6.0 P4：Evidence Pack 导出（case 快照 + 审计链 + 确定性断言） ===
+// === v0.8.0 W5+W8 增补：沉默留痕纳入 + 守护回放（Devin Session Insights 同款统计） ===
 fn export_evidence(id_str){
     let ci = -1
     for i in cases.len() {
@@ -2174,10 +2454,44 @@ fn export_evidence(id_str){
     let paid = paid_total(ci)
     let due = 0
     if n > 0 { due = total_f / n }
-    let ev = {case: cases[ci], ledger: {total: bt, people_count: ("" + n), due_per_person: cut2(due), paid_total: cut2(paid), outstanding: cut2(total_f - paid)}, assertion: {rule: "due_per_person = bill_total / count_people; paid_total = sum(payments); outstanding = bill_total - paid_total", bill_total: bt, people_count: ("" + n), paid_total: cut2(paid), computed_outstanding: cut2(total_f - paid)}, audit: audit_log}
+    // W8 守护回放：审计链按 action 统计 + 首/末事件（时间线符号标注在 replay.actions）
+    let replay_actions = ""
+    let replay_kinds = []
+    let replay_counts = []
+    for ai in audit_log.len() {
+        let seg = ("" + audit_log[ai]).split(" | ")
+        if seg.len() >= 3 {
+            let ak = seg[2]
+            let hit = -1
+            for rk in replay_kinds.len() {
+                if replay_kinds[rk] == ak { hit = rk }
+            }
+            if hit >= 0 {
+                replay_counts[hit] = replay_counts[hit] + 1
+            } else {
+                replay_kinds.push(ak)
+                replay_counts.push(1)
+            }
+        }
+    }
+    for rk in replay_kinds.len() {
+        if replay_actions != "" { replay_actions = replay_actions + "; " }
+        replay_actions = replay_actions + replay_kinds[rk] + "×" + ("" + replay_counts[rk])
+    }
+    // W5 沉默留痕随包导出（「为什么没做」也是证据链的一环）
+    let sup_e = []
+    if fs.exists("suppressed.json") {
+        let sv = ("" + fs.read("suppressed.json")).parse_json()
+        if sv != nil { sup_e = sv }
+    }
+    let first_ev = ""
+    let last_ev = ""
+    if audit_log.len() > 0 { first_ev = "" + audit_log[0] }
+    if audit_log.len() > 0 { last_ev = "" + audit_log[audit_log.len() - 1] }
+    let ev = {case: cases[ci], ledger: {total: bt, people_count: ("" + n), due_per_person: cut2(due), paid_total: cut2(paid), outstanding: cut2(total_f - paid)}, assertion: {rule: "due_per_person = bill_total / count_people; paid_total = sum(payments); outstanding = bill_total - paid_total", bill_total: bt, people_count: ("" + n), paid_total: cut2(paid), computed_outstanding: cut2(total_f - paid)}, audit: audit_log, replay: {actions_summary: replay_actions, first_event: first_ev, last_event: last_ev, rule: "全程审计链可回放；提案出处与拍板 actor（user/agent）逐条在案"}, suppressed: sup_e}
     let r = fs.write("evidence/case-" + id_str + ".json", ev.to_json())
     if r == nil {
-        ui.hint.set_text("证据包已导出：evidence/case-" + id_str + ".json（快照+审计链+确定性断言，可离线校验）")
+        ui.hint.set_text("证据包已导出：evidence/case-" + id_str + ".json（快照+审计链+回放统计+沉默留痕，可离线校验）")
     } else {
         ui.hint.set_text("证据包导出失败：" + ("" + r))
     }
@@ -2399,6 +2713,118 @@ fn post_confirm_actions(id_str){
             })
         }
     }
+    // ③ 本机日历写入（v0.8.0：RC2 device_calendar 官方通路）。启发式：拍板确认后
+    //    app 自动走「授权→选日历→原生面板写入」，人在原生面板上只做物理确认；
+    //    events.create 由宿主原生 review 兜底，本 app 无任何静默写。Linux 宿主无此
+    //    服务 → host.has 门检跳过（ICS 已在①生成，任何日历软件可导入，诚实降级）。
+    if host.has("device_calendar") {
+        calendar_write_case(id_str)
+    }
+}
+
+// === v0.8.0：device_calendar 写链（RC2 官方协议；参数名/校验与
+//    OctoSense crates/shell/src/device_calendar 逐字对齐） ===
+// 链：permission.request（原生授权）→ calendars.list → 取第一个可写日历 →
+//     calendars.select（原生 review，回 handle）→ events.create（原生面板物理确认，
+//     all-day 事件 UTC 零点边界）。每一步失败都真实原因透出 + ICS 兜底提示。
+let cal_write_id = ""
+let cal_handle = ""
+fn cal_degrade(stage, err){
+    ui.hint.set_text("本机日历：" + stage + "失败（" + err + "）——已生成 ICS，可导入任何日历软件")
+}
+fn calendar_write_case(id_str){
+    cal_write_id = id_str
+    cal_handle = ""
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur < 0 { return }
+    // all-day 事件需要绝对日期（no-facts：相对词对不上日历就不写，不发明）
+    let td = "" + cases[cur]["target_date"]
+    if td == "" {
+        ui.hint.set_text("本机日历：活动日期未解析到（" + ("" + cases[cur]["slot_day"]) + " 对不上具体日期）——已生成 ICS，可手动导入")
+        return
+    }
+    host.request("device_calendar.permission.request", {}, fn(r){
+        if !r.is_ok {
+            cal_degrade("授权", r.error)
+            return
+        }
+        // 非日历平台（Linux 桌面等）会回 supported:false——如实降级，不装成功
+        if r.data != nil {
+            if ("" + r.data["supported"]) == "false" {
+                cal_degrade("本宿主", "此系统不支持日历读写（supported:false）")
+                return
+            }
+        }
+        host.request("device_calendar.calendars.list", {}, fn(r2){
+            if !r2.is_ok {
+                cal_degrade("读日历列表", r2.error)
+                return
+            }
+            // 取第一个可写日历（ writable=false 只读不可建事件——服务端也会拒）
+            let cid = ""
+            if r2.data != nil {
+                let cals = r2.data["calendars"]
+                if cals != nil {
+                    for ci2 in cals.len() {
+                        if cid == "" {
+                            if cals[ci2]["writable"] { cid = "" + cals[ci2]["id"] }
+                        }
+                    }
+                }
+            }
+            if cid == "" {
+                cal_degrade("选日历", "没有可写的系统日历")
+                return
+            }
+            host.request("device_calendar.calendars.select", {calendar_id: cid}, fn(r3){
+                if !r3.is_ok {
+                    cal_degrade("选定日历", r3.error)
+                    return
+                }
+                if r3.data == nil {
+                    cal_degrade("选定日历", "未返回 handle")
+                    return
+                }
+                cal_handle = "" + r3.data["handle"]
+                if cal_handle == "" {
+                    cal_degrade("选定日历", "handle 为空")
+                    return
+                }
+                // 组装 all-day 事件（title ≤512 / UTC 零点边界 / 下一天零点为 end）
+                let cur2 = -1
+                for i2 in cases.len() {
+                    if "" + cases[i2]["id"] == cal_write_id { cur2 = i2 }
+                }
+                if cur2 < 0 { return }
+                let td2 = "" + cases[cur2]["target_date"]
+                let dt = td2.split("-")
+                if dt.len() != 3 {
+                    cal_degrade("写入", "日期解析失败：" + td2)
+                    return
+                }
+                let z = days_from_civil(dt[0].to_f64(), dt[1].to_f64(), dt[2].to_f64())
+                // 本历法 z 以 0000-03-01 为原点（无 +719468 偏移）：Unix 纪元 1970-01-01
+                // 的 z=719468 → start_ms = (z-719468)*86400000（all-day 的 UTC 零点）
+                let start_ms = (z - 719468) * 86400000
+                let act2 = "" + cases[cur2]["activity"]
+                if act2 == "" { act2 = "聚会" }
+                let title2 = "【牵线】#" + cal_write_id + " " + act2
+                let loc2 = "" + cases[cur2]["place"]
+                let notes2 = "聚会守护 #" + cal_write_id + "｜原文：" + trim_n("" + cases[cur2]["text"], 60) + "｜由牵线确认拍板后写入（原生面板人工确认）"
+                host.request("device_calendar.events.create", {handle: cal_handle, event: {title: title2, start_ms: start_ms, end_ms: start_ms + 86400000, timezone: "UTC", all_day: true, location: loc2, notes: notes2}}, fn(r4){
+                    if r4.is_ok {
+                        audit("calendar_write", "#" + cal_write_id + " → 系统日历（原生面板确认）")
+                        ui.hint.set_text("本机日历：已写入系统日历 ✓（你在原生面板按了确认）——提醒与 ICS 同步在案")
+                    } else {
+                        cal_degrade("写入", r4.error)
+                    }
+                })
+            })
+        })
+    })
 }
 
 // 管家 create 提案的执行端：字段由提案给定（非本地猜测），空字段保持空（no-facts）；
@@ -2687,6 +3113,10 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
             // #48b：详情已拆到 detail_list（本视图只服务列表）；占位照 #5 范式
             View{width: Fill height: 1}
         } else {
+        // === v0.8.0 W4：守护灯常驻条（列表顶部第一行，确定性摘要） ===
+        View{width: Fill height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+            show_bg: true draw_bg.color: #xefeadf draw_bg.border_radius: 12.0
+            Label{width: Fill text: guard_light draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 13}}}
         // === 决赛 S3：待拍板提案横幅（管家出了提案、人还没拍板时出现在列表顶部）——
         //   原则不变：模型文本不参与动作接线，这里只是「去拍板」的指路条（静态 copy）；
         //   零渲染零占位（plan_pending=="no" 时留 1px，#5 空分支硬约束范式）。
@@ -3039,15 +3469,23 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                             ReceiptLine{text: "  ↳ " + case_receipt[sel][_ri]}
                         }
                     }
-                    // === v0.4.0 S5/S6：日历 ICS 与提醒登记行（已确认态）===
+                    // === v0.4.0 S5/S6 + v0.8.0 ③：日历 ICS 与提醒登记行（已确认态）===
                     if case_status_text[sel] == "已确认" {
-                        BodyLine{text: "日历：ICS 已生成（calendar/qianxian-" + case_ids[sel] + ".ics）｜ 提醒：T-24h 已登记"}
+                        BodyLine{text: "日历：ICS 已生成（calendar/qianxian-" + case_ids[sel] + ".ics）｜ 本机日历：确认时已尝试写入（支持宿主走原生确认）｜ 提醒：T-24h 已登记"}
                     }
                     // === v0.6.0 S-P2：确定性对账（有账才显示；数字全部由代码算出）===
+                    // === v0.8.0 W2：全员余额列表按差额方向着色（欠=琥珀 / 清=玉绿）===
                     if ledger_head != "" {
                         SectionLabel{text: ledger_head}
                         for li in ledger_lines.len() {
-                            ReceiptLine{text: "  · " + ledger_lines[li]}
+                            if ledger_diff[li] == "due" {
+                                Label{width: Fill text: "  · " + ledger_lines[li] draw_text.color: #xa35f00 draw_text.text_style.font_size: 12}
+                            } else {
+                                Label{width: Fill text: "  · " + ledger_lines[li] draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}
+                            }
+                        }
+                        if ledger_tip != "" {
+                            ReceiptLine{text: "  ↳ " + ledger_tip}
                         }
                         View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
                             TextInput{width: Fill height: 40 empty_text: "收款：姓名 金额（如 阿明 150）"
@@ -3138,13 +3576,40 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                         ButtonFlat{text: "拍板执行" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_approve()
                             draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
                             draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
-                        ButtonFlat{text: "放弃" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_decline()
-                            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                            draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                        // v0.8.0 W1：放弃 → 两段式理由快捷项（拒绝并改写；8 秒不选自动收回）
+                        if decline_prompt != "yes" {
+                            ButtonFlat{text: "放弃" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_decline()
+                                draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                        }
+                    }
+                    if decline_prompt == "yes" {
+                        MetaLine{width: Fill text: "为什么放弃？理由会让管家下一轮改方案（8 秒内选，超时收回）"}
+                        View{width: Fill height: Fit flow: Right spacing: 6
+                            ButtonFlat{text: "时间不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_time()
+                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "地点不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_place()
+                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "理解错了" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_intent()
+                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "我自己来" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_self()
+                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                        }
                     }
                 }
             } else {
                 View{width: Fill height: 1}
+            }
+            // === v0.8.0 W5：沉默留痕区（守护进程「考虑过但没说」的决策，回看可审计）===
+            //   空态占位行由 load_suppressed 预填（闭包只做无条件 for——防闭包内
+            //   if/else+嵌套 for 组合的 pop_stack 渲染崩）
+            SectionLabel{text: "🤫 沉默留痕 · 考虑过但没说的事（回看可审计）"}
+            for si2 in suppressed_lines.len() {
+                MetaLine{width: Fill text: suppressed_lines[si2]}
             }
             View{width: Fill height: 1}
         } else {
