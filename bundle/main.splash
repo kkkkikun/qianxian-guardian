@@ -3729,16 +3729,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
         // 照第一方 news:301-306 写法：if t.id == tab {TabButtonActive{}} else {TabButton{}}
         // 计数照 ai-providers:45 "N models" 写法。Tab 是 GestureView on_tap 触发 set_filter。
         let cf_now = "" + current_filter
-        View{width: Fill height: Fit flow: Right spacing: 7 align: Align{y: 0.5}
+        View{width: Fill height: Fit flow: Right spacing: 5 align: Align{y: 0.5}
             // 标签 1：全部
             GestureView{on_tap: |x, y| set_filter("all") width: Fit height: Fit
                 if cf_now == "all" {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #x2b2722 draw_bg.border_radius: 14.0
                         Label{text: "全部" draw_text.color: #xf7f2ec draw_text.text_style: theme.font_bold{font_size: 12.5}}
                     }
                 } else {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 14.0
                         Label{text: "全部" draw_text.color: secondary draw_text.text_style.font_size: 12.5}
                     }
@@ -3747,12 +3747,12 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // 标签 2：待拍板
             GestureView{on_tap: |x, y| set_filter("Proposing") width: Fit height: Fit
                 if cf_now == "Proposing" {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #x2b2722 draw_bg.border_radius: 14.0
                         Label{text: "待拍板" draw_text.color: #xf7f2ec draw_text.text_style: theme.font_bold{font_size: 12.5}}
                     }
                 } else {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 14.0
                         Label{text: "待拍板" draw_text.color: secondary draw_text.text_style.font_size: 12.5}
                     }
@@ -3761,12 +3761,12 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // 标签 3：已确认
             GestureView{on_tap: |x, y| set_filter("Confirmed") width: Fit height: Fit
                 if cf_now == "Confirmed" {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #x2b2722 draw_bg.border_radius: 14.0
                         Label{text: "已确认" draw_text.color: #xf7f2ec draw_text.text_style: theme.font_bold{font_size: 12.5}}
                     }
                 } else {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 14.0
                         Label{text: "已确认" draw_text.color: secondary draw_text.text_style.font_size: 12.5}
                     }
@@ -3775,12 +3775,12 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // 标签 4：已完成（v0.4.0 S4：活动全生命周期到收尾）
             GestureView{on_tap: |x, y| set_filter("Completed") width: Fit height: Fit
                 if cf_now == "Completed" {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #x2b2722 draw_bg.border_radius: 14.0
                         Label{text: "完成" draw_text.color: #xf7f2ec draw_text.text_style: theme.font_bold{font_size: 12.5}}
                     }
                 } else {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 14.0
                         Label{text: "完成" draw_text.color: secondary draw_text.text_style.font_size: 12.5}
                     }
@@ -3789,12 +3789,12 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // 标签 5：已取消
             GestureView{on_tap: |x, y| set_filter("Cancelled") width: Fit height: Fit
                 if cf_now == "Cancelled" {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #x2b2722 draw_bg.border_radius: 14.0
                         Label{text: "已取消" draw_text.color: #xf7f2ec draw_text.text_style: theme.font_bold{font_size: 12.5}}
                     }
                 } else {
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
+                    RoundedView{width: Fit height: Fit padding: Inset{left: 7 right: 7 top: 7 bottom: 7}
                         show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 14.0
                         Label{text: "已取消" draw_text.color: secondary draw_text.text_style.font_size: 12.5}
                     }
