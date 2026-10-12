@@ -1186,6 +1186,13 @@ fn back_to_list(){
 //   别的 agent 炫耀做了什么，这里的 agent 能交代「为什么没做」（arXiv 2605.06717
 //   「被压下的候选推送也要记录，事后可审计」）。解析失败/缺文件 → 诚实显示暂无留痕。
 let suppressed_lines = []
+// === v0.10.0 WP3-A：群智收敛（降级路径：文字投票卡+手动刷新） ===
+//   会话存 jail converge.json（伴生进程读房间消息归票后写入）；
+//   app 只发起投票（matrix.send_message 真发文字卡）+ 读计票显示 + 管家收敛出 PLAN。
+let converge_case_id = ""     // 当前投票会话目标守护 id（""=无会话）
+let converge_summary = ""     // 计票摘要（伴生进程写 converge.json 后 app 读入）
+let converge_winner = ""      // 票数最高字母（平票/零票为 ""）
+let converge_winner_slot = "" // 对应时段（"周日-下午"）
 let suppressed_count = 0
 fn suppressed_kind_label(k){
     if k == "weather_ok" { return "☀ 天气复核：无雨，未发预警" }
@@ -3046,6 +3053,124 @@ fn set_bill_cleared(id_str){
 
 // === 决赛 v0.4.0 S6：确认后动作（ICS 自动导出 + 群分享 + 提醒登记提示） ===
 // v0.10.0 WP5：分享结案回顾到群（matrix.send_message 真发；数字全来自审计字段）
+// === v0.10.0 WP3-A：群智收敛三动作（降级路径） ===
+// ① 发投票到群：文字投票卡（matrix.send_message 真发）；非 Rinx 宿主诚实降级文案可复制。
+fn converge_slots_text(){
+    return "A. 周六-上午    B. 周六-下午    C. 周六-晚上\n       D. 周日-上午    E. 周日-下午"
+}
+fn start_converge(){
+    let ci = -1
+    for i in cases.len() {
+        if cases[i]["id"] == selected_id { ci = i }
+    }
+    if ci < 0 { ui.hint.set_text("先选中一条守护再发投票"); return }
+    let id_str = "" + cases[ci]["id"]
+    let act = "" + cases[ci]["activity"]
+    if act == "" { act = "聚会" }
+    let place = "" + cases[ci]["place"]
+    let ppl = "" + cases[ci]["people"]
+    if ppl == "" { ppl = "（暂无名单——先加参与人再发投票更准确）" }
+    let body = "📋 时间收敛投票：#" + id_str + " " + act + " · " + place
+        + "\n候选时段（回复对应字母即投票）：\n" + converge_slots_text()
+        + "\n回复如「A」或「AB」（多选按整票计）。参与人：" + ppl
+        + "。\n当前已收到 0 票（成员回复后请组织者到牵线里点「刷新计票」）。"
+    converge_case_id = id_str
+    if host.has("matrix.send_message") {
+        host.request("matrix.send_message", {body: body}, fn(r){
+            if r.is_ok {
+                ui.hint.set_text("投票卡已发到群 ✓——成员回复字母后，回来点「刷新计票」")
+                audit("converge_start", "#" + converge_case_id + "（文字投票卡）")
+            } else {
+                ui.hint.set_text("发投票失败：" + r.error + "（可用下方文案手动转发）")
+            }
+        })
+    } else {
+        // 诚实降级：无 matrix 服务→屏显文案供手动转发
+        ui.msg_input.set_text(body)
+        ui.hint.set_text("本宿主无 matrix 服务——投票文案已填入输入框，复制转发到群即可（成员回复后回这里刷新计票）")
+    }
+    audit("converge_start", "#" + id_str + "（文字投票卡发起）")
+    render_views()
+}
+// ② 刷新计票：读伴生进程写的 converge.json（进程读房间消息归票；无文件=提示先跑伴生进程）
+fn refresh_converge(){
+    if !fs.exists("converge.json") {
+        ui.hint.set_text("还没有计票数据——先跑伴生进程：python3 tools/qx-converge-bridge.py --room '<房间>' --jail <jail>（它会读群消息归票）")
+        return
+    }
+    let v = ("" + fs.read("converge.json")).parse_json()
+    if v == nil {
+        ui.hint.set_text("converge.json 解析失败（伴生进程写入中？稍后再试）")
+        return
+    }
+    if converge_case_id == "" {
+        converge_case_id = "" + v["case_id"]
+    }
+    if ("" + v["case_id"]) != converge_case_id {
+        ui.hint.set_text("计票文件属于另一场投票（#" + ("" + v["case_id"]) + "）——先完成那场或重新发起")
+        return
+    }
+    converge_summary = "" + v["summary"]
+    converge_winner = "" + v["winner"]
+    converge_winner_slot = "" + v["winner_slot"]
+    render_views()
+    ui.hint.set_text("计票：" + converge_summary)
+}
+// ③ 管家收敛：把计票注入 turn，让模型出 reschedule PLAN（白名单拍板链）
+fn converge_butler(){
+    if converge_winner_slot == "" {
+        // 兜底：直接从 converge.json 读（重启后 converge_case_id 全局初值为空）
+        if fs.exists("converge.json") {
+            let v2 = ("" + fs.read("converge.json")).parse_json()
+            if v2 != nil {
+                converge_case_id = "" + v2["case_id"]
+                converge_summary = "" + v2["summary"]
+                converge_winner = "" + v2["winner"]
+                converge_winner_slot = "" + v2["winner_slot"]
+            }
+        }
+    }
+    if converge_case_id == "" || converge_winner_slot == "" {
+        ui.hint.set_text("先「刷新计票」拿到票数分布（平票/零票时请人工定夺，不收敛）")
+        return
+    }
+    let id_str = converge_case_id
+    let ci = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { ci = i }
+    }
+    if ci < 0 { ui.hint.set_text("找不到 #" + id_str); return }
+    // 直接用确定性白名单构造提案（不经模型——计票收敛是纯确定性场景；
+    //   「票数不足的时段」记沉默留痕）
+    plan_op = "reschedule"
+    plan_id = id_str
+    let sd = converge_winner_slot.split("-")
+    plan_day = sd[0]
+    plan_part = sd[1]
+    plan_summary = "按群投票收敛：#" + id_str + " 改到票数最高的 " + converge_winner_slot + "（" + converge_summary + "）"
+    plan_lines = []
+    plan_check = ""
+    let old_disp = ("" + cases[ci]["slot_day"]) + "-" + ("" + cases[ci]["slot_part"])
+    plan_lines.push("op：改期 ｜ 目标：#" + id_str + " " + ("" + cases[ci]["activity"]))
+    plan_lines.push("时间：" + old_disp + " ──▶ " + converge_winner_slot + "（群投票收敛：" + converge_summary + "）")
+    plan_lines.push("冲突预演：改后由拍板时全量重算")
+    plan_check = "ok"
+    plan_pending = "yes"
+    // 沉默留痕：考虑过但票数不足的时段
+    if fs.exists("suppressed.json") {
+        let sv = ("" + fs.read("suppressed.json")).parse_json()
+        if sv != nil {
+            let arr = sv["entries"]
+            if arr == nil { arr = [] }
+            arr.push({ts: "", kind: "converge", detail: "#" + id_str + " 收敛到 " + converge_winner_slot + "——其余时段票数不足（" + converge_summary + "）"})
+            fs.write("suppressed.json", {entries: arr}.to_json())
+        }
+    }
+    audit("converge_plan", "#" + id_str + " → " + converge_winner_slot + "（" + converge_summary + "）")
+    enter_chat()
+    ui.hint.set_text("管家已按群投票出提案——过目后点「拍板」")
+}
+
 fn share_fin_report(){
     let ci = -1
     for i in cases.len() {
@@ -4267,6 +4392,42 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             ButtonFlat{text: "分享到群" height: 44 padding: Inset{left: 12 right: 12} on_click: || post_confirm_actions("" + selected_id)
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
                                 draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 12}}}
+                        }
+
+                    }
+                    // === v0.10.0 WP3-A：群智收敛（确认态或已完成；降级路径明示）===
+                    if case_status_text[sel] == "已确认" {
+                        View{width: Fill height: Fit flow: Right spacing: 6
+                            ButtonFlat{text: "发投票到群" height: 44 padding: Inset{left: 10 right: 10} on_click: || start_converge()
+                                draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "刷新计票" height: 44 padding: Inset{left: 10 right: 10} on_click: || refresh_converge()
+                                draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xa87516}
+                                draw_text +: {color: #xa87516 color_hover: #xa87516 color_down: #xa87516 text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "管家收敛" height: 44 padding: Inset{left: 10 right: 10} on_click: || converge_butler()
+                                draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
+                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 12}}}
+                        }
+                        Label{width: Fill text: "群投票：文字卡形态（本宿主不支持活卡片原地更新）——协议一致，计票手动刷新" draw_text.color: #xa89e91 draw_text.text_style.font_size: 11}
+                        if converge_summary != "" {
+                            Label{width: Fill text: "📋 计票：" + converge_summary + (if converge_winner_slot != "" { " → 可收敛到 " + converge_winner_slot } else { "（平票/零票，请人工定夺）" }) draw_text.color: #x2f7d4f draw_text.text_style: theme.font_bold{font_size: 12}}
+                        }
+                    }
+                    if case_status_text[sel] == "已完成" {
+                        View{width: Fill height: Fit flow: Right spacing: 6
+                            ButtonFlat{text: "发投票到群" height: 44 padding: Inset{left: 10 right: 10} on_click: || start_converge()
+                                draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "刷新计票" height: 44 padding: Inset{left: 10 right: 10} on_click: || refresh_converge()
+                                draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xa87516}
+                                draw_text +: {color: #xa87516 color_hover: #xa87516 color_down: #xa87516 text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "管家收敛" height: 44 padding: Inset{left: 10 right: 10} on_click: || converge_butler()
+                                draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
+                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 12}}}
+                        }
+                        Label{width: Fill text: "群投票：文字卡形态（本宿主不支持活卡片原地更新）——协议一致，计票手动刷新" draw_text.color: #xa89e91 draw_text.text_style.font_size: 11}
+                        if converge_summary != "" {
+                            Label{width: Fill text: "📋 计票：" + converge_summary + (if converge_winner_slot != "" { " → 可收敛到 " + converge_winner_slot } else { "（平票/零票，请人工定夺）" }) draw_text.color: #x2f7d4f draw_text.text_style: theme.font_bold{font_size: 12}}
                         }
                     }
                     // 待拍板态：确认主按钮朱砂通栏（动作坞主行动按状态就位）
