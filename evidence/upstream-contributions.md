@@ -21,3 +21,15 @@
 - #490：最小复现脚本（整个 app 一个调用）+ 原始 `[E]` 日志行 + SSL_CERT_FILE workaround 验证记录
 - #2768：参考实现全文 + 「用户触发的 agent 回合完全正常（tool_calls=1 get_forecast）」的内核日志对照——缺的只是到点自动发起
 
+
+## 2026-10-12 · Rinx #90：mini-app 无 matrix.edit_message（m.replace）服务
+
+- **链接**：https://github.com/hagency-org/Rinx/issues/90
+- **类型**：能力缺口 issue（群体协作最小缺口；证据充分的源码核实）。
+- **内容**：miniapp-core 的 `MatrixServiceCall` 无 `EditMessage`；`m.replace` 只在
+  Rinx 自身聊天编辑（room_history.rs:196/831/867）与文章应用（article_app/backend.rs:232/348）
+  内部；palpo「acknowledge m.replace without populating /relations」语义在案。
+  建议暴露 `matrix.edit_message`（event_id+新 body，与 room_history 编辑渲染同语义）。
+- **降级参考实现随 issue 附上**（协议不变仅承载降级：qx-converge 归票+伴生进程+app 三按钮）。
+- **触发动机**：WP3 群智收敛的活卡片路径被源码核实否决（约束 4），按规划降级分支交付后，
+  把缺口作为贡献补报——评审「对 OctoSense 的贡献」轴的硬物证。
