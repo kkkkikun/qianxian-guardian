@@ -24,7 +24,7 @@
     "support": "kkkkikun@foxmail.com",
     "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
   },
-  "release_notes": "v0.8.0：提案卡 diff 化（旧值──▶新值+冲突预演）；全员余额列表+垫付建议；梯度催收四段式；守护灯常驻条；沉默留痕（考虑过但没说的事可回看）；三级提醒+天气主动复核；device_calendar 系统日历写链（原生面板物理确认）；Kimi 真模型管家。回归 25/25。",
+  "release_notes": "v0.9.0：PLAN op 全集补齐（mark_paid/undo/clear/export——100% agent 可操矩阵在案 evidence/ops-coverage.md）；AGENT.md v4 机器可读 op 表；UI 全面重构（红线生命周期组件/语义 chips/AA 对账表/分区详情/提案卡精修）；修真 bug：人名中文分隔符断裂、空分支中断回调。回归 25/25，渲染错误 0。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

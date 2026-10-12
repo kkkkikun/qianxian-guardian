@@ -237,10 +237,17 @@ rec(3, "建守护 #2 可见", any("#2 ·" in t for t, r in labels(ws)), "列表�
 conf = [t for t, r in labels(ws) if "冲突" in t]
 rec(4, "冲突标签可见", len(conf) >= 1, f"conflict-labels={conf[:2]}")
 
-# R23（v0.8.0 W4）：守护灯常驻条 —— 列表顶部确定性摘要行
-light = [t for t, r in labels(ws) if t.startswith("🛡 守护中")]
-rec(23, "守护灯常驻条（确定性摘要）", len(light) >= 1 and "共 2 条守护" in light[0] and "⚡2 冲突" in light[0],
-    f"guard-light={light[:1]}")
+# R23（v0.9.0 WP2 新形态）：守护灯卡 = 标题「守护中 · 共 N 条」+ 分色 chips
+#   现拍快照 + 回顶（陈旧 ws 是建卡瞬间的，守护灯卡可能尚未物化）
+for _t in range(3):
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-800")
+    time.sleep(0.6)
+ws = snap()["s"]
+g_title = [t for t, r in labels(ws) if t.startswith("守护中 · 共")]
+g_chips = [t for t, r in labels(ws) if "待拍板" in t or "冲突" in t or "待收尾" in t or "无异常" in t]
+ok23 = (len(g_title) >= 1 and "共 2 条" in g_title[0]
+        and any("待拍板" in t for t in g_chips) and any("冲突" in t for t in g_chips))
+rec(23, "守护灯常驻条（标题+分色 chips）", ok23, f"title={g_title[:1]} chips={g_chips[:4]}")
 
 # ---- 进入详情模式（新路径核心） ----
 ws = click_title(ws, 2) or ws
@@ -469,8 +476,15 @@ if t17:
         x, y = center(cbtn)
         get(f"/click?x={x}&y={y}")
         time.sleep(2.2)
-    ws = snap()["s"]
-    ics_line = any("日历：ICS 已生成" in t for t, r in labels(ws))
+    # v0.9.0 WP2：详情分区化后更高——「日历」行在折叠线下，滚动物化后再断言
+    ics_line = False
+    for _ in range(5):
+        ws = snap()["s"]
+        ics_line = any("日历：ICS 已生成" in t for t, r in labels(ws))
+        if ics_line:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(0.9)
     ics_file = (JAIL / "calendar").exists() and any((JAIL / "calendar").glob("*.ics"))
     rec(17, "确认后 ICS 自动生成 + 详情行可见", ics_line and ics_file,
         f"详情行={ics_line} jail文件={ics_file}")
@@ -676,7 +690,7 @@ if t21:
     head_ok = False
     for _ in range(4):
         ws = snap()["s"]
-        head_ok = any("应付按分取整" in t and "已收 ¥" in t for t, r in labels(ws))
+        head_ok = any("总额 ¥300.00" in t and "已收 ¥" in t for t, r in labels(ws))
         if head_ok:
             break
         get("/m?k=scroll&x=200&y=500&dx=0&dy=250")
@@ -709,8 +723,12 @@ if t21:
     for _ in range(4):
         ws = snap()["s"]
         txts = [t for t, r in labels(ws)]
-        diff_ok = (any("阿明：已付 ¥100.00" in t and "欠 ¥50.00" in t for t in txts)
-                   and any("小红：已付 ¥0.00" in t and "欠 ¥150.00" in t for t in txts))
+        # v0.9.0 WP2 表列形态：成员/已付/状态 各为独立 Label——按列断言
+        diff_ok = (any(t.strip() == "阿明" for t in txts)
+                   and any(t.strip() == "已付 ¥100.00" for t in txts)
+                   and any(t.strip() == "欠 ¥50.00" for t in txts)
+                   and any(t.strip() == "小红" for t in txts)
+                   and any(t.strip() == "欠 ¥150.00" for t in txts))
         tip_ok = any("下次垫付建议：小红" in t and "¥0.00" in t for t in txts)
         if diff_ok:
             break

@@ -26,7 +26,33 @@ ORANGE = (163, 95, 0)     # xa35f00 琥珀
 RED = (161, 77, 60)       # xa14d3c 赤陶
 PURPLE = (199, 64, 47)    # x5856d6→朱砂（撤销/AI 徽章已并入红线系）
 CARD = (241, 236, 228)    # xf1ece4 控件底
+SURFACE = (255, 253, 250)  # xfffdaf 宣纸
 BADGE_BG = (251, 233, 229)  # xfbe9e5 朱砂浅底
+JADE_BG = (232, 243, 236)   # xe8f3ec 玉绿浅底
+AMBER = (168, 117, 22)      # xa87516
+AMBER_BG = (247, 235, 211)  # xf7ebd3 琥珀浅底
+DANGER = (161, 77, 60)      # xa14d3c
+DANGER_BG = (246, 232, 227) # xf6e8e3 赭石浅底
+THREAD_TODO = (225, 215, 202)  # xe1d7ca 红线未到段
+KNOT_TODO = (201, 191, 178)    # xc9bfb2 未到结描边
+LINE = (233, 223, 210)      # xe9dfd2 发丝线
+FAINT = (168, 158, 145)     # xa89e91
+
+# v0.9.0 语义药丸：文本→(底色, 字色)。渲染器无 /snap 样式字段，按语义词上色。
+CHIP_STYLE = {
+    "待拍板": (CARD, SECOND), "已确认": (JADE_BG, GREEN), "已完成": (JADE_BG, GREEN),
+    "已取消": (DANGER_BG, DANGER), "待收尾": (AMBER_BG, AMBER), "无异常": (JADE_BG, GREEN),
+}
+
+def chip_style(text):
+    t = text.strip()
+    if t in CHIP_STYLE:
+        return CHIP_STYLE[t]
+    if ("冲突" in t and len(t) <= 8) or (t.endswith("待拍板") and len(t) <= 6):
+        return (AMBER_BG, AMBER) if "冲突" in t else (CARD, SECOND)
+    if "垫付建议" in t:
+        return (CARD, SECOND)
+    return None
 
 FONT_CJK = [
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
@@ -129,6 +155,17 @@ def main():
         elif ty == "TextInput":
             d.rounded_rectangle([x, y, x + ww, y + hh], radius=10, fill=CARD)
             fg, f = SECOND, f_small
+        elif ty == "Label" and chip_style(text):
+            cs = chip_style(text)
+            d.rounded_rectangle([x, y, x + ww, y + hh], radius=min(12, hh // 2), fill=cs[0])
+            fg, f = cs[1], f_badge
+        elif text.startswith("!") and "同占" in text:
+            d.rounded_rectangle([x - 6, y - 4, x + ww + 6, y + hh + 4], radius=10, fill=AMBER_BG)
+            fg, f = AMBER, f_small
+        elif "按分取整" in text:
+            fg, f = GREEN, f_small
+        elif text.startswith("「") and text.endswith("」"):
+            fg, f = FAINT, f_small
         elif not is_title and len(text) <= 12 and ("·" in text or text.startswith("#")):
             d.rounded_rectangle([x, y, x + ww, y + hh], radius=7,
                                 fill=BADGE_BG)
@@ -147,6 +184,35 @@ def main():
         if ty == "Label" and ww < 90 and hh <= 30 and x > 250:
             tx = x - 4  # 右侧徽章贴右边缘
         d.text((tx, y + max(1, (hh - 12) // 2)), text, fill=fg, font=f)
+
+    # === v0.9.0 红线补画（/snap 无样式字段：圆点/横线是不可见文本控件——按真实
+    #     标签坐标 + 状态 chip 语义补画，位置即真实布局位置，非装饰虚构） ===
+    stage_labels = [w for w in widgets if (w.get("t") or "").strip() in
+                    ("待拍板", "已确认", "已完成", "已收尾")
+                    and (w.get("r") or [0,0,0,0])[3] <= 16]
+    if len(stage_labels) == 4:
+        rs = [w["r"] for w in stage_labels]
+        ys = [r[1] for r in rs]
+        if max(ys) - min(ys) <= 6:  # 同一行 = 详情大红线标签
+            ty0 = min(ys)
+            xs_c = [r[0] + r[2] / 2 for r in rs]
+            cur = 0
+            chips = [(w.get("t") or "").strip() for w in widgets]
+            if "已确认" in chips and "已完成" not in chips: cur = 1
+            if "已完成" in chips and "待收尾" in chips: cur = 2
+            if "已完成" in chips and "待收尾" not in chips: cur = 3
+            yy = ty0 - 14
+            for k in range(4):
+                dot_r = 6 if k == cur else 5
+                fill = ACCENT if k <= cur else BG
+                d.ellipse([xs_c[k]-dot_r, yy-dot_r, xs_c[k]+dot_r, yy+dot_r],
+                          fill=ACCENT if k <= cur else SURFACE,
+                          outline=ACCENT if k == cur else KNOT_TODO,
+                          width=2 if k == cur else 1)
+                if k < 3:
+                    seg = (xs_c[k]+8, xs_c[k+1]-8)
+                    d.rectangle([seg[0], yy-1, seg[1], yy+1],
+                                fill=ACCENT if k < cur else THREAD_TODO)
 
     # 若内容超出视口（展开态较长），整体缩放到视口高度内，保证不裁切
     maxy = max((w.get("r") or [0, 0, 0, 0])[1] + (w.get("r") or [0, 0, 0, 0])[3]

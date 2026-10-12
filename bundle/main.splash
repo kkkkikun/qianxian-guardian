@@ -54,6 +54,10 @@ let plan_part = ""
 let plan_place = ""
 let plan_people = ""
 let plan_bill = ""
+// v0.9.0 WP1：mark_paid 的字段（who/amount）；clear 两段式确认的阶段标记
+let plan_who = ""
+let plan_amount = ""
+let plan_clear_stage = 0
 let plan_lines = []
 // === v0.8.0 W1（调研报告 P0）：拍板反馈回路 —— 拒绝不是死路，是改道入口 ===
 //   decline_prompt: 两段式理由选择态（第一次点「放弃」先问理由，8 秒不选自动收回）
@@ -253,6 +257,13 @@ let pref_save_result = "ok"
 // 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
 // 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
 let guard_light = ""
+// === v0.9.0 WP2：守护灯 chips 扁平数组 + 详情红线阶段（闭包只读，硬约束同源） ===
+let guard_chip_text = []
+let guard_chip_kind = []
+let guard_title = "守护中"
+let case_stage = []          // 生命周期阶段：-1=已取消（不画线）0=待拍板 1=已确认 2=已完成未收尾 3=已收尾
+let case_bill_cleared = []   // 每条守护的 bill_cleared（chips「待收尾」与红线收尾段用）
+let case_conflict_with = []  // v0.9.0 WP2：冲突横幅紧凑文案「与 #N·活动」（闭包只读）
 fn rebuild_lines(){
     // === #10/#12 新增：筛选下标数组 + 计数串在这里重建（filter 逻辑放函数上下文，不进 on_render） ===
     // #12 叠加：先用 current_filter 过一遍得到「标签总数 M」与候选 idxs；
@@ -322,6 +333,26 @@ fn rebuild_lines(){
     if light_proposing == 0 && light_conflict == 0 && light_tailing == 0 {
         guard_light = guard_light + " · 无异常"
     }
+    // === v0.9.0 WP2：守护灯 chips（标题行 + 分色计数 chips，HTML 规范 01 屏） ===
+    guard_chip_text.clear()
+    guard_chip_kind.clear()
+    guard_title = "守护中 · 共 " + ("" + cases.len()) + " 条"
+    if light_proposing > 0 {
+        guard_chip_text.push("" + ("" + light_proposing) + " 待拍板")
+        guard_chip_kind.push("neutral")
+    }
+    if light_conflict > 0 {
+        guard_chip_text.push("⚡ " + ("" + light_conflict) + " 冲突")
+        guard_chip_kind.push("amber")
+    }
+    if light_tailing > 0 {
+        guard_chip_text.push("" + ("" + light_tailing) + " 待收尾")
+        guard_chip_kind.push("amber")
+    }
+    if light_proposing == 0 && light_conflict == 0 && light_tailing == 0 {
+        guard_chip_text.push("无异常")
+        guard_chip_kind.push("jade")
+    }
     filter_count_str = "" + n
     case_ids.clear()
     case_lines.clear()
@@ -329,6 +360,8 @@ fn rebuild_lines(){
     case_statuses.clear()
     case_selected.clear()
     case_badge_text.clear()
+    case_stage.clear()
+    case_bill_cleared.clear()
     case_receipt.clear()
     case_place_lines.clear()
     case_activity_lines.clear()
@@ -340,6 +373,7 @@ fn rebuild_lines(){
     case_people_line.clear()
     case_conflict_lines.clear()
     case_conflict_party.clear()
+    case_conflict_with.clear()
     case_bill_total_str.clear()
     case_bill_split_text.clear()
     // 同步 case_expanded：保留已展开态，遇 selected_id 变更时不强制清空
@@ -361,6 +395,14 @@ fn rebuild_lines(){
             badge_t = badge_t + "·待收尾"
         }
         case_badge_text.push(badge_t)
+        // === v0.9.0 WP2：红线生命周期阶段 + bill_cleared 扁平化 ===
+        case_bill_cleared.push("" + cases[i]["bill_cleared"])
+        let stg = 0
+        if st == "Confirmed" { stg = 1 }
+        if st == "Completed" { stg = 2 }
+        if st == "Completed" && ("" + cases[i]["bill_cleared"]) == "yes" { stg = 3 }
+        if st == "Cancelled" { stg = -1 }
+        case_stage.push(stg)
         let title_act = "" + cases[i]["activity"]
         if title_act == "" { title_act = "聚会" }
         case_lines.push("#" + id_str + " · " + title_act)
@@ -428,9 +470,16 @@ fn rebuild_lines(){
             }
             case_conflict_lines.push(head)
             case_conflict_party.push(party)
+            // v0.9.0 WP2：横幅紧凑版（「与 #N·活动 同占「周六-上午」」）
+            let with2 = "另一条守护"
+            if other_id != "" {
+                with2 = "与 #" + other_id + "·" + other_act
+            }
+            case_conflict_with.push(with2 + " 同占「" + slot_label + "」")
         } else {
             case_conflict_lines.push("")
             case_conflict_party.push("")
+            case_conflict_with.push("")
         }
 
         // === #9 新增：保持现有 case_expanded 长度与 cases 同步 ===
@@ -726,8 +775,10 @@ fn add_person(id_str, raw){
         return
     }
     let old = "" + cases[cur]["people"]
+    // v0.9.0 WP1：分隔符归一（、，;；→ 逗号）——与 plan_parse 同源，防中文名单断裂
+    let name2 = norm_people_list("" + name)
     let added = []
-    for nm in name.split(",") {
+    for nm in name2.split(",") {
         let one = nm.trim()
         if one != "" { added.push(one) }
     }
@@ -1689,7 +1740,7 @@ fn chat_push(role, text){
 // Rinx 不给 mini-app 注入 AGENT.md（宿主侧 turn_input 无 guidance 分支，源码级核实），
 // 所以角色与协议必须由 app 自己嵌入 turn 文本——与 AGENT.md v3 同文，双处一致。
 fn build_agent_turn(user_text){
-    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 可选 create(text 必填原文)/confirm/reschedule/cancel/add_people/set_bill/complete/draft_dunning——除 create 外每个 op 的 PLAN 都必须包含 \"id\":\"<目标守护数字>\" 字段（例：{\"op\":\"confirm\",\"id\":\"2\"}；{\"op\":\"reschedule\",\"id\":\"1\",\"slot_day\":\"周日\",\"slot_part\":\"下午\"}；{\"op\":\"add_people\",\"id\":\"1\",\"people\":\"张三\"}；{\"op\":\"set_bill\",\"id\":\"1\",\"bill_total\":\"300\"}），缺 id 的提案会被拒；字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字；7)若本回合带【上次提案被拒】，必须按该理由调整方案，不许原样重提。回复中文、简短（≤120字）。"
+    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账/收款/撤销/清空/导出，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 全集：create(text 必填原文)/confirm/reschedule(+slot_day+slot_part)/cancel/add_people(+people)/set_bill(+bill_total)/complete/draft_dunning（催收草稿，数字由 app 算）/mark_paid(+who+amount 记某人已付款)/undo（撤销刚取消的守护，5 秒窗内）/clear（清空全部，危险，两段确认）/export（导出数据，可带 id 导出单条证据包）——除 create/clear/export 外都必须包含 \"id\":\"<目标守护数字>\"（例：{\"op\":\"confirm\",\"id\":\"2\"}；{\"op\":\"mark_paid\",\"id\":\"1\",\"who\":\"张三\",\"amount\":\"100\"}），缺 id 会被拒；字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字；7)若本回合带【上次提案被拒】，必须按该理由调整方案，不许原样重提。回复中文、简短（≤120字）。"
     let st = pre + "\n\n【当前守护】\n"
     if cases.len() == 0 {
         st = st + "（还没有守护）"
@@ -1775,6 +1826,7 @@ fn butler_send(){
 //   （新旧两代方法表都有）实现：协议保证 PLAN 为单行、扁平全字符串字段。
 fn plan_parse(reply){
     plan_pending = "no"
+    plan_clear_stage = 0
     let raw = "" + reply
     // 按 "PLAN{" 切分定位提案；协议保证每回复至多一个 PLAN
     let parts = raw.split("PLAN{")
@@ -1800,8 +1852,11 @@ fn plan_parse(reply){
     plan_day = norm_day(json_field(js, "slot_day"))
     plan_part = norm_part(json_field(js, "slot_part"))
     plan_place = trim24(json_field(js, "place"))
-    plan_people = trim24(json_field(js, "people"))
+    plan_people = trim24(norm_people_list(json_field(js, "people")))
     plan_bill = trim24(json_field(js, "bill_total"))
+    // v0.9.0 WP1 缺口 op 字段：mark_paid 的 who/amount
+    plan_who = trim24(json_field(js, "who"))
+    plan_amount = trim24(json_field(js, "amount"))
     // 摘要 = PLAN 行之前的话（≤60 字）；没有则中性兜底文案（不编造）
     let head = parts[0]
     head = head.trim()
@@ -1821,6 +1876,42 @@ fn norm_part(p){
     let parts = ["上午", "中午", "下午", "晚上"]
     for k in parts { if k == p { return k } }
     return ""
+}
+// v0.9.0 WP1 修真实 bug：人名分隔符归一——模型/用户可能用 、 ， ; ； 分隔，
+//   而 count_people/账本/mark_paid 守卫全部按英文逗号切（真机 e2e 实锤：
+//   「阿明、阿花」被当成一个人名 → mark_paid 被「不在名单」误拒）。
+//   写入端统一：任意分隔 → 英文逗号 + 逐段 trim。
+fn norm_people_list(raw){
+    let t = "" + raw
+    let t2 = ""
+    for seg in t.split("、") {
+        if t2 != "" { t2 = t2 + "," }
+        t2 = t2 + seg
+    }
+    let t3 = ""
+    for seg in t2.split("，") {
+        if t3 != "" { t3 = t3 + "," }
+        t3 = t3 + seg
+    }
+    let t4 = ""
+    for seg in t3.split(";") {
+        if t4 != "" { t4 = t4 + "," }
+        t4 = t4 + seg
+    }
+    let t5 = ""
+    for seg in t4.split("；") {
+        if t5 != "" { t5 = t5 + "," }
+        t5 = t5 + seg
+    }
+    let out = ""
+    for seg in t5.split(",") {
+        let nm = seg.trim()
+        if nm != "" {
+            if out != "" { out = out + "," }
+            out = out + nm
+        }
+    }
+    return out
 }
 
 // === v0.7.0 P5（创意/UI）：提案出处高亮 ===
@@ -1891,6 +1982,10 @@ fn plan_op_label(op){
     if op == "set_bill" { return "记 AA 总额" }
     if op == "complete" { return "标记完成（收尾）" }
     if op == "draft_dunning" { return "生成催收草稿" }
+    if op == "mark_paid" { return "记收款（对账重算）" }
+    if op == "undo" { return "撤销取消（5 秒窗）" }
+    if op == "clear" { return "清空全部（危险·两段确认）" }
+    if op == "export" { return "导出数据/证据包" }
     if op == "create" { return "新建守护" }
     return op
 }
@@ -1912,6 +2007,22 @@ fn build_plan_lines(){
         plan_lines.push("新建守护 ｜ 原文（【】=字段出处）：" + plan_src_marked)
         plan_lines.push("活动：" + disp(plan_activity) + " ｜ 时间：" + slot_disp() + " ｜ 地点：" + disp(plan_place))
         plan_lines.push("参与人：" + disp(plan_people) + " ｜ AA 总额：" + disp(plan_bill))
+    } else if op == "clear" || (op == "export" && plan_id == "") {
+        // v0.9.0 WP1：无 id 的 op——clear（危险两段式）/ export（全量导出）。
+        //   分支必须有实体语句：空块（仅注释）实证会中断后续求值（真机 clear
+        //   回合回调中断、hint 停留在载入值——2026-10-12 Rinx 实锤）。
+        if op == "clear" {
+            plan_lines.push("op：清空全部守护（危险操作）｜ 当前共 " + ("" + cases.len()) + " 条")
+            if cases.len() == 0 {
+                plan_check = "本来就没有守护，无可清空——拒绝执行"
+            }
+            if plan_clear_stage == 0 {
+                plan_lines.push("⚠ 危险操作：第一次拍板只确认，第二次拍板（8 秒内）才执行")
+            }
+        }
+        if op == "export" {
+            plan_lines.push("op：导出全部守护数据（cases.json 原文）")
+        }
     } else {
         let pid = ("" + plan_id).to_f64()
         let ci = -1
@@ -1979,6 +2090,38 @@ fn build_plan_lines(){
                 let old_bill = "" + cases[ci]["bill_total"]
                 if old_bill == "" { old_bill = "未记账" }
                 plan_lines.push("AA 总额：" + old_bill + " ──▶ " + disp(plan_bill))
+            }
+            // === v0.9.0 WP1 缺口 op：mark_paid / undo（带 id 校验） ===
+            if op == "mark_paid" {
+                if plan_who == "" {
+                    plan_check = "记收款缺姓名（who 为空）——拒绝执行"
+                }
+                let amt_f2 = plan_amount.to_f64()
+                if amt_f2 <= 0 {
+                    plan_check = "记收款金额要大于 0（amount 无效）——拒绝执行"
+                }
+                // who 必须在参与人名单（防记错人——与 UI 记收款同源守卫语义）
+                let in_ppl = "no"
+                for nm4 in ("" + cases[ci]["people"]).split(",") {
+                    if nm4.trim() == plan_who { in_ppl = "yes" }
+                }
+                if in_ppl == "no" && plan_who != "" {
+                    plan_check = plan_who + " 不在 #" + plan_id + " 的参与人名单——拒绝执行"
+                }
+                let paid_now = paid_total(ci)
+                plan_lines.push("收款：" + plan_who + " ¥" + cut2(amt_f2) + "（已收 ¥" + cut2(paid_now) + " ──▶ ¥" + cut2(paid_now + amt_f2) + "）")
+            }
+            if op == "export" {
+                plan_lines.push("op：导出证据包 ｜ 目标：#" + plan_id + " " + ("" + cases[ci]["activity"]))
+            }
+            if op == "undo" {
+                // 撤销窗口：只许撤「刚取消的那条」，且 5 秒窗内（与 UI 撤销钮同源语义）
+                if cases[ci]["status"] != "Cancelled" {
+                    plan_check = "#" + plan_id + " 不是已取消态，无可撤销——拒绝执行"
+                } else if undo_win_open != "yes" || ("" + cancelled_last_id) != ("" + cases[ci]["id"]) {
+                    plan_check = "撤销窗口已过（5 秒）或目标不是刚取消的那条——拒绝执行"
+                }
+                plan_lines.push("撤销取消：#" + plan_id + " ──▶ 恢复为「" + status_badge_text(cancel_prev_status) + "」（拍板时窗口仍开着才生效）")
             }
         }
     }
@@ -2133,6 +2276,62 @@ fn butler_approve(){
         ui.hint.set_text("催收草稿已生成（" + tier + " 档）——数字全部来自状态机快照，模型零参与")
         last_actor = "user"
         return
+    } else if op == "mark_paid" {
+        // v0.9.0 WP1：agent 记收款——复用 UI 记收款函数（含格式/金额/名单守卫+审计+自动清零推导）
+        selected_id = pid
+        set_pay_draft(plan_who + " " + plan_amount)
+        add_payment()
+        chat_push("sys", "已拍板：#" + plan_id + " 记收款 " + plan_who + " ¥" + plan_amount + "（对账与自动清零同步重算）")
+    } else if op == "undo" {
+        selected_id = pid
+        undo_cancel()
+        // 读回真实结果（undo_cancel 内部有窗口守卫，可能未生效——如实转述）
+        let ci3 = -1
+        for i3 in cases.len() {
+            if "" + cases[i3]["id"] == plan_id { ci3 = i3 }
+        }
+        if ci3 >= 0 && cases[ci3]["status"] != "Cancelled" {
+            audit("undo", "#" + plan_id + " 撤销取消（agent 提案）")
+            chat_push("sys", "已拍板：#" + plan_id + " 撤销取消，恢复为 " + status_badge_text("" + cases[ci3]["status"]))
+        } else {
+            chat_push("sys", "撤销未生效（窗口已过）——状态仍为已取消")
+        }
+    } else if op == "clear" {
+        // 危险两段式：复用 clear_all_data 自带两段机制。plan_clear_stage 区分：
+        //   0=首次拍板（挂确认态）→ 1=窗口内第二次（执行）/过期（如实重挂）
+        if plan_clear_stage == 0 {
+            clear_all_data()
+            plan_clear_stage = 1
+            audit("clear_arm", "危险提案第一次拍板（确认态，5s）")
+            chat_push("sys", "⚠ 已确认一次：再点「拍板执行」才真正清空（8 秒内）")
+            ui.hint.set_text("清空提案待二次确认（8 秒）")
+            last_actor = "user"
+            return   // 保持 plan_pending，等第二次拍板
+        } else {
+            if clear_pending_flag == "yes" {
+                clear_all_data()
+                plan_clear_stage = 0
+                audit("clear", "全部守护已清空（agent 提案，两段确认后）")
+                chat_push("sys", "已拍板：全部守护已清空（两段确认完成）")
+            } else {
+                clear_all_data()
+                chat_push("sys", "二次确认窗口已过——已重新挂起确认，再点一次「拍板执行」（8 秒内）")
+                ui.hint.set_text("清空提案重新待确认（8 秒）")
+                last_actor = "user"
+                return
+            }
+        }
+    } else if op == "export" {
+        if plan_id != "" {
+            selected_id = pid
+            export_evidence(plan_id)
+            audit("export", "#" + plan_id + " 证据包（agent 提案）")
+            chat_push("sys", "已拍板：#" + plan_id + " 证据包已导出（evidence/case-" + plan_id + ".json）")
+        } else {
+            export_data()
+            audit("export", "全部守护数据（agent 提案）")
+            chat_push("sys", "已拍板：全部守护数据已屏显（hint 区可复制备份）")
+        }
     } else {
         ui.hint.set_text("未知提案类型：" + op)
         last_actor = "user"
@@ -2288,12 +2487,18 @@ fn paid_total(ci){
     }
     return total
 }
-// rebuild_selected_ledger()：为选中守护构建对账明细行（on_render 只读扁平数组）
+// rebuild_selected_ledger()：为选中守护构建对账明细（on_render 只读扁平数组）
 // 副作用：自动推导 bill_cleared（人人差额≤0 或 已收≥总额 且 有账）→ 原位写回 cases
+// v0.9.0 WP2：重构为表列并行数组（成员/已付/状态/色标）——HTML 规范 02 屏 AA 对账表
 let ledger_lines = []
-let ledger_diff = []    // v0.8.0 W2 平行色标："due"（还欠，琥珀）/"ok"（已清，玉绿）
+let ledger_diff = []     // 平行色标："due"（欠，琥珀）/"ok"（清，玉绿）
 let ledger_head = ""
-let ledger_tip = ""     // v0.8.0 W2「谁该付下一笔」垫付建议（Settle Up 同款事前消解）
+let ledger_tip = ""      // 「谁该付下一笔」垫付建议（Settle Up 同款事前消解）
+let ledger_name = []
+let ledger_paid_show = []
+let ledger_state = []
+let ledger_kind = []
+let ledger_total_line = ""
 // v0.8.0 W2：正数 f64 取整（to_chars 扫整数位，不依赖 math.floor——两代宿主方法表
 // 有差异，main.splash 既有代码全部手工字符扫描，同源零新依赖）。
 fn ifloor(x){
@@ -2327,6 +2532,11 @@ fn rebuild_selected_ledger(){
     ledger_diff = []
     ledger_head = ""
     ledger_tip = ""
+    ledger_name = []
+    ledger_paid_show = []
+    ledger_state = []
+    ledger_kind = []
+    ledger_total_line = ""
     let ci = -1
     for i in cases.len() {
         if cases[i]["id"] == selected_id { ci = i }
@@ -2340,8 +2550,8 @@ fn rebuild_selected_ledger(){
     let n = count_people(ppl)
     if n <= 0 { return }
     let paid_all = paid_total(ci)
-    ledger_head = "对账：总额 ¥" + cut2(total_f) + " × " + ("" + n) + " 人 ｜ 已收 ¥" + cut2(paid_all) + " ｜ 应付按分取整，尾差落末位"
-    // v0.8.0 W2：全员余额列表——每人一行 应付/已付/差额（Splitwise 绿橙方向色惯例）
+    ledger_head = "总额 ¥" + cut2(total_f) + " × " + ("" + n) + " 人 · 已收 ¥" + cut2(paid_all)
+    // v0.9.0 WP2：表列并行数组——成员 | 已付 | 状态（欠=琥珀/清=玉绿），总计行单列
     let idx = 0
     for nm in ppl.split(",") {
         let who = nm.trim()
@@ -2357,17 +2567,30 @@ fn rebuild_selected_ledger(){
         }
         let diff = due_i - mine
         if diff > 0.005 {
+            ledger_name.push(who)
+            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_state.push("欠 ¥" + cut2(diff))
+            ledger_kind.push("due")
             ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 欠 ¥" + cut2(diff))
             ledger_diff.push("due")
         } else if diff < -0.005 {
+            ledger_name.push(who)
+            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_state.push("多垫 ¥" + cut2(0 - diff))
+            ledger_kind.push("ok")
             ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 多垫 ¥" + cut2(0 - diff) + "（收齐时找齐）")
             ledger_diff.push("ok")
         } else {
+            ledger_name.push(who)
+            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_state.push("清 ✓")
+            ledger_kind.push("ok")
             ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 已付清 ✓")
             ledger_diff.push("ok")
         }
         idx = idx + 1
     }
+    ledger_total_line = "合计：已收 ¥" + cut2(paid_all) + " / 总额 ¥" + cut2(total_f) + (if paid_all >= total_f { " · 已收齐 ✓" } else { " · 还差 ¥" + cut2(total_f - paid_all) })
     // v0.8.0 W2：「谁该付下一笔」——当前垫付最少的成员先补（事前压低欠款概率）
     if paid_all < total_f {
         let min_paid = -1
@@ -3045,14 +3268,16 @@ fn clear_all_data(){
     clear_pending_flag = "yes"
     clear_pending_deadline = 1
     clear_prev_count = cur_n
-    ui.hint.set_text("再点一次「清空全部」才会真删 " + "" + cur_n + " 条守护（不可逆）；5 秒内点别的按钮可放弃")
-    // 5 秒后超时 → 放弃确认态
-    start_timeout(5.0, || {
+    // v0.9.0 WP1：两段窗 5s→8s——PLAN 卡路径人要读完危险提示再二次拍板（真机实测
+    //   5s 不够，滚动定位+二次点击超窗 → 永远只挂在确认态）；与拒绝理由窗同源 8s。
+    ui.hint.set_text("再点一次「清空全部」才会真删 " + "" + cur_n + " 条守护（不可逆）；8 秒内点别的按钮可放弃")
+    // 8 秒后超时 → 放弃确认态
+    start_timeout(8.0, || {
         if clear_pending_flag == "yes" {
             clear_pending_flag = "no"
             clear_pending_deadline = 0
             clear_prev_count = 0
-            ui.hint.set_text("清空确认已过期（5s 内未再点），未删除任何数据")
+            ui.hint.set_text("清空确认已过期（8s 内未再点），未删除任何数据")
         }
     })
 }
@@ -3069,6 +3294,25 @@ let accent = #xc7402f
 let Card = RoundedView{width: Fill height: Fit flow: Down spacing: 8 padding: Inset{left: 12 right: 12 top: 12 bottom: 12}
     show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
     draw_bg.shadow_color: #x2b272212 draw_bg.shadow_radius: 8.0 draw_bg.shadow_offset: vec2(0.0, 1.0)}
+// === v0.9.0 WP2 设计 token（HTML 规范附录 A 一一对应；splash 颜色必须字面量，
+//     本区块是唯一权威对照处——改色先改这里再全文件替换） ===
+//   canvas  暖纸   #xf7f2ec  页面底
+//   surface 宣纸   #xfffdfa  卡面（Card 默认）
+//   ink     墨色   #x2b2722  主文字/标题
+//   secondary     #x6e675e  次要文字
+//   faint         #xa89e91  更弱/占位/原文引行
+//   line   发丝线  #xe9dfd2  分隔线/卡描边
+//   accent 朱砂    #xc7402f  红线/主按钮/当前态（hover #xd0563f down #xa83424；晕环 #xc7402f2e）
+//   jade   玉绿    #x2f7d4f  已确认/已清/✓（底 #xe8f3ec）
+//   amber  琥珀    #xa87516  冲突/待收尾/欠（底 #xf7ebd3）
+//   danger 赭石    #xa14d3c  取消/危险（底 #xf6e8e3）
+//   neutral 灰泥   #xf1ece4  待拍板/中性 chip（字 #x6e675e）
+//   thread-todo   #xe1d7ca  红线未到段
+//   knot-todo     #xc9bfb2  未到结描边
+//   圆角三档：卡 14 / chip 12 / 按钮 22（主按钮高 ≥44）
+//   字阶：21 页题 / 15.5 卡题 / 14 键值 / 13 正文 / 12.5 元信息 / 11-12 chip
+//   已知边界：运行时无删除线（diff 旧值用 faint+──▶ 承担）；无字距控制（分区标签
+//   用「账 目 · AA」空格语义代替 letter-spacing）。
 let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 4 bottom: 4}
     show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 7.0}
 let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 11}}
@@ -3113,10 +3357,27 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
             // #48b：详情已拆到 detail_list（本视图只服务列表）；占位照 #5 范式
             View{width: Fill height: 1}
         } else {
-        // === v0.8.0 W4：守护灯常驻条（列表顶部第一行，确定性摘要） ===
-        View{width: Fill height: Fit padding: Inset{left: 12 right: 12 top: 7 bottom: 7}
-            show_bg: true draw_bg.color: #xefeadf draw_bg.border_radius: 12.0
-            Label{width: Fill text: guard_light draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 13}}}
+        // === v0.9.0 WP2：守护灯常驻条（HTML 规范 01 屏：卡片 + 标题行 + 分色 chips）===
+        Card{padding: Inset{left: 14 right: 14 top: 11 bottom: 11} spacing: 6
+            Label{width: Fill text: guard_title draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 13}}
+            View{width: Fill height: Fit flow: Right spacing: 6
+                for gi in guard_chip_text.len() {
+                    if guard_chip_kind[gi] == "amber" {
+                        RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                            show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
+                            Label{text: guard_chip_text[gi] draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
+                    } else if guard_chip_kind[gi] == "jade" {
+                        RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                            show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                            Label{text: guard_chip_text[gi] draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}}
+                    } else {
+                        RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                            show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 12.0
+                            Label{text: guard_chip_text[gi] draw_text.color: #x6e675e draw_text.text_style.font_size: 12}}
+                    }
+                }
+            }
+        }
         // === 决赛 S3：待拍板提案横幅（管家出了提案、人还没拍板时出现在列表顶部）——
         //   原则不变：模型文本不参与动作接线，这里只是「去拍板」的指路条（静态 copy）；
         //   零渲染零占位（plan_pending=="no" 时留 1px，#5 空分支硬约束范式）。
@@ -3271,8 +3532,8 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
             //   两卡文案同为「从一条消息开始」，同屏重复。
             if seq > 0 {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
-                    Label{text: "还没有聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "把一条群消息丢给管家开始（例如：周六上午去深圳湾骑车）；无 AI 服务时点「建守护」走本地规则。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    Label{text: "还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15.5}}
+                    Label{text: "把群里那句聚会邀约贴进来，剩下的交给管家。\n（无 AI 服务时点「建守护」走本地规则兜底）" draw_text.color: secondary draw_text.text_style.font_size: 13}
                 }
             }
             // 空分支兜底：永远留 1px 占位，防上帧残留（ai-providers:241 注释范式）
@@ -3301,79 +3562,154 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
             }
 
             // === #10 改造：列表循环改走 filtered_idxs，按当前筛选渲染 ===
-            // on_render 闭包只读字符串数组（filtered_idxs[i] 是整数，作为 case_* 数组下标），
-            // 筛选本身在 rebuild_lines() 函数上下文里完成（可读 cases[i]["status"]），
-            // 这里不做判断、不读 cases[i][…]，完全合规 #4/#5/#7/#8 硬约束。
+            // v0.9.0 WP2 重构：三段式卡（标题行+chips / 元信息行 / 迷你红线）+ 冲突琥珀横幅
+            //   + 原文引行（HTML 规范 01 屏）。红线四结：done=实心朱砂 / now=朱砂+晕环 /
+            //   todo=描边空心；闭包内只有 if/else（无嵌套 for——pop_stack 红线）。
             for i in filtered_idxs.len() {
                 let j = filtered_idxs[i]
                 let cur_id = case_ids[j]
-                let expanded = case_expanded[j]
-                // 高亮条：选中态左侧 4pt 色条（保留 ▶ 兼顾读屏）
-                let hi_color = status_bar_color(case_statuses[j])
-                let hi_w = 4
-                if case_selected[j] != "yes" { hi_w = 0 }
-                // 注：on_tap 只属 GestureView（RoundedView/Card 没有此属性），
-                // 照第一方 news:319 的 GestureView 包 Card 写法；
-                // #9：点卡片 = 选中 + 切换展开（取代 #8 open_detail）
+                // 元信息行：时段 · 地点 · 人数/字数（占位串归一）
+                let _pl_disp = "" + case_place_lines[j]
+                if _pl_disp == "（未抽取到）" { _pl_disp = "地点未抽取" }
+                let _np = count_people("" + case_people_line[j])
+                let _meta2 = "" + case_slot_day[j]
+                if case_slot_part[j] != "" { _meta2 = _meta2 + " · " + case_slot_part[j] }
+                _meta2 = _meta2 + " · " + _pl_disp
+                if _np > 0 { _meta2 = _meta2 + " · " + ("" + _np) + " 人" }
+                // 原文截断 24 字（split 逐字重建，运行时无切片）
+                let _full_text = "" + case_text_lines[j]
+                let _shown_text = _full_text
+                if _full_text.len() > 24 {
+                    let _kept = ""
+                    let _parts = _full_text.split("")
+                    for _pi in _parts.len() {
+                        if _pi >= 24 { break }
+                        _kept = _kept + _parts[_pi]
+                    }
+                    _shown_text = "「" + _kept + "…」"
+                } else {
+                    _shown_text = "「" + _full_text + "」"
+                }
                 GestureView{width: Fill height: Fit on_tap: |x, y| on_tap_card(cur_id)
-                    Card{
-                        View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.0}
-                        View{width: hi_w height: 56 draw_bg.color: hi_color}
-                        View{width: Fill height: Fit flow: Down spacing: 6
-                            View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                                // === #16 新增：标题行最左 10×10 状态色点 ===
-                                // RoundedView + show_bg:true + border_radius:5.0 → 圆角色块。
-                                // 颜色由 status_bar_color(status) 直接给（颜色字面量，不经字符串）。
-                                // 选中态时左侧另有 hi_w 色条，二者并存不冲突（#16 契约）。
-                                RoundedView{width: 10 height: 10
-                                    show_bg: true draw_bg.color: status_bar_color(case_statuses[j]) draw_bg.border_radius: 5.0}
-                                // 标题：选中时前缀 ▶，展开时前缀 ▾（给折叠/展开一个视觉差）
-                                let prefix = "  "
-                                if case_selected[j] == "yes" { prefix = "▶ " }
-                                let exp_prefix = "  "
-                                if expanded == "yes" { exp_prefix = "▾ " }
-                                Label{width: Fill text: prefix + exp_prefix + case_lines[j] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                                Badge{BadgeText{text: case_badge_text[j] draw_text.color: status_badge_fg(case_statuses[j])}
-                                    draw_bg +: {color: status_badge_bg(case_statuses[j])}}
-                                // === #18：折叠态冲突改在徽章文字体现（「待拍板·冲突」等），不再单独渲染冲突红点；
-                                //   标题行最左的 10×10 状态色点（status_bar_color）已经承担状态视觉。 ===
+                    Card{padding: Inset{left: 14 right: 14 top: 12 bottom: 12} spacing: 7
+                        // ── 段一：标题行（左题右 chips）──
+                        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                            Label{width: Fill text: case_lines[j] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15.5}}
+                            // 状态 chip（neutral/jade/danger 按 HTML 语义）
+                            if case_statuses[j] == "Confirmed" {
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                                    Label{text: "已确认" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}}
+                            } else if case_statuses[j] == "Cancelled" {
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xf6e8e3 draw_bg.border_radius: 12.0
+                                    Label{text: "已取消" draw_text.color: #xa14d3c draw_text.text_style.font_size: 12}}
+                            } else if case_statuses[j] == "Completed" {
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                                    Label{text: "已完成" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}}
+                            } else {
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 12.0
+                                    Label{text: "待拍板" draw_text.color: #x6e675e draw_text.text_style.font_size: 12}}
                             }
-                            // === #15：折叠态三行（标题+徽章 / 活动·地点 / 原文截断24字+…）
-                            //   第二行末尾追加「· 共 N 字」（N = case_text_lines[j].len() 真实计算）。
-                            //   本 runtime 无时钟 API，按外环契约不做假时间。
-                            //   原文超过 24 字则截断并加 …（截断长度不含 …）；
-                            //   24 字及以内原样显示，无 … 后缀。
-                            //   地点为「（未抽取到）」时折叠态显示「地点未抽取到」。
-                            let _act_full = "" + case_activity_lines[j]
-                            let _pl_disp = "" + case_place_lines[j]
-                            if _pl_disp == "（未抽取到）" { _pl_disp = "地点未抽取到" }
-                            let _full_text = "" + case_text_lines[j]
-                            let _text_len = _full_text.len()
-                            // 截断：Splash 的字符串**不能下标取字符**、数组**没有 join**
-                            // （SCRIPT-API §Data and strings / §Limits）。唯一可用的切分是
-                            // `split(p)`（按分隔符切成数组），故用"逐字符 split 再拼回"实现截断。
-                            let _shown_text = _full_text
-                            if _text_len > 24 {
-                                let _kept = ""
-                                let _parts = _full_text.split("")
-                                for _pi in _parts.len() {
-                                    if _pi >= 24 { break }
-                                    _kept = _kept + _parts[_pi]
-                                }
-                                _shown_text = _kept + "…"
-                            }
-                            TextLine{text: _act_full + " · " + _pl_disp + " · 共 " + "" + _text_len + " 字"}
-                            TextLine{text: _shown_text}
-                            // === #31 改造：卡内不再有展开态（截断问题整体绕开）；
-                            //   完整详情见根组件「详情面板」（rebuild_lines 末尾 update_detail_panel 刷新）。
-                            //   这里只保留折叠态三行（标题+徽章 / 活动·地点 / 原文截断24字+…）。
-                            // 折叠态冲突摘要（移到此处，因为展开态已删 — 见 #31 留出的折叠态唯一一处冲突可见位置）
+                            // 冲突 chip（琥珀，与待收尾同语义色）
                             if case_conflict[j] == "yes" {
-                                TextLine{text: case_conflict_lines[j]}
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
+                                    Label{text: "⚡ 冲突" draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
+                            }
+                            // 待收尾 chip（有账未清且已确认/已完成）
+                            if case_bill_total_str[j] != "" && case_bill_cleared[j] != "yes" {
+                                if case_statuses[j] == "Confirmed" {
+                                    RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                        show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
+                                        Label{text: "待收尾" draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
+                                }
+                                if case_statuses[j] == "Completed" {
+                                    RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                        show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
+                                        Label{text: "待收尾" draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
+                                }
                             }
                         }
+                        // ── 段二：元信息行 ──
+                        Label{width: Fill text: _meta2 draw_text.color: #x6e675e draw_text.text_style.font_size: 12.5}
+                        // ── 段三：迷你红线（已取消不画线）──
+                        if case_statuses[j] != "Cancelled" {
+                            View{width: Fill height: Fit flow: Right align: Align{y: 0.5}
+                                // 结 1（待拍板）
+                                if case_stage[j] > 0 {
+                                    View{width: 12 height: 12 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}}
+                                } else {
+                                    View{width: 14 height: 14 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 14 height: 14 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 7.0 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}}
+                                }
+                                // 段 1
+                                if case_stage[j] > 1 {
+                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                } else {
+                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca}
+                                }
+                                // 结 2（已确认）
+                                if case_stage[j] > 1 {
+                                    View{width: 12 height: 12 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}}
+                                } else if case_stage[j] == 1 {
+                                    View{width: 14 height: 14 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 14 height: 14 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 7.0 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}}
+                                } else {
+                                    View{width: 12 height: 12 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}}
+                                }
+                                // 段 2
+                                if case_stage[j] > 2 {
+                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                } else {
+                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca}
+                                }
+                                // 结 3（已完成）
+                                if case_stage[j] > 2 {
+                                    View{width: 12 height: 12 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}}
+                                } else if case_stage[j] == 2 {
+                                    View{width: 14 height: 14 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 14 height: 14 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 7.0 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}}
+                                } else {
+                                    View{width: 12 height: 12 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}}
+                                }
+                                // 段 3
+                                if case_stage[j] > 3 {
+                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                } else {
+                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca}
+                                }
+                                // 结 4（已收尾）
+                                if case_stage[j] > 3 {
+                                    View{width: 12 height: 12 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}}
+                                } else if case_stage[j] == 3 {
+                                    View{width: 14 height: 14 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 14 height: 14 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 7.0 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}}
+                                } else {
+                                    View{width: 12 height: 12 align: Align{x: 0.5 y: 0.5}
+                                        RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}}
+                                }
+                            }
+                        }
+                        // ── 冲突琥珀横幅（整条卡底部）──
+                        if case_conflict[j] == "yes" {
+                            if case_statuses[j] != "Cancelled" {
+                                View{width: Fill height: Fit padding: Inset{left: 11 right: 11 top: 8 bottom: 8}
+                                    show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 10.0
+                                    Label{width: Fill text: "⚡ " + case_conflict_with[j] + "，改个时段即解开" draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
+                            }
+                        }
+                        // ── 原文引行（faint）──
+                        Label{width: Fill text: _shown_text draw_text.color: #xa89e91 draw_text.text_style.font_size: 12}
                     }
-                }
                 }
             }
             // 非空分支兜底：留 1px 占位（ai-providers:241 注释范式）
@@ -3455,15 +3791,122 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                 Card{
                     let slot_now = case_slot_day[sel] + "-" + case_slot_part[sel]
                     if slot_now == "-" { slot_now = "未抽取" }
-                    // UI 改版（card-ux：返回行为明确）：返回列表置顶——详情卡总高必须
-                    //   ≤ case_list 盒高（~480px），超出部分零布局（#31 实测机制）；
-                    //   置顶保证任何深度下出口可见。
-                    ButtonFlat{text: "← 返回列表" height: 40 on_click: || back_to_list()
-                        draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                        draw_text +: {color: accent color_hover: accent color_down: accent}}
-                    BodyLine{text: "状态：" + case_status_text[sel] + " ｜ 时间：" + slot_now}
-                    BodyLine{text: "参与人：" + case_people_line[sel] + " ｜ AA：" + case_bill_split_text[sel]}
-                    BodyLine{text: "活动：" + case_activity_lines[sel] + " ｜ 地点：" + case_place_full[sel]}
+                    // v0.9.0 WP2：详情分区化（HTML 规范 02 屏）
+                    //   导航 → 标题+chips → 红线大卡 → 键值分区 → AA 对账表 → 回执 → 输入行 → 主按钮
+                    ButtonFlat{text: "‹ 返回列表" height: 36 padding: Inset{left: 8 right: 8} on_click: || back_to_list()
+                        draw_bg +: {border_radius: 12.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 0.0}
+                        draw_text +: {color: #x6e675e color_hover: #x6e675e color_down: #x6e675e}}
+                    // ── 标题行：#N·活动 + 状态 chips ──
+                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                        Label{width: Fill text: case_lines[sel] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 17}}
+                        if case_statuses[sel] == "Confirmed" {
+                            RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                                Label{text: "已确认" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}}
+                        } else if case_statuses[sel] == "Cancelled" {
+                            RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                show_bg: true draw_bg.color: #xf6e8e3 draw_bg.border_radius: 12.0
+                                Label{text: "已取消" draw_text.color: #xa14d3c draw_text.text_style.font_size: 12}}
+                        } else if case_statuses[sel] == "Completed" {
+                            RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                                Label{text: "已完成" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}}
+                        } else {
+                            RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 12.0
+                                Label{text: "待拍板" draw_text.color: #x6e675e draw_text.text_style.font_size: 12}}
+                        }
+                        if case_bill_total_str[sel] != "" && case_bill_cleared[sel] != "yes" {
+                            if case_statuses[sel] == "Confirmed" {
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
+                                    Label{text: "待收尾" draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
+                            }
+                            if case_statuses[sel] == "Completed" {
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
+                                    Label{text: "待收尾" draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
+                            }
+                        }
+                    }
+                    // ── 红线大卡（带阶段标签；已取消不画）──
+                    if case_statuses[sel] != "Cancelled" {
+                        View{width: Fill height: Fit padding: Inset{left: 4 right: 4 top: 6 bottom: 2} flow: Right align: Align{y: 0.0}
+                            View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
+                                if case_stage[sel] > 0 {
+                                    RoundedView{width: 11 height: 11 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 5.5}
+                                } else {
+                                    RoundedView{width: 17 height: 17 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 8.5 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}
+                                }
+                                if case_stage[sel] == 0 {
+                                    Label{text: "待拍板" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 10.5}}
+                                } else {
+                                    Label{text: "待拍板" draw_text.color: #xa89e91 draw_text.text_style.font_size: 10.5}
+                                }
+                            }
+                            if case_stage[sel] > 1 {
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 4 right: 6}}
+                            } else {
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 4 right: 6}}
+                            }
+                            View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
+                                if case_stage[sel] > 1 {
+                                    RoundedView{width: 11 height: 11 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 5.5}
+                                } else if case_stage[sel] == 1 {
+                                    RoundedView{width: 17 height: 17 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 8.5 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}
+                                } else {
+                                    RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}
+                                }
+                                if case_stage[sel] == 1 {
+                                    Label{text: "已确认" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 10.5}}
+                                } else {
+                                    Label{text: "已确认" draw_text.color: #xa89e91 draw_text.text_style.font_size: 10.5}
+                                }
+                            }
+                            if case_stage[sel] > 2 {
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 4 left: 6 right: 6}}
+                            } else {
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 4 left: 6 right: 6}}
+                            }
+                            View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
+                                if case_stage[sel] > 2 {
+                                    RoundedView{width: 11 height: 11 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 5.5}
+                                } else if case_stage[sel] == 2 {
+                                    RoundedView{width: 17 height: 17 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 8.5 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}
+                                } else {
+                                    RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}
+                                }
+                                if case_stage[sel] == 2 {
+                                    Label{text: "已完成" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 10.5}}
+                                } else {
+                                    Label{text: "已完成" draw_text.color: #xa89e91 draw_text.text_style.font_size: 10.5}
+                                }
+                            }
+                            if case_stage[sel] > 3 {
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 4 left: 6 right: 6}}
+                            } else {
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 4 left: 6 right: 6}}
+                            }
+                            View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
+                                if case_stage[sel] > 3 {
+                                    RoundedView{width: 11 height: 11 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 5.5}
+                                } else if case_stage[sel] == 3 {
+                                    RoundedView{width: 17 height: 17 show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 8.5 draw_bg.border_size: 1.5 draw_bg.border_color: #xc7402f}
+                                } else {
+                                    RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}
+                                }
+                                if case_stage[sel] == 3 {
+                                    Label{text: "已收尾" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 10.5}}
+                                } else {
+                                    Label{text: "已收尾" draw_text.color: #xa89e91 draw_text.text_style.font_size: 10.5}
+                                }
+                            }
+                        }
+                    }
+                    // ── 键值分区（时间/地点/参与人/AA/原文）──
+                    Label{width: Fill text: "时间：" + slot_now + " ｜ 地点：" + case_place_full[sel] draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{width: Fill text: "参与人：" + case_people_line[sel] + " ｜ AA：" + case_bill_split_text[sel] draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{width: Fill text: "活动：" + case_activity_lines[sel] + " ｜ 状态：" + case_status_text[sel] draw_text.color: ink draw_text.text_style.font_size: 14}
                     if case_receipt[sel].len() > 0 {
                         for _ri in case_receipt[sel].len() {
                             ReceiptLine{text: "  ↳ " + case_receipt[sel][_ri]}
@@ -3473,58 +3916,81 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                     if case_status_text[sel] == "已确认" {
                         BodyLine{text: "日历：ICS 已生成（calendar/qianxian-" + case_ids[sel] + ".ics）｜ 本机日历：确认时已尝试写入（支持宿主走原生确认）｜ 提醒：T-24h 已登记"}
                     }
-                    // === v0.6.0 S-P2：确定性对账（有账才显示；数字全部由代码算出）===
-                    // === v0.8.0 W2：全员余额列表按差额方向着色（欠=琥珀 / 清=玉绿）===
+                    // === v0.9.0 WP2：AA 对账表（HTML 规范 02 屏：成员|已付|状态 + 总计 + 恒等注脚）===
                     if ledger_head != "" {
-                        SectionLabel{text: ledger_head}
-                        for li in ledger_lines.len() {
-                            if ledger_diff[li] == "due" {
-                                Label{width: Fill text: "  · " + ledger_lines[li] draw_text.color: #xa35f00 draw_text.text_style.font_size: 12}
-                            } else {
-                                Label{width: Fill text: "  · " + ledger_lines[li] draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}
+                        SectionLabel{text: "账目 · " + ledger_head}
+                        Card{padding: Inset{left: 14 right: 14 top: 10 bottom: 10} spacing: 7
+                            // 表头
+                            View{width: Fill height: Fit flow: Right spacing: 8
+                                Label{width: 84 text: "成员" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 11}}
+                                Label{width: Fill text: "已付" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 11}}
+                                Label{width: Fit text: "状态" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 11}}
+                            }
+                            // 行（闭包内 for+if/else 无嵌套 for——安全组合）
+                            for li in ledger_name.len() {
+                                View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                                    Label{width: 84 text: ledger_name[li] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 13}}
+                                    Label{width: Fill text: ledger_paid_show[li] draw_text.color: #x6e675e draw_text.text_style.font_size: 13}
+                                    if ledger_kind[li] == "due" {
+                                        Label{width: Fit text: ledger_state[li] draw_text.color: #xa87516 draw_text.text_style: theme.font_bold{font_size: 13}}
+                                    } else {
+                                        Label{width: Fit text: ledger_state[li] draw_text.color: #x2f7d4f draw_text.text_style: theme.font_bold{font_size: 13}}
+                                    }
+                                }
+                            }
+                            // 总计行 + 恒等注脚
+                            Label{width: Fill text: ledger_total_line draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 13}}
+                            Label{width: Fill text: "✓ 按分取整 · 尾差由垫付最多者承担 · 总计恒等" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 11.5}
+                            if ledger_tip != "" {
+                                View{width: Fill height: Fit padding: Inset{left: 11 right: 11 top: 8 bottom: 8}
+                                    show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 10.0
+                                    Label{width: Fill text: ledger_tip draw_text.color: #x6e675e draw_text.text_style.font_size: 12}}
+                            }
+                            View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                                TextInput{width: Fill height: 40 empty_text: "收款：姓名 金额（如 阿明 150）"
+                                    on_change: |txt| set_pay_draft("" + txt)}
+                                ButtonFlat{text: "记收款" height: 40 padding: Inset{left: 10 right: 10} on_click: || add_payment()
+                                    draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
+                                    draw_text +: {color: #xffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                                ButtonFlat{text: "导出证据" height: 40 padding: Inset{left: 10 right: 10} on_click: || export_evidence("" + selected_id)
+                                    draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
                             }
                         }
-                        if ledger_tip != "" {
-                            ReceiptLine{text: "  ↳ " + ledger_tip}
-                        }
-                        View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                            TextInput{width: Fill height: 40 empty_text: "收款：姓名 金额（如 阿明 150）"
-                                on_change: |txt| set_pay_draft("" + txt)}
-                            ButtonFlat{text: "记收款" height: 40 padding: Inset{left: 10 right: 10} on_click: || add_payment()
-                                draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
-                                draw_text +: {color: #xffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
-                            ButtonFlat{text: "导出证据" height: 40 padding: Inset{left: 10 right: 10} on_click: || export_evidence("" + selected_id)
-                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                    }
+                    // === v0.4.0 S4/S6：完成/收尾/分享（确认态；主按钮朱砂通栏）===
+                    if case_status_text[sel] == "已确认" {
+                        ButtonFlat{width: Fill text: "标记完成" height: 44 on_click: || set_completed("" + selected_id)
+                            draw_bg +: {border_radius: 22.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
+                        View{width: Fill height: Fit flow: Right spacing: 6
+                            ButtonFlat{text: "AA 已收齐" height: 44 padding: Inset{left: 12 right: 12} on_click: || set_bill_cleared("" + selected_id)
+                                draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
+                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 12}}}
+                            ButtonFlat{text: "分享到群" height: 44 padding: Inset{left: 12 right: 12} on_click: || post_confirm_actions("" + selected_id)
+                                draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 12}}}
                         }
                     }
-                    // === v0.4.0 S4/S6：完成/收尾/分享按钮（确认态才显示）===
-                    if case_status_text[sel] == "已确认" {
-                        View{width: Fill height: Fit flow: Right spacing: 6
-                            ButtonFlat{text: "标记完成" height: 40 padding: Inset{left: 10 right: 10} on_click: || set_completed("" + selected_id)
-                                draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
-                                draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
-                            ButtonFlat{text: "AA 已收齐" height: 40 padding: Inset{left: 10 right: 10} on_click: || set_bill_cleared("" + selected_id)
-                                draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
-                                draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
-                            ButtonFlat{text: "分享到群" height: 40 padding: Inset{left: 10 right: 10} on_click: || post_confirm_actions("" + selected_id)
-                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
-                        }
+                    // 待拍板态：确认主按钮朱砂通栏（动作坞主行动按状态就位）
+                    if case_status_text[sel] == "待拍板" {
+                        ButtonFlat{width: Fill text: "确认这条守护" height: 44 on_click: || confirm_case()
+                            draw_bg +: {border_radius: 22.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
                     }
                     View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
                         TextInput{width: Fill height: 44 empty_text: "加参与人（逗号分隔）"
                             on_change: |txt| set_people_draft("" + txt)}
                         ButtonFlat{text: "添加" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_person("" + selected_id, people_draft)
-                            draw_bg +: {border_radius: 13.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                            draw_bg +: {border_radius: 13.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                            draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 12}}}
                     }
                     View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
                         TextInput{width: Fill height: 44 empty_text: "记 AA 总额，如300（选填）"
                             on_change: |txt| set_bill_draft("" + txt)}
                         ButtonFlat{text: "记一笔" height: 44 padding: Inset{left: 10 right: 10} on_click: || update_bill_total("" + selected_id, bill_draft)
-                            draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 12}}}
+                            draw_bg +: {border_radius: 13.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
+                            draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 12}}}
                     }
                 }
             }
@@ -3559,46 +4025,76 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
                     MetaLine{width: Fill text: ct}
                 }
             }
-            // 待拍板提案卡（一次至多一个）
+            // 待拍板提案卡（一次至多一个）——v0.9.0 WP2 精修（HTML 规范 03 屏）：
+            //   op 头章（朱砂实底）+ 目标行；diff 行旧值 faint/新值朱砂加粗（运行时无
+            //   删除线——faint 色 + ──▶ 箭头承担对比语义，记 evidence）；拍板主按钮。
             if plan_pending == "yes" {
-                Card{show_bg: true draw_bg.color: #xfdf6ec draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xc7402f
-                    Badge{show_bg: true draw_bg.color: #xfbe9e5
-                        BadgeText{text: "📋 管家提案 · 待拍板" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 11}}
-                    }
-                    BodyLine{text: plan_summary}
-                    for pi in plan_lines.len() {
-                        TextLine{text: plan_lines[pi]}
-                    }
-                    if plan_check != "ok" {
-                        TextLine{text: "⚠ " + plan_check}
-                    }
+                Card{show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xc7402f
+                    padding: Inset{left: 0 right: 0 top: 0 bottom: 0} spacing: 0
+                    // ── 头章行：op 徽标 + 目标 ──
                     View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                        ButtonFlat{text: "拍板执行" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_approve()
-                            draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-                            draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
-                        // v0.8.0 W1：放弃 → 两段式理由快捷项（拒绝并改写；8 秒不选自动收回）
-                        if decline_prompt != "yes" {
-                            ButtonFlat{text: "放弃" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_decline()
-                                draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                draw_text +: {color: secondary color_hover: secondary color_down: secondary}}
+                        padding: Inset{left: 14 right: 14 top: 11 bottom: 11}
+                        show_bg: true draw_bg.color: #xfcf8f1 draw_bg.border_radius: 14.0
+                        RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 2 bottom: 3}
+                            show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 8.0
+                            Label{text: plan_op_label(plan_op) draw_text.color: #xfffdfa draw_text.text_style: theme.font_bold{font_size: 11}}
                         }
+                        Label{width: Fill text: "管家提案 · 待拍板" draw_text.color: #x6e675e draw_text.text_style.font_size: 12}
                     }
-                    if decline_prompt == "yes" {
-                        MetaLine{width: Fill text: "为什么放弃？理由会让管家下一轮改方案（8 秒内选，超时收回）"}
-                        View{width: Fill height: Fit flow: Right spacing: 6
-                            ButtonFlat{text: "时间不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_time()
-                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
-                            ButtonFlat{text: "地点不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_place()
-                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
-                            ButtonFlat{text: "理解错了" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_intent()
-                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
-                            ButtonFlat{text: "我自己来" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_self()
-                                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                    View{width: Fill height: Fit flow: Down spacing: 6
+                        padding: Inset{left: 14 right: 14 top: 10 bottom: 10}
+                        BodyLine{text: plan_summary}
+                        for pi in plan_lines.len() {
+                            // diff 行语义着色：含「──▶」为变更行（朱砂加粗）；「冲突预演：✓」
+                            // 玉绿；「⚡」琥珀。判别用 let 预提（闭包内不写方法链进 if 条件，
+                            // 照 _text_len 既有范式）。
+                            if plan_lines[pi] != "" {
+                                let _is_diff = plan_lines[pi].split("──▶").len() > 1
+                                let _is_ok = plan_lines[pi].split("冲突预演：✓").len() > 1
+                                let _is_warn = plan_lines[pi].split("⚡").len() > 1
+                                if _is_diff {
+                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 13}}
+                                } else if _is_ok {
+                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #x2f7d4f draw_text.text_style.font_size: 13}
+                                } else if _is_warn {
+                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #xa87516 draw_text.text_style.font_size: 13}
+                                } else {
+                                    TextLine{text: plan_lines[pi]}
+                                }
+                            }
                         }
+                        if plan_check != "ok" {
+                            TextLine{text: "⚠ " + plan_check}
+                        }
+                        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                            ButtonFlat{text: "拍板执行" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_approve()
+                                draw_bg +: {border_radius: 22.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                                draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
+                            // v0.8.0 W1：放弃 → 两段式理由快捷项（拒绝并改写；8 秒不选自动收回）
+                            if decline_prompt != "yes" {
+                                ButtonFlat{text: "放弃" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_decline()
+                                    draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                    draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f}}
+                            }
+                        }
+                        if decline_prompt == "yes" {
+                            MetaLine{width: Fill text: "为什么放弃？理由会让管家下一轮改方案（8 秒内选，超时收回）"}
+                            View{width: Fill height: Fit flow: Right spacing: 6
+                                ButtonFlat{text: "时间不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_time()
+                                    draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                                ButtonFlat{text: "地点不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_place()
+                                    draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                                ButtonFlat{text: "理解错了" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_intent()
+                                    draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                                ButtonFlat{text: "我自己来" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_self()
+                                    draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+                            }
+                        }
+                        Label{width: Fill text: "拍板后走白名单动作 · 5 秒内可撤销 · 拒绝理由注入下轮——agent 从不直接改状态，它只能提案" draw_text.color: #xa89e91 draw_text.text_style.font_size: 11}
                     }
                 }
             } else {
@@ -3618,23 +4114,14 @@ SolidView{width: Fill height: Fill flow: Down padding: 16 spacing: 10 draw_bg.co
     }}
     // #31f：根静态详情面板已删除——面板并入 case_list on_render 的 ui_mode="detail" 分支
     action_row := View{width: Fill height: Fit flow: Right spacing: 8
-
-        // === #11 动词化文案：同意选中 → 确认这条守护（绿=主行动 #7 状态色） ===
-        ButtonFlat{text: "确认这条守护" height: 44 padding: Inset{left: 14 right: 14} on_click: || confirm_case()
-            draw_bg +: {border_radius: 16.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
-            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        // === #11 动词化文案：改口 → 重新收敛（橙=警示 #7 状态色） ===
+        // === v0.9.0 WP2：动作坞降为次级行——主行动（确认/标记完成）按状态进详情闭包
+        //   （朱砂通栏）；此处只留次级与危险操作，与 HTML 规范 02 屏 dock 一致。 ===
         ButtonFlat{text: "重新收敛" height: 44 padding: Inset{left: 14 right: 14} on_click: || reschedule_case()
-            draw_bg +: {border_radius: 16.0 color: #xa35f00 color_hover: #x8f5400 color_down: #x7d4a00 border_size: 0.0}
-            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
-        // === #11 动词化文案 + 取消按钮降权（默认态：浅底红字，视觉弱化）===
-        // 注：确认态的「确认取消（5s）」变体由 case_list 的 on_render 渲染
-        // （根组件属性不随状态重算，#8 实证）；此处只保留固定的默认态按钮。
+            draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+            draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f}}
         ButtonFlat{text: "取消守护" height: 44 padding: Inset{left: 14 right: 14} on_click: || cancel_case()
-            draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+            draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf6e8e3 color_down: #xf6e8e3 border_size: 0.0}
             draw_text +: {color: #xa14d3c color_hover: #xa14d3c color_down: #xa14d3c}}
-        // #9：撤销按钮已移到 case_list on_render 内的 undo_bar，根组件不再放 if 块
-        // （#8 外环复验：根组件属性不随状态重算，必须放闭包里）
     }
     // === #29（外环派）：低频操作（改时间/AI解析/导出数据/清空全部）已从根组件第二行
     //   折叠进「怎么用？」说明卡——按钮升 44pt 后，根组件底部从 3 行 132pt 收缩到 2 行 88pt，
