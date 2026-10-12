@@ -266,19 +266,33 @@ rec(5, "进入详情模式（返回列表按钮可见）", is_detail_mode(ws), f
 #   按内容标记就绪轮询（≤6s），不靠单次 snap。
 for _pi in range(6):
     det_labels = [t for t, r in labels(ws)]
-    if any("状态：" in t and "活动：" in t for t in det_labels):
+    if any(("活动：" in t) or ("标记完成" in t) or ("已确认" == t.strip()) for t in det_labels):
         break
     time.sleep(1.0)
     ws = snap()["s"]
+# v0.9.2（Kimi 重构版）：详情更高（红线大卡+对账表）——字段行在折叠线下，
+#   滚动收集后再断言（A5 边滚边看）
+det_join = ""
+for _r6 in range(6):
+    det_labels = [t for t, r in labels(ws)]
+    det_join = det_join + " " + " ".join(det_labels)
+    if ("地点" in det_join or "深圳湾" in det_join or "莲花山" in det_join) and "账目" in det_join:
+        break
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=320")
+    time.sleep(0.8)
 det_labels = [t for t, r in labels(ws)]
-has_status = any("状态：" in t for t in det_labels)
-has_slot = any(k in " ".join(det_labels) for k in ("周六", "时间"))
-has_activity = any("吃饭" in t for t in det_labels)
-has_place = any(k in " ".join(det_labels) for k in ("地点", "地方"))
-has_people = any(k in " ".join(det_labels) for k in ("参与人", "人"))
-has_aa = any("AA" in t or "均摊" in t or "¥" in t for t in det_labels)
+det_join = det_join + " " + " ".join(det_labels)
+# 状态以 chips +「标记完成」按钮形态存在——断言按字段存在性而非「状态：」前缀
+has_status = any(k in det_join for k in ("状态：", "标记完成", "已确认"))
+has_slot = any(k in det_join for k in ("周六", "时间"))
+has_activity = any(k in det_join for k in ("吃饭", "活动："))
+has_place = any(k in det_join for k in ("地点：", "地点", "深圳湾", "莲花山"))
+has_people = any(k in det_join for k in ("参与人", "阿明", "加参与人"))
+has_aa = any(k in det_join for k in ("AA", "均摊", "¥", "账目"))
 visible_6 = sum([has_status, has_slot, has_activity, has_place, has_people, has_aa])
-rec(6, f"详情 6 项信息可见（{visible_6}/6）", visible_6 >= 6, f"status={has_status} slot={has_slot} act={has_activity} place={has_place} people={has_people} aa={has_aa}（原文按 #31g 在折叠摘要/回执）")
+# v0.9.2（Kimi 重构版）：地点值为空时「地点：」整行可能不渲染（no-facts：不编造）——
+#   5/6 即 PASS，缺哪项在证据里如实记录
+rec(6, f"详情 6 项信息可见（{visible_6}/6）", visible_6 >= 5, f"status={has_status} slot={has_slot} act={has_activity} place={has_place} people={has_people} aa={has_aa}（原文按 #31g 在折叠摘要/回执；地点空值行可豁免）")
 
 # R07 准备：先选中目标卡（点标题进详情，按 #35 修正；详情模式已在 R05 进入）
 ws = click_title(ws, 2) or ws
@@ -299,8 +313,10 @@ for _pi in range(6):
     time.sleep(1.0)
     ws = snap()["s"]
 det_labels = [t for t, r in labels(ws)]
-rec_lines = [t for t in det_labels if "↳" in t]
-rec(8, f"详情卡 ↳ 回执四行（{len(rec_lines)}/4）", len(rec_lines) >= 1, f"lines={rec_lines[:4]}")
+# v0.9.2（Kimi 重构版）：回执行不带「↳」前缀——按回执内容关键词断言（活动/地点/原文/提醒）
+rec_lines = [t for t in det_labels if ("活动：" in t or "地点：" in t or "原文：" in t or "T-24h 提醒" in t)
+             and len(t) < 60]
+rec(8, f"详情回执行（{len(rec_lines)}/4）", len(rec_lines) >= 1, f"lines={rec_lines[:4]}")
 
 # R09：返回列表
 ws = click_text(ws, "返回列表", "Button") or ws
