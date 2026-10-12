@@ -3824,8 +3824,8 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             //   写在 on_render 闭包里（#8/#10 实证：根组件属性不随状态重算）。
             if seq == 0 {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
-                    Label{text: "第一次用？把群消息丢给管家" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "管家分诊、查冲突、出提案——你只点「拍板」；改期/加人/记账跟管家说就行。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    Label{width: Fill text: "第一次用？把群消息丢给管家" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                    Label{width: Fill text: "管家分诊、查冲突、出提案——你只点「拍板」；改期/加人/记账跟管家说就行。" draw_text.color: secondary draw_text.text_style.font_size: 13}
                     View{width: Fill height: Fit flow: Right
                         ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 14 right: 14} on_click: || fill_example()
                             draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
@@ -3841,8 +3841,8 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             //   两卡文案同为「从一条消息开始」，同屏重复。
             if seq > 0 {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
-                    Label{text: "还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15.5}}
-                    Label{text: "把群里那句聚会邀约贴进来，剩下的交给管家。\n（无 AI 服务时点「建守护」走本地规则兜底）" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                    Label{width: Fill text: "还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15.5}}
+                    Label{width: Fill text: "把群里那句聚会邀约贴进来，剩下的交给管家。\n（无 AI 服务时点「建守护」走本地规则兜底）" draw_text.color: secondary draw_text.text_style.font_size: 13}
                 }
             }
             // 空分支兜底：永远留 1px 占位，防上帧残留（ai-providers:241 注释范式）
@@ -3850,8 +3850,8 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
         // 分支 B：有守护但当前筛选下 0 条 —— 引导用户换筛选或建新条
         } else if filtered_idxs.len() == 0 {
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
-                Label{text: "这个筛选下还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                Label{text: "换个标签看看，或粘贴一条群消息开始（当前筛选：" + (if cf_now == "all" { "全部" } else if cf_now == "Proposing" { "待拍板" } else if cf_now == "Confirmed" { "已确认" } else if cf_now == "Completed" { "已完成" } else { "已取消" }) + "）。" draw_text.color: secondary draw_text.text_style.font_size: 13}
+                Label{width: Fill text: "这个筛选下还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                Label{width: Fill text: "换个标签看看，或粘贴一条群消息开始（当前筛选：" + (if cf_now == "all" { "全部" } else if cf_now == "Proposing" { "待拍板" } else if cf_now == "Confirmed" { "已确认" } else if cf_now == "Completed" { "已完成" } else { "已取消" }) + "）。" draw_text.color: secondary draw_text.text_style.font_size: 13}
             }
             // 筛选空分支兜底：同样留 1px 占位
             View{width: Fill height: 1}
@@ -4065,13 +4065,13 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             //   展开后滚动到底即达——#29 的低频键在有数据时重新可达。
             if howto_show_flag == "yes" {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
-                    Label{text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
-                    Label{text: "粘贴群消息，点「交给管家」；管家出提案，你在提案卡上点「拍板」即落地。" draw_text.color: ink draw_text.text_style.font_size: 14}
-                    Label{text: "改期/加人/记账/取消直接跟管家说（如「改到周日下午」）；无 AI 服务的设备自动降级——点「建守护」走本地规则，功能完整。" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{width: Fill text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 16}}
+                    Label{width: Fill text: "粘贴群消息，点「交给管家」；管家出提案，你在提案卡上点「拍板」即落地。" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{width: Fill text: "改期/加人/记账/取消直接跟管家说（如「改到周日下午」）；无 AI 服务的设备自动降级——点「建守护」走本地规则，功能完整。" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #45 C 切片：app 不能自驱唤醒 agent（无 needs/triggers），
                     // 宿主「Ask 牵线」面板问我任何问题时，我会主动带出临期/待拍板提醒
                     // （详见 AGENT.md「主动提示行为」小节）。
-                    Label{text: "在宿主「Ask 牵线」面板可以问：「周六有什么安排？」——已确认的守护临期时我会主动提醒你" draw_text.color: ink draw_text.text_style.font_size: 14}
+                    Label{width: Fill text: "在宿主「Ask 牵线」面板可以问：「周六有什么安排？」——已确认的守护临期时我会主动提醒你" draw_text.color: ink draw_text.text_style.font_size: 14}
                     // === #29（外环派）：低频操作折叠区 ——
                     //   原 ai_row 的 4 个按钮（改时间 / AI 解析 / 导出数据 / 清空全部）
                     //   从根组件搬到「怎么用？」说明卡内,只在卡片展开时可见。
@@ -4079,7 +4079,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     //   闭包内可重渲染);on_click 直接调既有 fn(cycle_slot/enter_chat/
                     //   export_data/clear_all_data),无新逻辑、无新状态。
                     //   height: 44 与主区三键对齐,触控目标达 HIG 44pt 标准。
-                    Label{text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
+                    Label{width: Fill text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
                     // 复用 #11 AI 按钮弱化风格 + #14 灰底色,与主区三键视觉拉开层级
                     // （次级灰底 + accent/secondary 字,不抢眼）。
                     // #44 外环修：五键原单行 flow:Right 总宽 ~500px > 容器 ~380px，第 5 键
