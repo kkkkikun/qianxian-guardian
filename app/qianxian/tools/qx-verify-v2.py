@@ -779,12 +779,14 @@ if t21:
         cleared = [c.get("bill_cleared") for c in _json.loads(cj.read_text())["cases"]
                    if c.get("bill_total") == "300"]
     allclear = False
-    for _ in range(4):
+    for _ in range(6):
         ws = snap()["s"]
-        allclear = any("已收 ¥300.00" in t for t, r in labels(ws))
+        # v0.9.x 对账表合计行「合计：已收 ¥300.00 / 总额 ¥300.00 · 已收齐 ✓」（滚动到位后）
+        allclear = any("已收 ¥300.00" in t and ("已收齐" in t or "总额" in t) for t, r in labels(ws))                    or any("已收齐" in t for t, r in labels(ws))
         if allclear:
             break
-        time.sleep(1.0)
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=250")
+        time.sleep(0.9)
     rec(21, "账目清零闭环（对账/收款/自动清零）",
         head_ok and pay1 and diff_ok and pay2 and allclear and bool(cleared) and cleared[0] == "yes",
         f"参与人={okp} 记AA={okaa} 对账头={head_ok} 差额行={diff_ok} 两笔={pay1 and pay2} 已收¥300={allclear} 自动清零={cleared}")
@@ -896,8 +898,127 @@ rec(27, "主动提案拍板消费（改期落盘+一次性清除）",
 ws = click_text(ws, "回到守护列表", "Button") or ws
 time.sleep(1.0)
 
+# R28（v0.10.0 WP5）：结案报告卡——真实动作链（R-17 确认 + R-21 两笔收款满额自动清零）
+#   → 标记完成 → 详情顶部结案卡（已收尾徽章/四统计/时间线行带时间戳/分享按钮）。
+#   audit 链由本回归自然产生（audit.json 持久化：create/confirm/payment/complete/bill_auto_cleared）。
+# 先强制回列表态（R-26/R-27 停在聊天态）。判据：「回到守护列表」按钮消失 +
+#   守护灯/搜索框等列表标志出现。回不到列表则选不到卡——如实 FAIL。
+# 回到守护列表按钮在聊天视图顶部——先滚回顶再找（虚拟化视口外不渲染）
+_listed = False
+for _ in range(10):
+    ws = snap()["s"]
+    if is_list_mode(ws) and find(ws, "唱歌", "Label") is not None:
+        _listed = True
+        break
+    _bb = find(ws, "回到守护列表", "Button")
+    if _bb:
+        x, y = center(_bb)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(1.2)
+        get(f"/click?x={x}&y={y}")   # 事件泵补拍
+        time.sleep(1.5)
+    else:
+        get("/m?k=scroll&x=200&y=600&dx=0&dy=-600")
+        time.sleep(0.7)
+print(f"[R28-DEBUG-listed] 回列表成功={_listed}", flush=True)
+# is_list_mode 在聊天态误报（根区常驻「建守护」）——用「唱歌卡 Label 在树」作真判据
+_sing28 = None
+for _ in range(10):
+    ws = snap()["s"]
+    _sing28 = find(ws, "唱歌", "Label")
+    if _sing28:
+        break
+    _bb2 = find(ws, "回到守护列表", "Button")
+    if _bb2:
+        x, y = center(_bb2)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(1.2)
+        get(f"/click?x={x}&y={y}")
+        time.sleep(1.2)
+    else:
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=400")
+        time.sleep(0.8)
+_fin_ok = False
+_tl_rows = 0
+_share_ok = False
+_stat_ok = False
+print(f"[R28-DEBUG-sing] 选到唱歌卡={_sing28 is not None}", flush=True)
+if _sing28:
+    x, y = center(_sing28)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(2.0)
+    get(f"/click?x={x}&y={y}")   # 事件泵补拍进详情
+    time.sleep(1.5)
+    ws = snap()["s"]
+    print("[R28-DEBUG-detail]", [t[:40] for t, r in labels(ws)][:12], flush=True)
+    # R-26/R-27 在唱歌卡上留了待拍板提案（主动预警改期）——提案卡占位把结案卡挤出
+    #   视口且永不翻走。先滚找「放弃」清掉残留提案，再验结案卡。
+    for _ in range(8):
+        ws = snap()["s"]
+        dec = find(ws, "放弃", "Button")
+        if dec:
+            x, y = center(dec)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(0.8)
+            # 放弃会弹理由选择——选「我自己来」不注入反馈
+            time.sleep(0.6)
+            ws = snap()["s"]
+            own = find(ws, "我自己来", "Button")
+            if own:
+                x, y = center(own)
+                get(f"/click?x={x}&y={y}")
+                time.sleep(1.2)
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+        time.sleep(0.6)
+    # 标记完成（若还不是完成态）
+    for _ in range(4):
+        ws = snap()["s"]
+        mc = find(ws, "标记完成", "Button")
+        if mc:
+            x, y = center(mc)
+            get(f"/click?x={x}&y={y}")
+            time.sleep(2.0)
+            break
+        if any("已完成" in t or "已收尾" in t for t, r in labels(ws)):
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+        time.sleep(0.7)
+    # 滚到顶部看结案卡（标记完成后 rebuild 需一拍；先等「已收尾」出现）
+    for _ in range(6):
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=-600")
+        time.sleep(0.5)
+    for _ in range(4):
+        ws = snap()["s"]
+        if any("已收尾" in t for t, r in labels(ws)):
+            break
+        time.sleep(0.8)
+    # 结案卡整卡可能跨 1.5 屏——大幅滚动收集（方向随视口位置自适应）
+    for _ in range(14):
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=220")
+        time.sleep(0.5)
+        ws = snap()["s"]
+        txts = [t for t, r in labels(ws)]
+        if any("已收尾" in t or "已完成 · 已收尾" in t for t in txts):
+            _fin_ok = True
+        _tl_rows = max(_tl_rows, sum(1 for t in txts if any(k in t for k in ("诞生", "拍板确认", "活动完成", "收到款项", "账目清零"))))
+        if find(ws, "分享回顾到群", "Button") is not None or any("分享回顾到群" in t for t in txts):
+            _share_ok = True
+        if any("/人" in t and "¥" in t for t in txts) or any("到场" in t for t in txts):
+            _stat_ok = True
+        if _tl_rows >= 3 and _share_ok:
+            break
+if not (_fin_ok and _tl_rows >= 3 and _share_ok):
+    ws = snap()["s"]
+    print("[R28-DEBUG-ALL]", [t[:44] for t, r in labels(ws)][:24], flush=True)
+# 结案卡存在的最可靠信号=时间线行 +「分享回顾到群」按钮（徽章 Label 可被虚拟化
+#   截断；时间线/分享键是结案卡独有控件，列表/对账区不会有）
+rec(28, "结案报告卡（时间线≥3行+分享键+统计）", _tl_rows >= 3 and _share_ok and _stat_ok,
+    f"时间线行={_tl_rows} 分享键={_share_ok} 统计={_stat_ok}（徽章 fin={_fin_ok}）")
+
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v7：25 步既有 + v0.10.0 主动提案接入/消费 2 步） ===", flush=True)
+# ---- 收尾 ----
+print(f"\n=== {len(RESULTS)} 项回归汇总（v8：27 步既有 + v0.10.0 结案报告卡 1 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):

@@ -88,6 +88,10 @@ fn audit(action, detail){
     let t = local_time()
     let ts = ("" + t.year) + "-" + pad2(t.month) + "-" + pad2(t.day) + "T" + pad2(t.hour) + ":" + pad2(t.minute) + ":" + pad2(t.second) + "Z+8"
     audit_log.push(ts + " | " + last_actor + " | " + action + " | " + ("" + detail))
+    // v0.10.0 WP5：审计链持久化（结案报告时间线 + Evidence Pack 重启后仍可用）。
+    //   截尾 200 防文件无界增长；best-effort（写失败不打断动作本身，下条会自然重写）。
+    while audit_log.len() > 200 { audit_log.pop() }
+    fs.write("audit.json", {audit: audit_log}.to_json())
 }
 
 // === #30 新增：AA 收账均摊（参考 evidence/probe30-float-paradigm.md 真机范式） ===
@@ -541,6 +545,8 @@ fn rebuild_lines(){
     //   不再需要命令式 update_detail_panel（其 set_text 依赖树外静态区，已证不可靠）。
     // v0.6.0：选中守护的确定性对账（含 bill_cleared 自动推导）
     rebuild_selected_ledger()
+    // v0.10.0 WP5：结案报告卡（完成+账清=已收尾）
+    rebuild_fin_report()
 }
 
 // #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
@@ -662,6 +668,17 @@ fn load(){
                 pay_case.push("" + pdata.payments[pi])
                 pay_person.push("" + pdata.persons[pi])
                 pay_amount.push("" + pdata.amounts[pi])
+            }
+        }
+    }
+    // v0.10.0 WP5：读 audit.json（审计链持久化；parse 失败→空，不报错不归档）
+    if fs.exists("audit.json") {
+        let araw = fs.read("audit.json")
+        let av = araw.parse_json()
+        if av != nil && av.audit != nil {
+            audit_log = []
+            for ei in av.audit.len() {
+                audit_log.push("" + av.audit[ei])
             }
         }
     }
@@ -2647,6 +2664,107 @@ fn rebuild_selected_ledger(){
     }
 }
 
+// === v0.10.0 WP5：结案报告卡推导（活动完成+账清=已收尾后渲染） ===
+//   数据全部来自既有审计字段/状态机：四统计（到场=参与人数、人均=总额÷人数、
+//   当日天气=查不到如实显示「未查询」、周期天数=create→末事件审计跨度）+
+//   状态变迁时间线（create/confirm/complete/收款/bill_auto_cleared 带 UTC+8 时间戳）。
+//   零编造：审计里找不到的事件行不渲染；统计算不出就显示「—」。
+let fin_show = "no"
+let fin_title = ""
+let fin_stat_people = ""
+let fin_stat_per = ""
+let fin_stat_weather = ""
+let fin_stat_days = ""
+let fin_timeline = []
+fn rebuild_fin_report(){
+    fin_show = "no"
+    fin_title = ""
+    fin_stat_people = ""
+    fin_stat_per = ""
+    fin_stat_weather = ""
+    fin_stat_days = ""
+    fin_timeline = []
+    let ci = -1
+    for i in cases.len() {
+        if cases[i]["id"] == selected_id { ci = i }
+    }
+    if ci < 0 { return }
+    if cases[ci]["status"] != "Completed" { return }
+    if ("" + cases[ci]["bill_cleared"]) != "yes" { return }
+    fin_show = "yes"
+    let id_str = "" + cases[ci]["id"]
+    let act = "" + cases[ci]["activity"]
+    if act == "" { act = "聚会" }
+    fin_title = "#" + id_str + " · " + act + " · 已收尾"
+    // 四统计（确定性）
+    let ppl = "" + cases[ci]["people"]
+    let n = count_people(ppl)
+    if n > 0 {
+        fin_stat_people = ("" + n) + "/" + ("" + n) + " 人"
+    } else {
+        fin_stat_people = "—"
+    }
+    let bt = "" + cases[ci]["bill_total"]
+    let total_f = bt.to_f64()
+    if total_f > 0 && n > 0 {
+        fin_stat_per = "¥" + cut2(total_f / n) + "/人"
+    } else {
+        fin_stat_per = "—"
+    }
+    // 天气：历史天气不在状态机里（不编造）——如实显示
+    fin_stat_weather = "未查询"
+    // 周期天数：create 事件 → 最后一个事件（审计跨度，天）
+    let first_z = -1
+    let last_z = -1
+    let tl_rows = []
+    for ai in audit_log.len() {
+        let row = "" + audit_log[ai]
+        let seg = row.split(" | ")
+        if seg.len() >= 4 {
+            let dtl = "" + seg[3]
+            if dtl.search("#" + id_str) >= 0 || (seg[2] == "create" && tl_rows.len() == 0) {
+                let ts = "" + seg[0]
+                // ts = "YYYY-MM-DDTHH:MM:SSZ+8" → 取 MM-DD HH:MM
+                let dsp = ts
+                let parts2 = ts.split("-")
+                if parts2.len() >= 3 {
+                    let daypart = parts2[2].split("T")
+                    dsp = parts2[1] + "-" + daypart[0] + " " + daypart[1].split("Z")[0]
+                }
+                let lbl = "" + seg[2]
+                if lbl == "create" { lbl = "守护诞生" }
+                if lbl == "confirm" { lbl = "拍板确认" }
+                if lbl == "complete" { lbl = "活动完成" }
+                if lbl == "payment" { lbl = "收到款项" }
+                if lbl == "bill_auto_cleared" { lbl = "账目清零" }
+                if lbl == "bill_cleared" { lbl = "账目清零" }
+                let keep = "no"
+                if seg[2] == "create" { keep = "yes" }
+                if seg[2] == "confirm" { keep = "yes" }
+                if seg[2] == "complete" { keep = "yes" }
+                if seg[2] == "payment" { keep = "yes" }
+                if seg[2] == "bill_auto_cleared" { keep = "yes" }
+                if seg[2] == "bill_cleared" { keep = "yes" }
+                if keep == "yes" {
+                    fin_timeline.push(lbl + " · " + dsp)
+                    // 日期天数（跨日计算）
+                    let dy = parts2[0].to_f64()
+                    let dm = parts2[1].to_f64()
+                    let dd = daypart[0].to_f64()
+                    let z = days_from_civil(dy, dm, dd)
+                    if first_z < 0 { first_z = z }
+                    last_z = z
+                }
+            }
+        }
+    }
+    if first_z >= 0 && last_z >= first_z {
+        fin_stat_days = ("" + (last_z - first_z + 1)) + " 天"
+    } else {
+        fin_stat_days = "—"
+    }
+}
+
 // === v0.6.0 S-P2：记收款（详情面板入口；解析 "姓名 金额"） ===
 let pay_draft = ""
 fn set_pay_draft(s2){ pay_draft = s2 }
@@ -2914,6 +3032,7 @@ fn set_bill_cleared(id_str){
         return
     }
     cases[cur]["bill_cleared"] = "yes"
+    audit("bill_cleared", "#" + id_str + "（人工收尾）")
     rebuild_lines()
     save()
     state_save_result = save_result
@@ -2926,6 +3045,36 @@ fn set_bill_cleared(id_str){
 }
 
 // === 决赛 v0.4.0 S6：确认后动作（ICS 自动导出 + 群分享 + 提醒登记提示） ===
+// v0.10.0 WP5：分享结案回顾到群（matrix.send_message 真发；数字全来自审计字段）
+fn share_fin_report(){
+    let ci = -1
+    for i in cases.len() {
+        if cases[i]["id"] == selected_id { ci = i }
+    }
+    if ci < 0 { return }
+    let id_str = "" + cases[ci]["id"]
+    let act = "" + cases[ci]["activity"]
+    if act == "" { act = "聚会" }
+    let slot = ("" + cases[ci]["slot_day"]) + "-" + ("" + cases[ci]["slot_part"])
+    let place = "" + cases[ci]["place"]
+    let ppl = "" + cases[ci]["people"]
+    let body = "🎉 聚会回顾：#" + id_str + " " + act + "（" + slot + " · " + place + "）已圆满收尾！"
+        + "到场 " + fin_stat_people + "，人均 " + fin_stat_per + "，周期 " + fin_stat_days
+        + "（数据由牵线守护从审计链导出）。"
+    audit("share_fin", "#" + id_str)
+    if host.has("matrix.send_message") {
+        host.request("matrix.send_message", {body: body}, fn(r){
+            if r.is_ok {
+                ui.hint.set_text("聚会回顾已分享到群 ✓")
+            } else {
+                ui.hint.set_text("分享失败：" + r.error + "（回顾卡已在详情页，可手动复制转发）")
+            }
+        })
+    } else {
+        ui.hint.set_text("本宿主无 matrix 服务，无法发群——回顾卡已在详情页，可手动复制转发")
+    }
+}
+
 fn post_confirm_actions(id_str){
     // ① ICS 自动生成（本机可验证的日历写入路径）
     let cur = -1
@@ -3854,6 +4003,59 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     ButtonFlat{text: "‹ 返回列表" height: 36 padding: Inset{left: 8 right: 8} on_click: || back_to_list()
                         draw_bg +: {border_radius: 12.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 0.0}
                         draw_text +: {color: #x6e675e color_hover: #x6e675e color_down: #x6e675e}}
+                    // ── v0.10.0 WP5：结案报告卡（活动完成+账清=已收尾；生命周期句号）──
+                    //   数据全来自审计字段/状态机；分享回顾经 matrix.send_message 真发
+                    //   （无服务宿主诚实降级——透出真实错误）。
+                    if fin_show == "yes" {
+                        Card{show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #x2f7d4f
+                            padding: Inset{left: 14 right: 14 top: 12 bottom: 12} spacing: 8
+                            // 标题 + 已收尾徽章
+                            View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
+                                Label{width: Fill text: fin_title draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15.5}}
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                    show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                                    Label{text: "已完成 · 已收尾" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}}
+                            }
+                            // 全绿迷你红线（生命周期句号：四结全实心朱砂）
+                            View{width: Fill height: Fit flow: Right align: Align{y: 0.5}
+                                RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
+                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
+                            }
+                            // 四统计（均分四列：数字+标签）
+                            View{width: Fill height: Fit flow: Right
+                                View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
+                                    Label{text: fin_stat_people draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15}}
+                                    Label{text: "到场" draw_text.color: #x6e675e draw_text.text_style.font_size: 10.5}}
+                                View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
+                                    Label{text: fin_stat_per draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15}}
+                                    Label{text: "人均" draw_text.color: #x6e675e draw_text.text_style.font_size: 10.5}}
+                                View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
+                                    Label{text: fin_stat_weather draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15}}
+                                    Label{text: "当日天气" draw_text.color: #x6e675e draw_text.text_style.font_size: 10.5}}
+                                View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
+                                    Label{text: fin_stat_days draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15}}
+                                    Label{text: "周期天数" draw_text.color: #x6e675e draw_text.text_style.font_size: 10.5}}
+                            }
+                            // 状态变迁时间线（审计事件 + UTC+8 时间戳）
+                            View{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{top: 8}
+                                Label{text: "守护时间线" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 11}}
+                                for fi in fin_timeline.len() {
+                                    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                                        RoundedView{width: 6 height: 6 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 3.0}
+                                        Label{width: Fill text: fin_timeline[fi] draw_text.color: #x6e675e draw_text.text_style.font_size: 12}
+                                    }
+                                }
+                            }
+                            ButtonFlat{width: Fill text: "分享回顾到群" height: 44 on_click: || share_fin_report()
+                                draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 13}}}
+                        }
+                    }
                     // ── 标题行：#N·活动 + 状态 chips ──
                     View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
                         Label{width: Fill text: case_lines[sel] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 17}}
