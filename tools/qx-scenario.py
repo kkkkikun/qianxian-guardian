@@ -83,21 +83,33 @@ class Ctx:
         time.sleep(wait)
 
     def shot(self, note=""):
-        """渲染当前控件树成一帧（check-only 跳过）。"""
+        """抓**真实宿主渲染帧**（/g?wait=1 返回 makepad backend_png 路径）。
+        check-only 跳过。不可用时回退到 snap-to-png 控件树重绘（诚实降级）。"""
         if self.check_only or not self.frames_dir:
             return
         os.makedirs(self.frames_dir, exist_ok=True)
-        # 复用 snap-to-png 渲染器
-        spec = importlib.util.spec_from_file_location(
-            "s2p", str(pathlib.Path(__file__).resolve().parents[1] / "app" / "qianxian" / "tools" / "snap-to-png.py"))
-        s2p = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(s2p)
         out = f"{self.frames_dir}/{self.n:03d}.png"
-        sys.argv = ["snap-to-png", "--port", str(self.port), "--out", out]
+        grabbed = False
         try:
-            s2p.main()
-        except SystemExit:
-            pass
+            import shutil
+            r = self.get("/g?wait=1", timeout=10)
+            src = r.get("png")
+            if src and os.path.exists(src):
+                shutil.copy(src, out)
+                grabbed = True
+        except Exception:
+            grabbed = False
+        if not grabbed:
+            # 回退：控件树重绘（保留旧路径，标注为重绘）
+            spec = importlib.util.spec_from_file_location(
+                "s2p", str(pathlib.Path(__file__).resolve().parents[1] / "app" / "qianxian" / "tools" / "snap-to-png.py"))
+            s2p = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(s2p)
+            sys.argv = ["snap-to-png", "--port", str(self.port), "--out", out]
+            try:
+                s2p.main()
+            except SystemExit:
+                pass
         # 步骤标注条
         self._annotate(out, note)
         self.n += 1
