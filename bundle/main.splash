@@ -1212,9 +1212,28 @@ fn load_suppressed(){
         suppressed_lines.push("暂无留痕记录——伴生守护进程运行后，未触发的提醒/预警都会记在这里")
     }
 }
+// === v0.10.0 WP4：主动提案接入（守护进程「到点醒来干活」写进 jail 的改期提案） ===
+//   qx-proactive-butler.py 在 T-24h 降水 ≥60% 时把模型起草的 PLAN 写进 pending_plan.json；
+//   进聊天视图时读入并复用 plan_parse 解析进提案卡——人拍板后走既有白名单链，
+//   随后清除文件（一次性提案；放弃则改由用户对管家说怎么改）。
+fn load_pending_plan(){
+    if !fs.exists("pending_plan.json") { return }
+    let v = ("" + fs.read("pending_plan.json")).parse_json()
+    if v == nil { return }
+    let reply = "" + v["reply"]
+    if reply == "" { return }
+    // 提案卡接入（plan_parse 内含合法性校验 + diff 行构建 + plan_pending=yes）
+    plan_parse(reply)
+    if plan_pending == "yes" {
+        let rain = "" + v["precip"]
+        if rain == "" { rain = "≥60" }
+        chat_push("sys", "⛈ 主动预警：管家凌晨复核发现活动日降水概率 " + rain + "%（open-meteo）——已备好改期提案，请拍板")
+    }
+}
 fn enter_chat(){
     ui_mode = "chat"
     load_suppressed()
+    load_pending_plan()
     ui.case_list.set_visible(false)
     ui.detail_list.set_visible(false)
     ui.chat_list.set_visible(true)
@@ -2339,6 +2358,8 @@ fn butler_approve(){
     }
     last_actor = "user"
     plan_pending = "no"
+    // v0.10.0 WP4：主动提案已落地——清除 pending_plan.json（幂等消费）
+    if fs.exists("pending_plan.json") { fs.remove("pending_plan.json") }
     render_views()
 }
 
@@ -2365,6 +2386,7 @@ fn decline_timeout(){
 fn decline_finish(reason_label, feedback){
     decline_prompt = "no"
     plan_pending = "no"
+    if fs.exists("pending_plan.json") { fs.remove("pending_plan.json") }
     decline_feedback = feedback
     if reason_label == "self" {
         chat_push("sys", "已放弃——你在详情里自己动手即可")

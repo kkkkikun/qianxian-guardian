@@ -843,8 +843,61 @@ if bj2:
 else:
     rec(25, "交给管家按钮可见", False, "列表模式未找到按钮")
 
+# R26（v0.10.0 WP4）：主动提案接入——jail 写 pending_plan.json → 进聊天视图
+#   提案卡渲染（主动预警 sys + op 行 + 拍板键）；拍板后改期落盘+文件消费。
+#   回归结尾有唱歌卡（R-14 重建，id 由 seq 决定——本步直接对「唱歌」卡发起提案）。
+import json as _json2
+_j = JAIL
+_pp = _j / "pending_plan.json"
+_reply26 = ("⛈ 主动预警：唱歌活动明天降水概率 72%（open-meteo·深圳），建议顺延。\n"
+            'PLAN{"op":"reschedule","id":"1","slot_day":"周日","slot_part":"晚上"}')
+# 唱歌卡 id 断言前读实际值（清空重建后应为 1）
+_c26 = _json2.loads((_j / "cases.json").read_text())["cases"]
+_sing_id = next((str(c.get("id")) for c in _c26 if "唱歌" in (c.get("text") or "")), "1")
+_reply26 = _reply26.replace('"id":"1"', f'"id":"{_sing_id}"')
+_pp.write_text(_json2.dumps({"id": int(_sing_id), "trigger": "proactive_weather",
+    "precip": 72.0, "weather": "深圳", "day": "周日", "part": "晚上",
+    "reply": _reply26, "at": "2026-10-12T00:00:00"}, ensure_ascii=False))
+# 回列表→进聊天（提案应在）
+ws = click_text(ws, "回到守护列表", "Button") or ws
+time.sleep(1.2)
+ws = type_text(ws, "看看")
+_bj26 = find(ws, "交给管家", "Button")
+if _bj26:
+    x, y = center(_bj26)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(2.2)
+_ok26 = False
+_diff26 = False
+_ap26 = False
+for _ in range(9):
+    get("/m?k=scroll&x=200&y=700&dx=0&dy=380")
+    time.sleep(0.7)
+    ws = snap()["s"]
+    _ok26 = any("主动预警" in t for t, r in labels(ws))
+    _diff26 = any("──▶" in t and "//" not in t[:3] for t, r in labels(ws))
+    _ap26 = find(ws, "拍板执行", "Button") is not None
+    if _ok26 and _ap26:
+        break
+rec(26, "主动提案接入（预警+diff+拍板键）", _ok26 and _diff26 and _ap26,
+    f"预警sys={_ok26} diff行={_diff26} 拍板键={_ap26}")
+# 拍板消费（提案改期落盘 + pending_plan.json 清除）
+if _ap26:
+    b26 = find(ws, "拍板执行", "Button")
+    x, y = center(b26)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(2.0)
+_cafter = _json2.loads((_j / "cases.json").read_text())["cases"]
+_sing = next((c for c in _cafter if "唱歌" in (c.get("text") or "")), None)
+_consumed = not _pp.exists()
+rec(27, "主动提案拍板消费（改期落盘+一次性清除）",
+    bool(_sing) and _sing.get("slot_day") == "周日" and _sing.get("slot_part") == "晚上" and _consumed,
+    f"唱歌 slot={_sing.get('slot_day') if _sing else '?'}-{_sing.get('slot_part') if _sing else '?'} 文件已清除={_consumed}")
+ws = click_text(ws, "回到守护列表", "Button") or ws
+time.sleep(1.0)
+
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v6：22 步既有 + v0.8.0 守护灯/垫付建议/沉默留痕 3 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v7：25 步既有 + v0.10.0 主动提案接入/消费 2 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):
