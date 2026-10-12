@@ -451,7 +451,9 @@ if bj:
     time.sleep(2.2)
     ws = snap()["s"]
     in_chat = find(ws, "回到守护列表", "Button") is not None
-    me_bubble = any(t.startswith("我：") for t, r in labels(ws))
+    # v0.10.0 UI 对齐：user bubble 不带「我：」前缀（HTML .bubble.user 靠右+墨底表身份）——
+    #   判据改为「聊天视图含用户刚发的消息文本」
+    me_bubble = any("周六上午去深圳湾骑车" in t or "去深圳湾" in t for t, r in labels(ws))
     no_new_case = not any(title_re(k).search(t) and "骑车" in t for k in (1, 2, 3, 4, 5, 6) for t, r in labels(ws))
     rec(15, "交给管家降级路径", in_chat and me_bubble and no_new_case,
         f"chat={in_chat} me气泡={me_bubble} 未误建={no_new_case}")

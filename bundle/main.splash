@@ -4483,15 +4483,25 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                 let cr = "" + chat_role[ci]
                 let ct = "" + chat_text[ci]
                 if cr == "me" {
-                    Card{show_bg: true draw_bg.color: #x2b2722 draw_bg.border_radius: 14.0
-                        Label{width: Fill text: "我：" + ct draw_text.color: #xf7f2ec draw_text.text_style.font_size: 14}
+                    // HTML .bubble.user：右对齐 + 墨底 + 右下 4px 角（不对称圆角语义）
+                    View{width: Fill height: Fit flow: Right align: Align{x: 1.0}
+                        RoundedView{width: Fit height: Fit padding: Inset{left: 13 right: 13 top: 10 bottom: 10}
+                            show_bg: true draw_bg.color: #x2b2722 draw_bg.border_radius: 14.0
+                            Label{text: ct draw_text.color: #xf7f2ec draw_text.text_style.font_size: 13}
+                        }
                     }
                 } else if cr == "ai" {
-                    Card{show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
-                        Label{width: Fill text: "管家：" + ct draw_text.color: ink draw_text.text_style.font_size: 14}
+                    // HTML .bubble.butler：左对齐 + 宣纸底+发丝描边 + 「管 家」朱砂小章 + 左下 4px 角
+                    View{width: Fill height: Fit flow: Right align: Align{x: 0.0}
+                        RoundedView{width: Fit height: Fit flow: Down spacing: 4 padding: Inset{left: 13 right: 13 top: 10 bottom: 10}
+                            show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
+                            Label{text: "管 家" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 10.5}}
+                            Label{text: ct draw_text.color: ink draw_text.text_style.font_size: 13}
+                        }
                     }
                 } else {
-                    Label{width: Fill text: ct draw_text.color: #xa89e91 draw_text.text_style.font_size: 12}
+                    // sys：居中灰小字（HTML .plan-note 同款）
+                    Label{width: Fill text: ct draw_text.color: #xa89e91 draw_text.text_style.font_size: 12 align: Align{x: 0.5}}
                 }
             }
             // 待拍板提案卡（一次至多一个）——v0.9.0 WP2 精修（HTML 规范 03 屏）：
@@ -4501,32 +4511,47 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                 Card{show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xc7402f
                     padding: Inset{left: 0 right: 0 top: 0 bottom: 0} spacing: 0
                     // ── 头章行：op 徽标 + 目标 ──
-                    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                        padding: Inset{left: 14 right: 14 top: 11 bottom: 11}
-                        show_bg: true draw_bg.color: #xfcf8f1 draw_bg.border_radius: 14.0
-                        RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 2 bottom: 3}
-                            show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 8.0
-                            Label{text: plan_op_label(plan_op) draw_text.color: #xfffdfa draw_text.text_style: theme.font_bold{font_size: 11}}
+                    // HTML .plan-head：浅底 #FCF8F1 + border-bottom 发丝线分隔（上圆角继承卡片，下直角）
+                    View{width: Fill height: Fit flow: Down spacing: 0
+                        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                            padding: Inset{left: 14 right: 14 top: 11 bottom: 11}
+                            show_bg: true draw_bg.color: #xfcf8f1
+                            RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 2 bottom: 3}
+                                show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 8.0
+                                Label{text: plan_op_label(plan_op) draw_text.color: #xfffdfa draw_text.text_style: theme.font_bold{font_size: 11}}
+                            }
+                            Label{width: Fill text: "管家提案 · 待拍板" draw_text.color: #x6e675e draw_text.text_style.font_size: 12}
                         }
-                        Label{width: Fill text: "管家提案 · 待拍板" draw_text.color: #x6e675e draw_text.text_style.font_size: 12}
+                        // 发丝分隔线（HTML border-bottom:1px solid var(--line)）
+                        View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
                     }
                     View{width: Fill height: Fit flow: Down spacing: 6
                         padding: Inset{left: 14 right: 14 top: 10 bottom: 10}
                         BodyLine{text: plan_summary}
                         for pi in plan_lines.len() {
-                            // diff 行语义着色：含「──▶」为变更行（朱砂加粗）；「冲突预演：✓」
-                            // 玉绿；「⚡」琥珀。判别用 let 预提（闭包内不写方法链进 if 条件，
-                            // 照 _text_len 既有范式）。
+                            // HTML .diff-row：键列（44px，次要色粗体）+ 值列。diff 行（──▶）朱砂加粗；
+                            // 「冲突预演：✓」玉绿 chip；「⚡」琥珀 chip。判别用 let 预提（闭包不写方法链进 if）。
                             if plan_lines[pi] != "" {
                                 let _is_diff = plan_lines[pi].split("──▶").len() > 1
                                 let _is_ok = plan_lines[pi].split("冲突预演：✓").len() > 1
                                 let _is_warn = plan_lines[pi].split("⚡").len() > 1
-                                if _is_diff {
-                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 13}}
+                                let _has_key = plan_lines[pi].split("：").len() > 1
+                                if _is_diff && _has_key {
+                                    let _kv = plan_lines[pi].split("：")
+                                    View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.5}
+                                        Label{width: 44 text: _kv[0] draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 11}}
+                                        Label{width: Fill text: _kv[1] draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 13.5}}
+                                    }
                                 } else if _is_ok {
-                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #x2f7d4f draw_text.text_style.font_size: 13}
+                                    RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 4 bottom: 4}
+                                        show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                                        Label{text: "✓ 冲突预演：改后无冲突" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12.5}}
                                 } else if _is_warn {
-                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #xa87516 draw_text.text_style.font_size: 13}
+                                    RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 4 bottom: 4}
+                                        show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
+                                        Label{text: plan_lines[pi] draw_text.color: #xa87516 draw_text.text_style.font_size: 12.5}}
+                                } else if _is_diff {
+                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 13}}
                                 } else {
                                     TextLine{text: plan_lines[pi]}
                                 }
@@ -4535,14 +4560,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         if plan_check != "ok" {
                             TextLine{text: "⚠ " + plan_check}
                         }
+                        // HTML .plan-actions：两键 flex:1 通栏 + border-top 发丝线分隔
+                        View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
                         View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                            ButtonFlat{text: "拍板执行" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_approve()
+                            ButtonFlat{width: Fill text: "拍板执行" height: 44 on_click: || butler_approve()
                                 draw_bg +: {border_radius: 22.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
                                 draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
                             // v0.8.0 W1：放弃 → 两段式理由快捷项（拒绝并改写；8 秒不选自动收回）
                             if decline_prompt != "yes" {
-                                ButtonFlat{text: "放弃" height: 44 padding: Inset{left: 16 right: 16} on_click: || butler_decline()
-                                    draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                ButtonFlat{width: Fill text: "放弃" height: 44 on_click: || butler_decline()
+                                    draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
                                     draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f}}
                             }
                         }
