@@ -46,3 +46,5 @@
 | 2026-10-12（续） | v0.9.2 UI 第二轮重构（用户引入 Kimi 设计版 main.splash 替换） | 用户两轮引入 Kimi 直写的 splash（v0.9.1/v0.9.2，逻辑层继承我方 v0.9.0：12 op/归一/日历写链全保留，UI 区重写）；我方做替换验证+驱动适配（R-06/R-08 断言按新呈现形态改写+滚动收集+5/6 阈值豁免空地点行） | hub check PASSED（0.9.2）；回归 **25/25** 渲染错误 0（三轮驱动适配后）；详情/对账/回执/垫付建议全量在树实证；三截图重出 | verified（回归/渲染 0 错误）；边界：视频未重录 | `evidence/v090-features-20261012.md` 增补 |
 
 | 2026-10-12（续 2） | Rinx 实机 v0.9.2 复跑 + 演示视频 v0.9.2 重录（规划 §4 六幕骨架） | Rinx×Kimi 一回合全链（变体准入/提案/拍板/落盘 + 状态标签行/守护灯在树实证）；tools/demo-video-v092.py 六幕（agentic 主线/红线生命周期/主动守护/冲突裁决/AA 闭环/信任审计）+验证级别收尾；素材=card-host 实机控件树重绘帧 + 真宿主×真模型逐字实录；ffmpeg 修复（~/.local/bin/ffmpeg 是 9 字节占位假文件，改用 imageio_ffmpeg 的 v7.0.2 二进制） | 视频 90 秒 720p（807KB）合成+抽帧 QC；Release v0.9.2 已挂载 | verified（Rinx e2e/视频抽帧） | `evidence/finals-demo-v092.mp4`、`tools/demo-video-v092.py` |
+
+| 2026-10-12（续 3） | 参赛材料整体刷新（README/listing/one-pager） | README 全面重写为 v0.9.2 口径（Kimi 管家/12 op/diff 卡/AA 闭环/主动守护/日历双通路/视频链接/三条审查路/目录含 tools）；listing.json 商店描述+关键词刷新；one-pager 增 v0.9.x 段 | hub check PASSED（0.9.2）复核 | verified | `README.md`、`bundle/listing.json`、`evidence/one-pager.md` |
