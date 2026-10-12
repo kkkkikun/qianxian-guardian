@@ -55,6 +55,11 @@ class Ctx:
     def find(self, sub, ty=None, ws=None):
         ws = ws if ws is not None else self.snap()
         for w in ws:
+            r = w.get("r") or [0, 0, 0, 0]
+            # ScrollY 虚拟化：?all=1 会带出视口外控件的占位 rect [0,0,0,0]——
+            #   过滤（点它会点到左上角错误位置，A5 在案坑）
+            if r[2] <= 0 or r[3] <= 0:
+                continue
             if sub in (w.get("t") or "") and (ty is None or w.get("ty") == ty):
                 return w
         return None
@@ -192,6 +197,12 @@ def run_scenario(ctx, steps):
             except Exception:
                 pass
             ctx.expect(f"expect_jail[{key}={expected}]", ok)
+        elif act == "inject":
+            # st = ("inject", filename, json_obj_str)：往 jail 写文件（驱动 pending_plan/
+            #   converge 等外部进程契约文件；文件内容须与守护进程真实输出形状一致）
+            import json as _ij
+            obj = _ij.loads(st[2]) if isinstance(st[2], str) else st[2]
+            (JAIL / st[1]).write_text(_ij.dumps(obj, ensure_ascii=False, indent=1))
         elif act == "back_list":
             ok = step_click(ctx, "返回列表", wait=1.6, scroll_dy=-400) or \
                  step_click(ctx, "回到守护列表", wait=1.6, scroll_dy=-400)
