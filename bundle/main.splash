@@ -3624,8 +3624,15 @@ let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.t
 SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 top: 22 bottom: 12} spacing: 10 draw_bg.color: #xf7f2ec
     // === UI 方法论改版（App Flow card-ux skill：一屏一主行动 / 操作就近分组）===
     //   标题 21（HTML 规范 .app-head h2）：首屏纵向空间让给守护列表这一核心内容
-    Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 21}}
-    Label{text: "把群消息丢给管家，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 12}
+    // v0.10.0：红线结品牌图标（附录 B 寓意：一根朱砂线绕成结，两端各牵一颗圆点——
+    //   把人和人牵到一起）。Svg 控件引 bundle 资产 icon.svg（pdftools 同款 draw_svg 范式）。
+    View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.5}
+        Svg{width: 34 height: 34 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
+        View{width: Fit height: Fit flow: Down spacing: 2
+            Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 21}}
+            Label{text: "把群消息丢给管家，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 12}
+        }
+    }
     RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
         padding: Inset{left: 14 right: 6 top: 5 bottom: 5}
         show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2

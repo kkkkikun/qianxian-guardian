@@ -1,4 +1,4 @@
-# 牵线 · 聚会筹办守护（qianxian）
+# <img src="bundle/assets/icon.svg" width="36" valign="middle" alt="红线结"> 牵线 · 聚会筹办守护（qianxian）
 
 > 📄 **一分钟读懂这个作品** → [evidence/one-pager.md](evidence/one-pager.md)
 > （做了什么 / 为什么这么设计 / 怎么核验 / 怎么跑 / 已知边界，一页纸）
