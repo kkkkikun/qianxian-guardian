@@ -652,6 +652,9 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             ButtonFlat{width: Fill text: "分享回顾到群" height: 44 on_click: || share_fin_report()
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
                                 draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 9}}}
+                            ButtonFlat{width: Fill text: "邮件回顾（人审）" height: 44 on_click: || mail_share_fin()
+                                draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 9}}}
                         }
                     }
                     // ── 标题行：#N·活动 + 状态 chips（chips 紧跟标题，HTML 02 屏 .d-nav gap 8）──
@@ -992,6 +995,14 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     ButtonFlat{width: Fit text: "重试 AI" height: 40 padding: Inset{left: 14 right: 14} on_click: || butler_retry_ai()
                         draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
                         draw_text +: {color: accent color_hover: accent color_down: accent}}
+                }
+            }
+            // === v0.10.1 WP4：催收草稿邮件通路（有暂存草稿时可见）===
+            if dunning_draft != "" {
+                View{width: Fill height: Fit flow: Right spacing: 8
+                    ButtonFlat{width: Fill text: "邮件人审发出催收草稿" height: 40 on_click: || butler_mail_dunning()
+                        draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                        draw_text +: {color: accent color_hover: accent color_down: accent text_style: font_bold_cjk{font_size: 9}}}
                 }
             }
             // 待拍板提案卡（一次至多一个）——v0.9.0 WP2 精修（HTML 规范 03 屏）：

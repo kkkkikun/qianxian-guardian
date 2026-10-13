@@ -449,8 +449,11 @@ fn butler_approve(){
             draft = head2 + "按 " + ("" + n) + " 人均摊每人约 ¥" + cut2(due) + "。麻烦还没转的伙伴今天转一下组织者，谢谢～"
         }
         ui.msg_input.set_text(draft)
+        // v0.10.1 WP4：草稿暂存全局——聊天视图「邮件人审发出」动作读它（matrix 群发文案通路的姊妹通路）
+        dunning_draft = draft
+        dunning_case_id = plan_id
         audit("draft_dunning", tier + " #" + plan_id + " 差额 ¥" + cut2(out))
-        chat_push("sys", "催收草稿已生成（梯度 " + tier + " 档，按活动日期确定性选档；金额/差额全部由代码从状态机算出）——已填入输入框，核对后复制发送即可")
+        chat_push("sys", "催收草稿已生成（梯度 " + tier + " 档，按活动日期确定性选档；金额/差额全部由代码从状态机算出）——已填入输入框，核对后复制发送即可；也可点下方「邮件人审发出」走宿主评审")
         set_hint("催收草稿已生成（" + tier + " 档）——数字全部来自状态机快照，模型零参与")
         last_actor = "user"
         return

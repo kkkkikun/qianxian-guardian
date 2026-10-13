@@ -73,6 +73,9 @@ let ai_dead = "no"
 let member_vote_flag = "no"
 // === v0.10.1 WP3：守护灯确定性计数（glance 速览卡数据源，与守护灯同口径，零模型参与）===
 let guard_n_propose = 0
+// === v0.10.1 WP4：催收草稿邮件通路状态（拍板组稿 → 人审后发）===
+let dunning_draft = ""
+let dunning_case_id = ""
 let guard_n_conflict = 0
 let guard_n_tail = 0
 let member_vote_text = ""
@@ -2515,8 +2518,11 @@ fn butler_approve(){
             draft = head2 + "按 " + ("" + n) + " 人均摊每人约 ¥" + cut2(due) + "。麻烦还没转的伙伴今天转一下组织者，谢谢～"
         }
         ui.msg_input.set_text(draft)
+        // v0.10.1 WP4：草稿暂存全局——聊天视图「邮件人审发出」动作读它（matrix 群发文案通路的姊妹通路）
+        dunning_draft = draft
+        dunning_case_id = plan_id
         audit("draft_dunning", tier + " #" + plan_id + " 差额 ¥" + cut2(out))
-        chat_push("sys", "催收草稿已生成（梯度 " + tier + " 档，按活动日期确定性选档；金额/差额全部由代码从状态机算出）——已填入输入框，核对后复制发送即可")
+        chat_push("sys", "催收草稿已生成（梯度 " + tier + " 档，按活动日期确定性选档；金额/差额全部由代码从状态机算出）——已填入输入框，核对后复制发送即可；也可点下方「邮件人审发出」走宿主评审")
         set_hint("催收草稿已生成（" + tier + " 档）——数字全部来自状态机快照，模型零参与")
         last_actor = "user"
         return
@@ -3399,22 +3405,65 @@ fn converge_butler(){
     set_hint("管家已按群投票出提案——过目后点「拍板」")
 }
 
-fn share_fin_report(){
+// v0.10.1 WP4：回顾文案组稿抽出（matrix 群分享与邮件人审两通路同文）
+fn fin_report_body(){
     let ci = -1
     for i in cases.len() {
         if cases[i]["id"] == selected_id { ci = i }
     }
-    if ci < 0 { return }
+    if ci < 0 { return "" }
     let id_str = "" + cases[ci]["id"]
     let act = "" + cases[ci]["activity"]
     if act == "" { act = "聚会" }
     let slot = ("" + cases[ci]["slot_day"]) + "-" + ("" + cases[ci]["slot_part"])
     let place = "" + cases[ci]["place"]
-    let ppl = "" + cases[ci]["people"]
-    let body = "🎉 聚会回顾：#" + id_str + " " + act + "（" + slot + " · " + place + "）已圆满收尾！"
+    return "🎉 聚会回顾：#" + id_str + " " + act + "（" + slot + " · " + place + "）已圆满收尾！"
         + "到场 " + fin_stat_people + "，人均 " + fin_stat_per + "，周期 " + fin_stat_days
         + "（数据由牵线守护从审计链导出）。"
-    audit("share_fin", "#" + id_str)
+}
+
+// === v0.10.1 WP4：mail.review_send 人审发信通路（跨 app 调用=宿主评审面板，源码级核实）===
+//   纪律：to 留空不编造地址——收件人由人在宿主作曲/评审面板里填（durable composer）。
+//   降级：无邮件服务/平台不支持物理审批 → 真实错误透出 + 文案回输入框可复制。
+fn mail_review_send(subject, body, tag){
+    if !host.has("mail.review_send") {
+        ui.msg_input.set_text(body)
+        set_hint("本宿主无邮件服务——「" + tag + "」文案已填入输入框，复制后手动发送即可")
+        render_views()
+        return
+    }
+    host.request("mail.review_send", {account: "", to: "", subject: subject, body: body}, fn(r){
+        if r.is_ok {
+            set_hint(tag + "：已进入宿主邮件评审——物理确认后发出（收件人在评审面板填写）")
+        } else {
+            // 真实错误透出（如 Linux 宿主：平台不支持物理审批）+ 文案回输入框兜底
+            ui.msg_input.set_text(body)
+            set_hint(tag + "邮件链不可用：" + r.error + "——文案已在输入框，可手动发送")
+            render_views()
+        }
+    })
+}
+
+// WP4：催收草稿邮件人审发出（读暂存草稿；名单永不公示纪律不变——to 由人评审时填）
+fn butler_mail_dunning(){
+    if dunning_draft == "" { set_hint("先让管家起草催收文案（说「催一下」即可）"); return }
+    audit("mail_dunning", "#" + dunning_case_id)
+    mail_review_send("聚会账目提醒（牵线守护）", dunning_draft, "催收邮件")
+    dunning_draft = ""
+    dunning_case_id = ""
+}
+
+fn mail_share_fin(){
+    let body = fin_report_body()
+    if body == "" { set_hint("先选中一条守护再分享"); return }
+    audit("share_fin_mail", "")
+    mail_review_send("聚会回顾（牵线守护）", body, "结案回顾邮件")
+}
+
+fn share_fin_report(){
+    let body = fin_report_body()
+    if body == "" { return }
+    audit("share_fin", "")
     if host.has("matrix.send_message") {
         host.request("matrix.send_message", {body: body}, fn(r){
             if r.is_ok {
@@ -4523,6 +4572,9 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             ButtonFlat{width: Fill text: "分享回顾到群" height: 44 on_click: || share_fin_report()
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
                                 draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 9}}}
+                            ButtonFlat{width: Fill text: "邮件回顾（人审）" height: 44 on_click: || mail_share_fin()
+                                draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 9}}}
                         }
                     }
                     // ── 标题行：#N·活动 + 状态 chips（chips 紧跟标题，HTML 02 屏 .d-nav gap 8）──
@@ -4863,6 +4915,14 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     ButtonFlat{width: Fit text: "重试 AI" height: 40 padding: Inset{left: 14 right: 14} on_click: || butler_retry_ai()
                         draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
                         draw_text +: {color: accent color_hover: accent color_down: accent}}
+                }
+            }
+            // === v0.10.1 WP4：催收草稿邮件通路（有暂存草稿时可见）===
+            if dunning_draft != "" {
+                View{width: Fill height: Fit flow: Right spacing: 8
+                    ButtonFlat{width: Fill text: "邮件人审发出催收草稿" height: 40 on_click: || butler_mail_dunning()
+                        draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                        draw_text +: {color: accent color_hover: accent color_down: accent text_style: font_bold_cjk{font_size: 9}}}
                 }
             }
             // 待拍板提案卡（一次至多一个）——v0.9.0 WP2 精修（HTML 规范 03 屏）：

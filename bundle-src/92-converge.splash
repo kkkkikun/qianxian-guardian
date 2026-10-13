@@ -134,22 +134,65 @@ fn converge_butler(){
     set_hint("管家已按群投票出提案——过目后点「拍板」")
 }
 
-fn share_fin_report(){
+// v0.10.1 WP4：回顾文案组稿抽出（matrix 群分享与邮件人审两通路同文）
+fn fin_report_body(){
     let ci = -1
     for i in cases.len() {
         if cases[i]["id"] == selected_id { ci = i }
     }
-    if ci < 0 { return }
+    if ci < 0 { return "" }
     let id_str = "" + cases[ci]["id"]
     let act = "" + cases[ci]["activity"]
     if act == "" { act = "聚会" }
     let slot = ("" + cases[ci]["slot_day"]) + "-" + ("" + cases[ci]["slot_part"])
     let place = "" + cases[ci]["place"]
-    let ppl = "" + cases[ci]["people"]
-    let body = "🎉 聚会回顾：#" + id_str + " " + act + "（" + slot + " · " + place + "）已圆满收尾！"
+    return "🎉 聚会回顾：#" + id_str + " " + act + "（" + slot + " · " + place + "）已圆满收尾！"
         + "到场 " + fin_stat_people + "，人均 " + fin_stat_per + "，周期 " + fin_stat_days
         + "（数据由牵线守护从审计链导出）。"
-    audit("share_fin", "#" + id_str)
+}
+
+// === v0.10.1 WP4：mail.review_send 人审发信通路（跨 app 调用=宿主评审面板，源码级核实）===
+//   纪律：to 留空不编造地址——收件人由人在宿主作曲/评审面板里填（durable composer）。
+//   降级：无邮件服务/平台不支持物理审批 → 真实错误透出 + 文案回输入框可复制。
+fn mail_review_send(subject, body, tag){
+    if !host.has("mail.review_send") {
+        ui.msg_input.set_text(body)
+        set_hint("本宿主无邮件服务——「" + tag + "」文案已填入输入框，复制后手动发送即可")
+        render_views()
+        return
+    }
+    host.request("mail.review_send", {account: "", to: "", subject: subject, body: body}, fn(r){
+        if r.is_ok {
+            set_hint(tag + "：已进入宿主邮件评审——物理确认后发出（收件人在评审面板填写）")
+        } else {
+            // 真实错误透出（如 Linux 宿主：平台不支持物理审批）+ 文案回输入框兜底
+            ui.msg_input.set_text(body)
+            set_hint(tag + "邮件链不可用：" + r.error + "——文案已在输入框，可手动发送")
+            render_views()
+        }
+    })
+}
+
+// WP4：催收草稿邮件人审发出（读暂存草稿；名单永不公示纪律不变——to 由人评审时填）
+fn butler_mail_dunning(){
+    if dunning_draft == "" { set_hint("先让管家起草催收文案（说「催一下」即可）"); return }
+    audit("mail_dunning", "#" + dunning_case_id)
+    mail_review_send("聚会账目提醒（牵线守护）", dunning_draft, "催收邮件")
+    dunning_draft = ""
+    dunning_case_id = ""
+}
+
+fn mail_share_fin(){
+    let body = fin_report_body()
+    if body == "" { set_hint("先选中一条守护再分享"); return }
+    audit("share_fin_mail", "")
+    mail_review_send("聚会回顾（牵线守护）", body, "结案回顾邮件")
+}
+
+fn share_fin_report(){
+    let body = fin_report_body()
+    if body == "" { return }
+    audit("share_fin", "")
     if host.has("matrix.send_message") {
         host.request("matrix.send_message", {body: body}, fn(r){
             if r.is_ok {

@@ -19,7 +19,8 @@
     "octos.turn.start",
     "matrix.send_message",
     "device_calendar",
-    "glance"
+    "glance",
+    "mail"
   ],
   "compute": {
     "instruction_budget": null,
@@ -27,7 +28,7 @@
   },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "dc8f3ccf75cde4f64c050faef214b727204c8dab3402b095be68da10f86b6e75"
+    "bundle_blake3": "a0e4e955a98735d3251a3433d5ad1f0883913f342b1b2d7711da65ca9ee97a64"
   },
   "name": "牵线",
   "network": {
