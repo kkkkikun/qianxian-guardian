@@ -15,7 +15,7 @@
     <a href="evidence/finals-verification-map.md">核验地图</a> ·
     <a href="changes.md">变更台账</a>
   </p>
-  <p><sub>演示视频（约 2 分钟，配音+字幕）：见「界面预览」一节（B 站链接发布后回填此处）</sub></p>
+  <p><b><a href="https://www.bilibili.com/video/BV1djp66AEfA/">📺 演示视频（B 站，103 秒，配音+字幕）</a></b></p>
 </div>
 
 牵线是运行在 OctoSense 里的 Splash 小程序（script-app）：把群里的聚会消息丢给管家，
@@ -104,7 +104,7 @@ git clone https://github.com/kkkkikun/qianxian-guardian.git
 > 评审可用 `tools/octo shot` 复核，或在 Rinx 真宿主导入 bundle 实机对照。
 
 **演示视频**（约 2 分钟，配音+字幕，实机帧录制）：
-[evidence/finals-demo-v0.10.1.mp4](evidence/finals-demo-v0.10.1.mp4)（B 站链接发布后回填此处）；
+[evidence/finals-demo-v0.10.1.mp4](evidence/finals-demo-v0.10.1.mp4) · **[B 站观看（带配音）](https://www.bilibili.com/video/BV1djp66AEfA/)**；
 用户视角五幕在 [evidence/demo-videos/](evidence/demo-videos/)，端到端功能验证七套在
 [evidence/scenarios/](evidence/scenarios/)——全部实机录制、断言全过，可用
 `tools/qx-scenario.py --scenario <文件> --frames … --video …` 复录。
