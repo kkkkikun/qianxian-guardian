@@ -966,6 +966,19 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     Label{width: Fill text: ct draw_text.color: #xa89e91 draw_text.text_style.font_size: 8 align: Align{x: 0.5}}
                 }
             }
+            // === v0.10.2：AI 通道降级快捷动作（死亡闩锁置位时可见）——
+            //   降级不再是死路：本地规则一键落地 + 通道可手动重试。零渲染零占位语义：
+            //   闩锁未置位时整个 if 不渲染（不挤占对话流）。
+            if ai_dead == "yes" {
+                View{width: Fill height: Fit flow: Right spacing: 8
+                    ButtonFlat{width: Fill text: "用本地规则建守护" height: 40 on_click: || butler_local_fallback()
+                        draw_bg +: {border_radius: 20.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                        draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: font_bold_cjk{font_size: 9}}}
+                    ButtonFlat{width: Fit text: "重试 AI" height: 40 padding: Inset{left: 14 right: 14} on_click: || butler_retry_ai()
+                        draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                        draw_text +: {color: accent color_hover: accent color_down: accent}}
+                }
+            }
             // 待拍板提案卡（一次至多一个）——v0.9.0 WP2 精修（HTML 规范 03 屏）：
             //   op 头章（朱砂实底）+ 目标行；diff 行旧值 faint/新值朱砂加粗（运行时无
             //   删除线——faint 色 + ──▶ 箭头承担对比语义，记 evidence）；拍板主按钮。

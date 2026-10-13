@@ -105,6 +105,14 @@ fn load(){
         }
         // pv == nil 或 prs == nil：同样兜底，不报错
     }
+    // v0.10.2：AI 通道死亡闩锁读回（ai_state.json {"dead":"yes"}；缺失/损坏=通道未知，按活处理）
+    if fs.exists("ai_state.json") {
+        let araw = fs.read("ai_state.json")
+        let av = araw.parse_json()
+        if av != nil {
+            if ("" + av["dead"]) == "yes" { ai_dead = "yes" }
+        }
+    }
     // #48b：detail_list 初始隐藏（命令式，声明里写 visible:false 会被 render() 的
     //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
     ui.detail_list.set_visible(false)

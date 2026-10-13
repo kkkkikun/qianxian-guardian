@@ -61,6 +61,14 @@ let plan_who = ""
 let plan_amount = ""
 let plan_clear_stage = 0
 let plan_lines = []
+// === v0.10.2：AI 通道稳定性状态 ===
+// ai_dead：通道死亡闩锁——host.has 只证「已注册」，实测失败（错误/超时）后置位并持久化
+//   到 jail ai_state.json；置位后发送不再白等 45 秒，直接给本地规则出口+重试入口。
+// thinking_open：「思考中」气泡悬挂标记（回合间无其他入栈，结果到达时 pop 摘除替换）。
+// last_me_text：最近一条用户消息原文（降级快捷动作「用本地规则建守护」/「重试 AI」用）。
+let ai_dead = "no"
+let thinking_open = "no"
+let last_me_text = ""
 // === v0.8.0 W1（调研报告 P0）：拍板反馈回路 —— 拒绝不是死路，是改道入口 ===
 //   decline_prompt: 两段式理由选择态（第一次点「放弃」先问理由，8 秒不选自动收回）
 //   decline_feedback: 一次性反馈（【上次提案被拒：…】随下一轮管家 turn 注入后清空）

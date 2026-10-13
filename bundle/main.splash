@@ -61,6 +61,14 @@ let plan_who = ""
 let plan_amount = ""
 let plan_clear_stage = 0
 let plan_lines = []
+// === v0.10.2：AI 通道稳定性状态 ===
+// ai_dead：通道死亡闩锁——host.has 只证「已注册」，实测失败（错误/超时）后置位并持久化
+//   到 jail ai_state.json；置位后发送不再白等 45 秒，直接给本地规则出口+重试入口。
+// thinking_open：「思考中」气泡悬挂标记（回合间无其他入栈，结果到达时 pop 摘除替换）。
+// last_me_text：最近一条用户消息原文（降级快捷动作「用本地规则建守护」/「重试 AI」用）。
+let ai_dead = "no"
+let thinking_open = "no"
+let last_me_text = ""
 // === v0.8.0 W1（调研报告 P0）：拍板反馈回路 —— 拒绝不是死路，是改道入口 ===
 //   decline_prompt: 两段式理由选择态（第一次点「放弃」先问理由，8 秒不选自动收回）
 //   decline_feedback: 一次性反馈（【上次提案被拒：…】随下一轮管家 turn 注入后清空）
@@ -685,6 +693,14 @@ fn load(){
             }
         }
         // pv == nil 或 prs == nil：同样兜底，不报错
+    }
+    // v0.10.2：AI 通道死亡闩锁读回（ai_state.json {"dead":"yes"}；缺失/损坏=通道未知，按活处理）
+    if fs.exists("ai_state.json") {
+        let araw = fs.read("ai_state.json")
+        let av = araw.parse_json()
+        if av != nil {
+            if ("" + av["dead"]) == "yes" { ai_dead = "yes" }
+        }
     }
     // #48b：detail_list 初始隐藏（命令式，声明里写 visible:false 会被 render() 的
     //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
@@ -1813,20 +1829,44 @@ fn undo_cancel(){
 // card-host 无服务 → 诚实降级：sys 气泡明示，本地规则路径（建守护）原样可用。
 
 // #46 A切片（S3 改版）：AI 通道可见性——只探测管家通道（turn.start）
+// v0.10.2：死亡闩锁优先——实测失败过的通道不再报「可用」
 fn probe_ai_cap(){
+    if ai_dead == "yes" {
+        return "AI：通道实测无响应，本地规则兜底（对话里可「重试 AI」）"
+    }
     if host.has("octos.turn.start") {
         return "AI：管家对话通道可用（首次需宿主允许）"
     }
     return "AI：本机无管家服务，本地规则兜底"
 }
 
-// 决赛改进②（S3 改版）：30s 降级定时器，带代际核对 + 聊天面同步
+// v0.10.2：摘除悬挂的「思考中」气泡——它永远是最后一条（回合间无其他入栈；
+// 用户发送被 ai_pending 挡住），结果到达时 pop 掉由结果气泡替代，不再满屏残留。
+fn resolve_thinking(){
+    if thinking_open == "yes" {
+        chat_role.pop()
+        chat_text.pop()
+        thinking_open = "no"
+    }
+}
+
+// v0.10.2：通道死亡闩锁置位 + 持久化（jail ai_state.json）——一次实测失败，
+//   之后每条消息不再白等 45 秒；用户可点「重试 AI」手动复位。
+fn mark_ai_dead(why){
+    ai_dead = "yes"
+    let _w = fs.write("ai_state.json", {dead: "yes", reason: "" + why}.to_json())
+    ui.ai_cap_label.set_text(probe_ai_cap())
+}
+
+// 决赛改进②（S3 改版）：45s 降级定时器，带代际核对 + 聊天面同步
 fn ai_timeout(my){
     if my == ai_seq && ai_pending == "yes" {
         ai_pending = "no"
-        chat_push("sys", "管家无响应（45 秒）——已降级本地规则，点「建守护」即可")
+        resolve_thinking()
+        chat_push("sys", "管家无响应（45 秒）——已降级本地规则，点下方「用本地规则建守护」即可")
+        mark_ai_dead("timeout")
         render_views()
-        set_hint("AI 无响应（45 秒），已降级本地规则——直接点「建守护」即可")
+        set_hint("AI 无响应（45 秒），已降级本地规则——点对话下方「用本地规则建守护」")
     }
 }
 // 对话气泡入栈（role: "me"/"ai"/"sys"）；聊天视图可见时即时重渲染
@@ -1867,10 +1907,85 @@ fn build_agent_turn(user_text){
     return st + "\n【用户消息】\n" + user_text
 }
 
-// 管家入口：输入框文本 → 聊天视图 → turn.start（无服务则诚实降级）
+// v0.10.2：回合尝试抽成独立函数（butler_send 与「重试 AI」共用）——
+//   只发回合，不再推 me 气泡（重试不重复刷屏）。
+fn ai_attempt(text){
+    ai_pending = "yes"
+    ai_seq = ai_seq + 1
+    let my = ai_seq
+    chat_push("sys", "管家思考中…")
+    thinking_open = "yes"
+    // 15s 进度反馈：原地替换思考气泡文案（pop+push），不新增悬挂气泡
+    start_timeout(15.0, || {
+        if my == ai_seq && ai_pending == "yes" && thinking_open == "yes" {
+            resolve_thinking()
+            chat_push("sys", "管家还在思考…（模型响应较慢；45 秒无响应自动降级本地规则）")
+            thinking_open = "yes"
+        }
+    })
+    // v0.8.0 W1：拒绝理由一次性反馈——先注入进 turn 文本再清空（只影响本回合）
+    let turn_text = build_agent_turn(text)
+    decline_feedback = ""
+    start_timeout(45.0, || ai_timeout(my))
+    host.request("octos.turn.start", {text: turn_text}, fn(r){
+        // 决赛改进②：迟到回调按序号丢弃——已被新回合取代时不动任何 UI 状态
+        if my != ai_seq { return }
+        ai_pending = "no"
+        resolve_thinking()
+        if r.is_ok {
+            let reply = "" + r.data.text
+            if reply == "" { reply = "（管家返回了空回复）" }
+            chat_push("ai", reply)
+            plan_parse(reply)
+            if plan_pending == "yes" {
+                set_hint("管家出了提案——过目后点「拍板」执行")
+            } else {
+                set_hint("管家已回复（见对话）")
+            }
+        } else {
+            // #46b 诚实可见性：host.has 只证「已注册」，实测失败要把「可用」字样撤下
+            // v0.10.2：实测失败 → 死亡闩锁（后续发送即时降级，不再逐条白等 45 秒）
+            chat_push("sys", "AI 通道无响应（" + r.error + "）——已降级本地规则：点下方「用本地规则建守护」即可")
+            mark_ai_dead(r.error)
+            set_hint("AI 不可用，已降级为本地规则（" + r.error + "）")
+        }
+        render_views()
+    })
+}
+
+// v0.10.2：降级快捷动作——用本地规则处理上一条消息（分诊/二次确认/落库全走既有路径）
+fn butler_local_fallback(){
+    if last_me_text == "" {
+        set_hint("没有可建的原文——把群消息粘贴到输入框，再点「建守护」")
+        return
+    }
+    ui.msg_input.set_text(last_me_text)
+    add_case()
+    chat_push("sys", "已把上一条交给本地规则分诊（结果见提示与守护列表）")
+    render_views()
+}
+
+// v0.10.2：重试 AI 通道——清闩锁 + 有原文则直接重发上一条（不重复推 me 气泡）
+fn butler_retry_ai(){
+    if ai_pending == "yes" {
+        set_hint("管家还在思考，请稍候")
+        return
+    }
+    ai_dead = "no"
+    let _w = fs.write("ai_state.json", {dead: "no"}.to_json())
+    ui.ai_cap_label.set_text(probe_ai_cap())
+    if last_me_text != "" {
+        ai_attempt(last_me_text)
+    } else {
+        chat_push("sys", "已重置 AI 通道——粘贴消息后再点「交给管家」")
+        render_views()
+    }
+}
+
+// 管家入口：输入框文本 → 聊天视图 → turn.start（死亡闩锁/无服务则诚实降级，零等待）
 fn butler_send(){
     if ai_pending == "yes" {
-        set_hint("管家还在思考，请稍候（30 秒无响应自动降级）")
+        set_hint("管家还在思考，请稍候（45 秒无响应自动降级）")
         return
     }
     let text = ui.msg_input.text()
@@ -1879,44 +1994,23 @@ fn butler_send(){
         return
     }
     chat_push("me", text)
+    last_me_text = text
     ui.msg_input.set_text("")
     enter_chat()
-    if host.has("octos.turn.start") {
-        ai_pending = "yes"
-        ai_seq = ai_seq + 1
-        let my = ai_seq
-        chat_push("sys", "管家思考中…（约 45 秒，无响应自动降级本地规则）")
-        // v0.8.0 W1：拒绝理由一次性反馈——先注入进 turn 文本再清空（只影响本回合）
-        let turn_text = build_agent_turn(text)
-        decline_feedback = ""
-        start_timeout(45.0, || ai_timeout(my))
-        host.request("octos.turn.start", {text: turn_text}, fn(r){
-            // 决赛改进②：迟到回调按序号丢弃——已被新回合取代时不动任何 UI 状态
-            if my != ai_seq { return }
-            ai_pending = "no"
-            if r.is_ok {
-                let reply = "" + r.data.text
-                if reply == "" { reply = "（管家返回了空回复）" }
-                chat_push("ai", reply)
-                plan_parse(reply)
-                if plan_pending == "yes" {
-                    set_hint("管家出了提案——过目后点「拍板」执行")
-                } else {
-                    set_hint("管家已回复（见对话）")
-                }
-            } else {
-                // #46b 诚实可见性：host.has 只证「已注册」，实测失败要把「可用」字样撤下
-                chat_push("sys", "AI 通道无响应（" + r.error + "）——已降级本地规则，点「建守护」即可")
-                ui.ai_cap_label.set_text("AI：通道实测无响应，本地规则兜底")
-                set_hint("AI 不可用，已降级为本地规则（" + r.error + "）")
-            }
-            render_views()
-        })
-    } else {
-        // 诚实降级：无 AI 服务（card-host 即此态）——不假装管家在听
-        chat_push("sys", "本机没有管家服务（host 无 octos.turn.start）——本地规则兜底：点「建守护」走分诊建卡")
+    // v0.10.2：死亡闩锁——通道已知不可用时不白等，即时给本地出口 + 重试入口
+    if ai_dead == "yes" {
+        chat_push("sys", "AI 通道当前不可用（上次实测失败）——点下方「用本地规则建守护」直接落地，或「重试 AI」再试一次")
         ui.ai_cap_label.set_text(probe_ai_cap())
-        set_hint("本机无 AI 服务，已降级本地规则——点「建守护」即可")
+        render_views()
+        return
+    }
+    if host.has("octos.turn.start") {
+        ai_attempt(text)
+    } else {
+        // 诚实降级：无 AI 服务——不假装管家在听；同样置闩锁（本机会话内不再逐条重试空通道）
+        chat_push("sys", "本机没有管家服务（host 无 octos.turn.start）——点下方「用本地规则建守护」走分诊建卡")
+        mark_ai_dead("no-service")
+        set_hint("本机无 AI 服务，已降级本地规则——点对话下方「用本地规则建守护」")
         render_views()
     }
 }
@@ -4674,6 +4768,19 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                 } else {
                     // sys：居中灰小字（HTML .plan-note 同款）
                     Label{width: Fill text: ct draw_text.color: #xa89e91 draw_text.text_style.font_size: 8 align: Align{x: 0.5}}
+                }
+            }
+            // === v0.10.2：AI 通道降级快捷动作（死亡闩锁置位时可见）——
+            //   降级不再是死路：本地规则一键落地 + 通道可手动重试。零渲染零占位语义：
+            //   闩锁未置位时整个 if 不渲染（不挤占对话流）。
+            if ai_dead == "yes" {
+                View{width: Fill height: Fit flow: Right spacing: 8
+                    ButtonFlat{width: Fill text: "用本地规则建守护" height: 40 on_click: || butler_local_fallback()
+                        draw_bg +: {border_radius: 20.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                        draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: font_bold_cjk{font_size: 9}}}
+                    ButtonFlat{width: Fit text: "重试 AI" height: 40 padding: Inset{left: 14 right: 14} on_click: || butler_retry_ai()
+                        draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+                        draw_text +: {color: accent color_hover: accent color_down: accent}}
                 }
             }
             // 待拍板提案卡（一次至多一个）——v0.9.0 WP2 精修（HTML 规范 03 屏）：
