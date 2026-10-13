@@ -8,7 +8,7 @@ STEPS = [
     ("expect_text", "冲突"),
     ("shot", "两守护同时段互标冲突"),
     ("click", "#2 · 吃饭", 2.0),
-    ("click", "重新收敛", 1.6),
+    ("click", "改时间", 1.6),
     ("shot", "改期后：冲突标记自动清除"),
     ("back_list",),
     ("expect_no_text", "⚡ 冲突"),

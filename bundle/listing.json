@@ -1,33 +1,33 @@
 {
-  "schema": 1,
-  "subtitle": "群里说好的聚会，盯到人人到场",
-  "description": "牵线是聚会筹办守护：一句群消息丢给管家，agent 抽取字段、查冲突、出 PLAN 提案，你只做最终拍板——白名单动作落地、回执就位。守护到人人到场、账目清零：AA 对账表（按分取整，总计恒等）、梯度催收（永不公示名单）、三级提醒与天气复核、系统日历写（原生面板物理确认）、证据包导出可离线校验。红线生命周期：待拍板→已确认→已完成→已收尾，冲突解开红线肉眼可见地推进。抽不到就留空，绝不编造；无 AI 也完整可用（本地规则分诊+确定性状态机）。",
-  "category": "productivity",
-  "keywords": [
-    "聚会",
-    "活动",
-    "守护",
-    "日历",
-    "组织",
-    "AA分账",
-    "管家",
-    "提醒"
-  ],
-  "screenshots": [
-    "screenshots/01-main.png",
-    "screenshots/02-expanded.png",
-    "screenshots/03-conflict.png"
-  ],
-  "icon": "assets/icon.svg",
-  "platforms": [
-    "linux"
-  ],
-  "publisher": {
-    "name": "Aurora-X",
-    "support": "kkkkikun@foxmail.com",
-    "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
-  },
-  "release_notes": "v0.9.2：UI 第二轮重构（Kimi 设计版）——布局密度优化、详情分区精修、对账表完整（合计/恒等注脚/垫付建议）、红线阶段标签行、冲突横幅。12 个 PLAN op 全集保留。回归 25/25，渲染错误 0。",
-  "age_rating": "all",
-  "license": "Apache-2.0"
+ "schema": 1,
+ "subtitle": "群里说好的聚会，盯到人人到场",
+ "description": "牵线是聚会筹办守护：一句群消息丢给管家，agent 抽取字段、查冲突、出 PLAN 提案，你只做最终拍板——白名单动作落地、回执就位。守护到人人到场、账目清零：AA 对账表（按分取整，总计恒等）、梯度催收（永不公示名单）、三级提醒与天气复核、系统日历写（原生面板物理确认）、证据包导出可离线校验。红线生命周期：待拍板→已确认→已完成→已收尾，冲突解开红线肉眼可见地推进。抽不到就留空，绝不编造；无 AI 也完整可用（本地规则分诊+确定性状态机）。",
+ "category": "productivity",
+ "keywords": [
+  "聚会",
+  "活动",
+  "守护",
+  "日历",
+  "组织",
+  "AA分账",
+  "管家",
+  "提醒"
+ ],
+ "screenshots": [
+  "screenshots/01-main.png",
+  "screenshots/02-expanded.png",
+  "screenshots/03-conflict.png"
+ ],
+ "icon": "assets/icon.svg",
+ "platforms": [
+  "linux"
+ ],
+ "publisher": {
+  "name": "Aurora-X",
+  "support": "kkkkikun@foxmail.com",
+  "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
+ },
+ "release_notes": "v0.10.0：HTML 基准像素级复刻（字体按运行时实测 1.44× 字宽定标、真粗体 CJK 字族、冲突琥珀横幅/红线段/发丝线真实绘制）+ 管家稳定性（AI 通道死亡闩锁、思考气泡原位替换、降级快捷动作：本地规则一键落地/通道可重试）+ 紧凑化（搜索归入说明卡）。12 个 PLAN op 全集保留。回归 29/29，渲染错误 0。",
+ "age_rating": "all",
+ "license": "Apache-2.0"
 }

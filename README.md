@@ -6,10 +6,10 @@
 > **一条群消息，长成一个被照顾到收尾的完整活动。**
 > 本作品是**活动生命周期守护**（Case 状态机），不是聊天增强——聊天只是意图的入口和结果的回执通道。
 
-- **当前版本 v0.9.2**（`hub check — PASSED`，contract 1.10.0，agent read-only 最小权限 + AGENT.md v4）。
+- **当前版本 v0.10.0**（`hub check — PASSED`，contract 1.10.0，agent read-only 最小权限 + AGENT.md v4）。
   **Kimi Coding Plan 真模型管家**（octos 内核原生 moonshot-coding family）× **Rinx 真宿主**全链实测：
   create/mark_paid（正例+否定）/export/clear（危险两段拍板）/改期 diff 卡——cases.json 落盘断言全过。
-  回归 **25/25**，渲染错误 0。
+  回归 **29/29**，渲染错误 0。
 - **决赛主线（管家模式）**：**agent 驱动全流程，人只做最终拍板**——
   粘贴群消息点「交给管家」→ agent 抽取字段/查冲突/真工具查天气 → **PLAN 机器提案**（12 op 全集）→
   提案卡上点「拍板」→ 白名单动作执行 + 回执。**ops 覆盖矩阵**（[evidence/ops-coverage.md](evidence/ops-coverage.md)）：
@@ -33,20 +33,22 @@
   → 与官方「日历」场景四步演示的逐条对齐见
   **[evidence/official-scenario-alignment.md](evidence/official-scenario-alignment.md)**
 - **比赛**：GOSIM Agentic App 黑客松 2026（队伍 Aurora-X）；初赛入围（73/100）
-- 🎥 **演示视频 v0.9.2**：90 秒六幕（agentic 主线 / 真模型对话实录 / 红线生命周期 / 主动守护 /
-  冲突裁决 / AA 闭环）→ [evidence/finals-demo-v092.mp4](evidence/finals-demo-v092.mp4)
-  （[Release v0.9.2 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.9.2)）
+- 🎥 **演示视频 v0.10.0**（全部实机帧录制，UI 与当前版本一致）：
+  用户视角五幕（[群消息→守护](evidence/demo-videos/01-group-message.mp4) /
+  [冲突裁决](evidence/demo-videos/02-conflict.mp4) / [AA 闭环](evidence/demo-videos/03-aa.mp4) /
+  [管家实录](evidence/demo-videos/04-butler.mp4) / [群智收敛](evidence/demo-videos/05-converge.mp4)）；
+  端到端功能验证七套在 [evidence/scenarios/](evidence/scenarios/)。
+  （历史：[Release v0.9.2 资产](https://github.com/kkkkikun/qianxian-guardian/releases/tag/v0.9.2)）
 
-## 界面预览（v0.9.2）
+## 界面预览（v0.10.0）
 
 | 守护列表（守护灯卡 + 红线生命周期） | 详情（对账表 + 恒等注脚 + 垫付建议） | 冲突态（琥珀横幅 + 双卡） |
 |---|---|---|
 | ![主界面](bundle/screenshots/01-main.png) | ![详情](bundle/screenshots/02-expanded.png) | ![冲突](bundle/screenshots/03-conflict.png) |
 
-> 来源标注（诚实）：本开发机 WSLg 会话无头（`/g` 抓帧超时），截图为
-> `tools/snap-to-png.py` 按**运行时真实控件树**语义重绘（文字/层级/坐标/状态色来自实际运行；
-> chips 药丸底色、冲突琥珀带、红线圆点由语义推断补画，v0.1.0 同款先例）。评审可用
-> `tools/octo shot` 复核，或在 Rinx 真宿主导入 bundle 实机对照。
+> 来源标注：截图为 card-host 宿主**真实渲染帧**（`/g?wait=1` 后端抓帧，非重绘）——
+> 徽章底色、冲突琥珀横幅、红线朱砂段均为运行时真实绘制。评审可用 `tools/octo shot` 复核，
+> 或在 Rinx 真宿主导入 bundle 实机对照。
 
 ## 它做什么
 
@@ -129,7 +131,7 @@ cd OctoScript-App-Design-Flow && python3 tools/setup-native.py   # 拉齐 makepa
 cd ../OctoSense-App-Hub
 cargo build --release -p octosense-app-hub --bin hub
 ./target/release/hub check <你的-clone>/my-entry/bundle --allow-unsigned
-# 期望：qianxian 0.9.2 — PASSED（仅 unsigned warning）
+# 期望：qianxian 0.10.0 — PASSED（仅 unsigned warning）
 ```
 
 **③ 完整复现**（需 card-host 运行时；见 [run.md](run.md)）

@@ -50,11 +50,16 @@ class Ctx:
 
     def labels(self, ws=None):
         ws = ws if ws is not None else self.snap()
-        return [w.get("t") or "" for w in ws if isinstance(w.get("t"), str)]
+        # 过滤 Splash 根控件：其 t 是全量源码，含所有文案字面量——
+        #   不过滤的话 expect_no_text 永远命中源码（v0.10.2 实锤）。
+        return [w.get("t") or "" for w in ws
+                if isinstance(w.get("t"), str) and w.get("ty") != "Splash"]
 
     def find(self, sub, ty=None, ws=None):
         ws = ws if ws is not None else self.snap()
         for w in ws:
+            if w.get("ty") == "Splash":
+                continue  # 根控件的 t 是全量源码——任何词都"命中"，点它会点到屏幕中央
             r = w.get("r") or [0, 0, 0, 0]
             # ScrollY 虚拟化：?all=1 会带出视口外控件的占位 rect [0,0,0,0]——
             #   过滤（点它会点到左上角错误位置，A5 在案坑）
@@ -145,13 +150,22 @@ class Ctx:
 # ---------- 步骤执行 ----------
 
 def step_click(ctx, target, wait=1.4, retries=6, scroll_dy=300):
-    """点按钮/标签（含滚动重试——ScrollY 虚拟化）。"""
+    """点按钮/标签（含滚动重试——ScrollY 虚拟化）。
+    v0.10.2：先回绝对顶再逐步下找——此前的纯下找在上一步滚过深时永远错过目标。"""
+    w = ctx.find(target, "Button") or ctx.find(target)
+    if w:
+        ctx.click(w, wait)
+        return True
+    ctx.scroll(-4000)  # 回绝对顶
+    time.sleep(0.5)
     for _ in range(retries):
         w = ctx.find(target, "Button") or ctx.find(target)
         if w:
             ctx.click(w, wait)
             return True
         ctx.scroll(scroll_dy)
+    # 兜底：回顶还原视口
+    ctx.scroll(-4000)
     return False
 
 
@@ -183,11 +197,18 @@ def run_scenario(ctx, steps):
             time.sleep(st[1])
         elif act == "expect_text":
             found = False
+            # v0.10.2：先回绝对顶再逐步下找（位置无关），结束回顶还原视口
+            ctx.scroll(-4000)
+            time.sleep(0.4)
+            _want = st[1]
+            _want_ns = _want.replace(" ", "")
             for _ in range(st[2] if len(st) > 2 else 6):
-                if any(st[1] in t for t in ctx.labels()):
+                # v0.10.2：加空格归一比对——「沉 默 留 痕」这类间距排版标题与「沉默留痕」同源
+                if any(_want in t or (_want_ns and _want_ns in t.replace(" ", "")) for t in ctx.labels()):
                     found = True
                     break
                 ctx.scroll(st[3] if len(st) > 3 else 280)
+            ctx.scroll(-4000)
             ctx.expect(f"expect_text[{st[1]}]", found)
         elif act == "expect_no_text":
             absent = all(st[1] not in t for t in ctx.labels())
