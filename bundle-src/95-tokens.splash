@@ -31,13 +31,13 @@ let Card = RoundedView{width: Fill height: Fit flow: Down spacing: 8 padding: In
 //   用「账 目 · AA」空格语义代替 letter-spacing）。
 let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 4 bottom: 4}
     show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 7.0}
-let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 11}}
-let TitleLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 16}
-let TextLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
-let ReceiptLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 12}
+let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 8}}
+let TitleLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 11}
+let TextLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 9}
+let ReceiptLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 8}
 
 // === #9 新增：内联展开用的小字段标签（次级色粗体 13），照 #8 DetailSection 范式 ===
-let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
-let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 14}
-let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
+let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 9}}
+let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 10}
+let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 9}
 
