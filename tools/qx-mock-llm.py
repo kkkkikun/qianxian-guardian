@@ -41,6 +41,10 @@ def scripted(text):
     if "确认" in msg:
         return ("第 1 条信息齐了，确认后我出回执并登记 T-24h 提醒。拍板即确认。\n"
                 'PLAN{"op":"confirm","id":"1"}')
+    # 撤销必须排在取消之前：「撤销刚才的取消」含「取消」
+    if "撤销" in msg or "反悔" in msg:
+        return ("好，撤销刚才的取消（5 秒窗口内有效）。\n"
+                'PLAN{"op":"undo"}')
     if "取消" in msg:
         return ("明白，取消第 1 条。拍板后进入 5 秒撤销窗口，反悔还来得及。\n"
                 'PLAN{"op":"cancel","id":"1"}')
@@ -50,6 +54,22 @@ def scripted(text):
     if "AA" in msg or "记账" in msg:
         return ("记上了：第 1 条 AA 总额 300，按参与人人数均摊。拍板后入账。\n"
                 'PLAN{"op":"set_bill","id":"1","bill_total":"300"}')
+    # v0.10.1 WP2：12 op 全集补齐（意图词一律先于活动词判定）
+    if "办完" in msg or "标记完成" in msg or "办完了" in msg:
+        return ("第 1 条活动已落地完成。拍板后进入已完成态，账目还挂着就继续收尾。\n"
+                'PLAN{"op":"complete","id":"1"}')
+    if "已付款" in msg or "已交" in msg or "交了" in msg:
+        return ("记上：阿明已付 100。拍板后入账，差额自动重算。\n"
+                'PLAN{"op":"mark_paid","id":"1","who":"阿明","amount":"100"}')
+    if "清空" in msg:
+        return ("这是危险操作：清空全部守护。需要再点一次拍板确认才真删。\n"
+                'PLAN{"op":"clear"}')
+    if "导出" in msg:
+        return ("好，导出当前守护数据（证据包可离线校验）。\n"
+                'PLAN{"op":"export"}')
+    if "催收" in msg or "催款" in msg or "催一下" in msg:
+        return ("第 1 条还有人欠着。我起草了催收文案，你过目改完再发——名单永不公示。\n"
+                'PLAN{"op":"draft_dunning","id":"1"}')
     if "骑车" in msg or "深圳湾" in msg:
         return ("消息里抽到：周六上午在深圳湾骑车，活动/时间/地点都齐了。"
                 "建议现在建守护盯住这条，拍板即生效。\n"

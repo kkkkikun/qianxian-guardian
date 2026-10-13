@@ -1236,6 +1236,19 @@ _r34 = _sp2.run([sys.executable, "tools/qx-converge.py"],
 rec(34, "归票幂等（latest-wins 改票）自测", "PASS" in _r34.stdout,
     _r34.stdout.strip().splitlines()[-1] if _r34.stdout.strip() else _r34.stderr.strip()[:60])
 
+# ---- R-35/R-36：WP2 可操性（真内核 × 剧本 mock；PLAN 合规协议层）----
+#   诚实边界：card-host 无 octos 服务/Ask 面板——op 链的「宿主面板」列以内核直连链路
+#   实证（Ask 面板是该通道的薄封装；Rinx 面板证据在 s4）；PLAN→白名单执行段由 R-26/27
+#   与本套 UI 链覆盖。子进程隔离（不影响本回归的 card-host 状态）。
+_r35 = _sp2.run([sys.executable, "tools/qx-dialog-chain.py", "--ops"],
+                capture_output=True, text=True, cwd=str(_ROOT), timeout=300)
+rec(35, "op 覆盖链：12 op PLAN 合规（真内核×mock）", "DIALOG-CHAIN ALL PASS" in _r35.stdout,
+    (_r35.stdout.strip().splitlines() or ["（无输出）"])[-1])
+_r36 = _sp2.run([sys.executable, "tools/qx-dialog-chain.py", "--lifecycle"],
+                capture_output=True, text=True, cwd=str(_ROOT), timeout=300)
+rec(36, "纯对话全生命周期链（12 op 顺序正确）", "DIALOG-CHAIN ALL PASS" in _r36.stdout,
+    (_r36.stdout.strip().splitlines() or ["（无输出）"])[-1])
+
 # ---- R-30/R-31：WP0 防回退断言（任务书验收口径；静态扫描类，附诚实边界） ----
 import re as _re
 import pathlib as _pl
@@ -1259,7 +1272,7 @@ rec(31, "AI 迟到回调代际守卫在案（静态；动态见 s4 证据）", _
 
 # ---- 收尾 ----
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v11：29 步既有 + WP0 防回退 2 步 + WP1 成员端 3 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v12：29 步既有 + WP0 防回退 2 步 + WP1 成员端 3 步 + WP2 可操性 2 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):
