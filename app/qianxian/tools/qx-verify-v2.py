@@ -1183,9 +1183,30 @@ if not (_btn_ok and _refresh_ok and _plan_ok):
 rec(29, "群智收敛降级路径（收敛提案链路）", _plan_ok,
     f"收敛提案={_plan_ok}（三按钮集={sorted(_seen_btn)} 计票显示={_refresh_ok}）")
 
+# ---- R-30/R-31：WP0 防回退断言（任务书验收口径；静态扫描类，附诚实边界） ----
+import re as _re
+import pathlib as _pl
+# R-30：主提交物无字符串切片写法（本运行时 s[a:b] 编译为 index 指令即崩渲染——
+#   解析一律 split 原语；v0.2.0 评审意见 + 决赛实测同源）。只扫非注释行。
+_slice_hits = []
+for _part in sorted(_pl.Path("bundle-src").glob("*.splash")):
+    for _ln, _line in enumerate(_part.read_text(encoding="utf-8").splitlines(), 1):
+        _code = _line.split("//")[0] if "//" not in _line else _line[: _line.index("//")]
+        for _m in _re.finditer(r"\[[^\]\{\}\n]*:[^\]\{\}\n]*\]", _code):
+            _slice_hits.append(f"{_part.name}:{_ln} {_m.group(0)}")
+rec(30, "无字符串切片写法（split 原语纪律）", len(_slice_hits) == 0,
+    f"命中={len(_slice_hits)}" + (f" 首例={_slice_hits[0]}" if _slice_hits else ""))
+
+# R-31：AI 迟到回调代际守卫在案（回调体首句必须按序号丢弃迟到回调）。
+#   诚实边界：card-host 无 octos 服务，动态「45s 降级后迟到回调注入」在本宿主不可构造
+#   （请求即时报错，无挂起态）；守卫的动态行为证据在 Rinx 真宿主轮次
+#   （evidence/s4-real-host-20261010.md，迟到回调实测丢弃）。本条锁静态防回退。
+_late_guard = "if my != ai_seq { return }" in _pl.Path("bundle-src/80-butler-turn.splash").read_text(encoding="utf-8")
+rec(31, "AI 迟到回调代际守卫在案（静态；动态见 s4 证据）", _late_guard, f"guard={'在案' if _late_guard else '缺失'}")
+
 # ---- 收尾 ----
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v9：28 步既有 + v0.10.0 群智收敛 1 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v10：29 步既有 + WP0 防回退 2 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):

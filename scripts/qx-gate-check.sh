@@ -55,7 +55,8 @@ if curl -s -m 2 http://127.0.0.1:8146/ >/dev/null 2>&1; then
   sleep 15
   R=$(QX_PORT=8146 timeout 900 python3 app/qianxian/tools/qx-verify-v2.py 2>&1 | grep -E "PASS [0-9]+/")
   echo "   $R"
-  echo "$R" | grep -qE "PASS 29/29" && say "回归 29/29" "PASS" || { say "回归" "FAIL（$R）"; FAIL=1; }
+  # WP0：不再硬编码步数——回归只增不减，判据改为「PASS N/N 全绿」（反向引用两数相等）
+  echo "$R" | grep -qE "PASS ([0-9]+)/\1" && say "回归（$R）" "PASS" || { say "回归" "FAIL（$R）"; FAIL=1; }
 else
   say "回归" "SKIP（card-host 未在 :8146——先起 card-host 再复核）"
 fi

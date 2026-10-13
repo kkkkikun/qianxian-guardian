@@ -147,8 +147,11 @@ python3 ../../../octosense-ws/OctoScript-App-Design-Flow/tools/octo run bundle -
 
 ## 目录
 
+> 一仓一应用：本仓库只提交「牵线」一个应用；`bundle/` 位于仓库根（App Hub 硬性要求，门禁有断言锁死）。
+
 ```
 bundle/     THE SUBMISSION：manifest/listing/main.splash/icon/截图
+bundle-src/            main.splash 的 16 个源码部件（编辑这里；tools/qx-pack.sh 拼接生成 bundle/main.splash）
 app/guardian/            场外链路证明（同一套设计在真实 Matrix + 真实 LLM 通道跑通，
                          G1–G5 六套冒烟 70+ 断言全绿）
 app/miniapp-qianxian/    旧 Rinx spike（已归档，被 app/qianxian 取代）

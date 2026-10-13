@@ -27,7 +27,7 @@
   "support": "kkkkikun@foxmail.com",
   "privacy_policy_url": "https://github.com/kkkkikun/qianxian-guardian/blob/master/PRIVACY.md"
  },
- "release_notes": "v0.10.0：HTML 基准像素级复刻（字体按运行时实测 1.44× 字宽定标、真粗体 CJK 字族、冲突琥珀横幅/红线段/发丝线真实绘制）+ 管家稳定性（AI 通道死亡闩锁、思考气泡原位替换、降级快捷动作：本地规则一键落地/通道可重试）+ 紧凑化（搜索归入说明卡）。12 个 PLAN op 全集保留。回归 29/29，渲染错误 0。",
+ "release_notes": "v0.10.1：发布流程切换官方 publish-github（GitHub 检查+签名+打包，无需发布者密钥）。v0.10.0：HTML 基准像素级复刻（字体按运行时实测 1.44× 字宽定标、真粗体 CJK 字族、冲突琥珀横幅/红线段/发丝线真实绘制）+ 管家稳定性（AI 通道死亡闩锁、思考气泡原位替换、降级快捷动作：本地规则一键落地/通道可重试）+ 紧凑化（搜索归入说明卡）。12 个 PLAN op 全集保留。回归 29/29，渲染错误 0。",
  "age_rating": "all",
  "license": "Apache-2.0"
 }
