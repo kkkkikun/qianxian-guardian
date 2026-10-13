@@ -18,7 +18,8 @@
     "storage",
     "octos.turn.start",
     "matrix.send_message",
-    "device_calendar"
+    "device_calendar",
+    "glance"
   ],
   "compute": {
     "instruction_budget": null,
@@ -26,7 +27,7 @@
   },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "be4612d2d8a9ab773fce6a648b98101abbc2f379dd3ce1eaa2166ed64a3ec75e"
+    "bundle_blake3": "dc8f3ccf75cde4f64c050faef214b727204c8dab3402b095be68da10f86b6e75"
   },
   "name": "牵线",
   "network": {

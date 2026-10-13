@@ -71,6 +71,10 @@ let ai_dead = "no"
 // 伴生进程 qx-member-agent.py 自治投票后写 jail member-vote.json；
 // app 只读显示 + 「改投首选」写 member-revote.json（Outbox，伴生进程消费）。
 let member_vote_flag = "no"
+// === v0.10.1 WP3：守护灯确定性计数（glance 速览卡数据源，与守护灯同口径，零模型参与）===
+let guard_n_propose = 0
+let guard_n_conflict = 0
+let guard_n_tail = 0
 let member_vote_text = ""
 let thinking_open = "no"
 let last_me_text = ""
@@ -357,6 +361,10 @@ fn rebuild_lines(){
             light_tailing = light_tailing + 1
         }
     }
+    // v0.10.1 WP3：计数同时落全局（glance 速览卡的数据源——与守护灯 chips 同一处推导）
+    guard_n_propose = light_proposing
+    guard_n_conflict = light_conflict
+    guard_n_tail = light_tailing
     guard_light = "🛡 守护中 · 共 " + ("" + cases.len()) + " 条守护"
     if light_proposing > 0 { guard_light = guard_light + " · " + ("" + light_proposing) + " 待拍板" }
     if light_conflict > 0 { guard_light = guard_light + " · ⚡" + ("" + light_conflict) + " 冲突" }
@@ -3615,6 +3623,14 @@ fn json_field(js, key){
 //   card-host 无 glance 服务时按"已降级本地规则"友好提示；glance capability 已在
 //   manifest 封闭清单（#37 三件套②）。默认不主动调，仅"发布到 glance 屏"按钮触发。
 // #40 hub 现实封闭清单无 glance，本函数在 card-host 永远降级；保留以备官方实现 glance 能力后启用
+// === v0.10.1 WP3：守护灯速览卡（官方 glance.publish 现行契约，源码级核实）===
+//   字段：card_id + title + source（L0 卡源）+ data + priority + open + notify
+//   （calendar.notify 的 event_card_args 同款形状；agent 卡禁可执行 Splash——L0 安全）。
+//   内容 = 守护灯确定性摘要（rebuild_lines 计数全局，与主页守护灯同一数据源，零模型参与）。
+//   证据纪律：发布载荷先写 jail glance-last.json（Outbox 留证，R-37 一致性断言读它）。
+//   降级：无 glance 服务 → 载荷仍落盘 + hint 明示（不假装已上屏）。
+let GUARD_CARD = "# ledger qianxian.guard@0.1.0\n# level: L0\n# profile: ui/l0\n# 牵线守护灯速览卡：文案全走 ev 数据字段（sys.dataset 只认固定字段集，官方 check_card 校验在案）\nsource ev sys.dataset(fields: [title, as_of, metric1_label, metric1_value, metric2_label, metric2_value, subtitle, summary, url1])\nview root Surface(pad: .tight) {\n  Col(gap: 8) {\n    Row(gap: 8, align: .center) {\n      TextCaption(text: ev.subtitle, width: .fill)\n      TextCaption(value: ev.as_of)\n    }\n    TextTitle(text: ev.title, width: .fill)\n    Row(gap: 8) {\n      Tile(label: ev.metric1_label, value: ev.metric1_value)\n      Tile(label: ev.metric2_label, value: ev.metric2_value)\n    }\n    TextBody(text: ev.summary, width: .fill)\n  }\n}"
+
 fn publish_glance(){
     // 任何低频按钮都视为"放弃取消/清空/AI 等待"
     clear_cancel_pending("")
@@ -3624,51 +3640,45 @@ fn publish_glance(){
     clear_pending_flag = "no"
     clear_pending_deadline = 0
     if ai_pending == "yes" {
-        set_hint("AI 还在跑，等解析完再发 glance 提醒")
+        set_hint("AI 还在跑，等它回完再发守护灯卡")
         return
     }
+    // 内容推导（确定性）：总计行 + 分指标；无异常如实写
+    let tail_txt = "" + guard_n_tail
+    let summary = "待拍板 " + ("" + guard_n_propose) + " · 冲突 " + ("" + guard_n_conflict) + " · 待收尾 " + tail_txt
+    if guard_n_propose == 0 && guard_n_conflict == 0 && guard_n_tail == 0 {
+        summary = "无异常——全部守护都在轨"
+    }
+    let payload = {
+        card_id: "guard-light",
+        title: "牵线 · 守护灯",
+        source: GUARD_CARD,
+        data: {ev: {
+            app_label: "牵线 · 守护灯",
+            open_label: "打开牵线",
+            title: guard_title,
+            as_of: "守护灯",
+            metric1_label: "待拍板", metric1_value: "" + guard_n_propose,
+            metric2_label: "冲 突", metric2_value: "" + guard_n_conflict,
+            subtitle: "待收尾 " + tail_txt,
+            summary: summary,
+            url1: "app://qianxian"
+        }},
+        priority: 50,
+        open: {app: "qianxian"},
+        notify: false
+    }
+    // 证据留痕：不管宿主有没有 glance 服务，载荷先落盘（一致性断言/复核都读它）
+    let _gw = fs.write("glance-last.json", payload.to_json())
     if !host.has("glance") {
-        set_hint("本宿主无 glance 服务（card-host），无法投递 L0 卡；外环真机可跑")
+        set_hint("本宿主无 glance 服务，速览卡未上屏——载荷已存 glance-last.json（内容即上屏语义）")
         return
     }
-    // 找一条 Confirmed 的守护做投递目标；按 selected_id 优先，否则取第一条 Confirmed
-    let target = -1
-    if selected_id > 0 {
-        for qi in cases.len() {
-            if cases[qi]["id"] == selected_id {
-                if "" + cases[qi]["status"] == "Confirmed" {
-                    target = qi
-                }
-                break
-            }
-        }
-    }
-    if target < 0 {
-        for qi in cases.len() {
-            if "" + cases[qi]["status"] == "Confirmed" {
-                target = qi
-                break
-            }
-        }
-    }
-    if target < 0 {
-        set_hint("暂无「已确认」守护可发 glance 提醒（先确认一条守护）")
-        return
-    }
-    let act = "" + cases[target]["activity"]
-    let sd = "" + cases[target]["slot_day"]
-    let sp = "" + cases[target]["slot_part"]
-    let pl = "" + cases[target]["place"]
-    let summary = "聚会提醒：" + act + " · " + sd + "-" + sp + " · " + pl
-    host.request("glance.publish", {
-        level: "L0",
-        title: "牵线 · 守护提醒",
-        body: summary
-    }, fn(r){
+    host.request("glance.publish", payload, fn(r){
         if r.is_ok {
-            set_hint("已投递 glance 屏（" + summary + "）")
+            set_hint("守护灯速览卡已发布到 glance 屏（" + guard_title + "）")
         } else {
-            set_hint("glance 投递失败（" + r.error + "），外环真机可排查")
+            set_hint("glance 发布失败（" + r.error + "）——载荷已存 glance-last.json")
         }
     })
 }

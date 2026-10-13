@@ -63,6 +63,10 @@ fn rebuild_lines(){
             light_tailing = light_tailing + 1
         }
     }
+    // v0.10.1 WP3：计数同时落全局（glance 速览卡的数据源——与守护灯 chips 同一处推导）
+    guard_n_propose = light_proposing
+    guard_n_conflict = light_conflict
+    guard_n_tail = light_tailing
     guard_light = "🛡 守护中 · 共 " + ("" + cases.len()) + " 条守护"
     if light_proposing > 0 { guard_light = guard_light + " · " + ("" + light_proposing) + " 待拍板" }
     if light_conflict > 0 { guard_light = guard_light + " · ⚡" + ("" + light_conflict) + " 冲突" }

@@ -1249,6 +1249,65 @@ _r36 = _sp2.run([sys.executable, "tools/qx-dialog-chain.py", "--lifecycle"],
 rec(36, "纯对话全生命周期链（12 op 顺序正确）", "DIALOG-CHAIN ALL PASS" in _r36.stdout,
     (_r36.stdout.strip().splitlines() or ["（无输出）"])[-1])
 
+# ---- R-37：WP3 守护灯速览卡（glance.publish 现行官方契约）----
+#   链路：展开说明卡 → 滚到「发布到 glance 屏」→ 点击 → glance-last.json 落盘断言
+#   （Outbox 留证模式）。一致性：卡内 ev 指标必须等于从 cases.json 重算的守护灯计数。
+#   诚实边界：card-host 无 glance 服务——发布动作的屏上降级提示在 R-37 只能验到
+#   hint 文案；L0 卡源官方校验（check_card valid=true）在 evidence/finals-wp3 里留命令+输出。
+_g37_ok = False
+_g37_ev = ""
+try:
+    # 列表态 + 说明卡展开（状态感知）
+    for _g in range(4):
+        ws = snap()["s"]
+        if _vis(ws, "低频操作"):
+            break
+        _b = _vis(ws, "返回列表", "Button") or _vis(ws, "回到守护列表", "Button")
+        if _b:
+            _x, _y = center(_b)
+            get(f"/click?x={_x}&y={_y}")
+            time.sleep(1.2)
+            continue
+        _h = _vis(ws, "怎么用？", "Button")
+        if _h:
+            _x, _y = center(_h)
+            get(f"/click?x={_x}&y={_y}")
+            time.sleep(1.2)
+    _gb = None
+    for _g in range(8):
+        ws = snap()["s"]
+        _gb = _vis(ws, "发布到 glance 屏", "Button")
+        if _gb:
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        time.sleep(0.8)
+    if _gb:
+        _x, _y = center(_gb)
+        get(f"/click?x={_x}&y={_y}")
+        time.sleep(1.5)
+        _gf = JAIL / "glance-last.json"
+        if _gf.exists():
+            _gp = _json2.loads(_gf.read_text())
+            _cases = _json2.loads((JAIL / "cases.json").read_text()).get("cases", [])
+            _np = sum(1 for c in _cases if c.get("status") == "Proposing")
+            _nc = sum(1 for c in _cases if c.get("conflict") == "yes" and c.get("status") not in ("Cancelled", "Completed"))
+            _nt = sum(1 for c in _cases if c.get("status") in ("Confirmed", "Completed")
+                      and c.get("bill_total") and c.get("bill_cleared") != "yes")
+            _ev = (_gp.get("data") or {}).get("ev") or {}
+            _g37_ok = (_gp.get("card_id") == "guard-light"
+                       and "ui/l0" in (_gp.get("source") or "")
+                       and _ev.get("metric1_value") == str(_np)
+                       and _ev.get("metric2_value") == str(_nc)
+                       and _ev.get("title", "").startswith("守护中 · 共"))
+            _g37_ev = f"card_id={_gp.get('card_id')} ev1={_ev.get('metric1_value')}/{_np} ev2={_ev.get('metric2_value')}/{_nc} title={_ev.get('title', '')[:14]}"
+        else:
+            _g37_ev = "glance-last.json 未落盘"
+    else:
+        _g37_ev = "发布按钮未找到"
+except Exception as _e:
+    _g37_ev = f"异常 {_e}"
+rec(37, "守护灯速览卡（载荷一致性+官方契约字段）", _g37_ok, _g37_ev)
+
 # ---- R-30/R-31：WP0 防回退断言（任务书验收口径；静态扫描类，附诚实边界） ----
 import re as _re
 import pathlib as _pl
@@ -1272,7 +1331,7 @@ rec(31, "AI 迟到回调代际守卫在案（静态；动态见 s4 证据）", _
 
 # ---- 收尾 ----
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v12：29 步既有 + WP0 防回退 2 步 + WP1 成员端 3 步 + WP2 可操性 2 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v13：29 步既有 + WP0 2 步 + WP1 3 步 + WP2 2 步 + WP3 1 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):
