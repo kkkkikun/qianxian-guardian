@@ -67,6 +67,11 @@ let plan_lines = []
 // thinking_open：「思考中」气泡悬挂标记（回合间无其他入栈，结果到达时 pop 摘除替换）。
 // last_me_text：最近一条用户消息原文（降级快捷动作「用本地规则建守护」/「重试 AI」用）。
 let ai_dead = "no"
+// === v0.10.2 WP1：成员端「替我投票」可视（双实例牵线的成员侧） ===
+// 伴生进程 qx-member-agent.py 自治投票后写 jail member-vote.json；
+// app 只读显示 + 「改投首选」写 member-revote.json（Outbox，伴生进程消费）。
+let member_vote_flag = "no"
+let member_vote_text = ""
 let thinking_open = "no"
 let last_me_text = ""
 // === v0.8.0 W1（调研报告 P0）：拍板反馈回路 —— 拒绝不是死路，是改道入口 ===
@@ -359,6 +364,8 @@ fn rebuild_lines(){
     if light_proposing == 0 && light_conflict == 0 && light_tailing == 0 {
         guard_light = guard_light + " · 无异常"
     }
+    // v0.10.2 WP1：成员端投票状态随每次重建刷新（伴生进程写文件 → UI 即见）
+    load_member_vote()
     // === v0.9.0 WP2：守护灯 chips（标题行 + 分色计数 chips，HTML 规范 01 屏） ===
     guard_chip_text.clear()
     guard_chip_kind.clear()
@@ -694,6 +701,8 @@ fn load(){
         }
         // pv == nil 或 prs == nil：同样兜底，不报错
     }
+    // v0.10.2 WP1：成员端投票状态读回（member-vote.json；伴生进程写入）
+    load_member_vote()
     // v0.10.2：AI 通道死亡闩锁读回（ai_state.json {"dead":"yes"}；缺失/损坏=通道未知，按活处理）
     if fs.exists("ai_state.json") {
         let araw = fs.read("ai_state.json")
@@ -809,6 +818,21 @@ fn save(){
     write_agent_brief()
 }
 
+
+// v0.10.2 WP1：member-vote.json → 扁平显示串（load 与 rebuild_lines 双调用，
+//   伴生进程写新票后 UI 滚动即刷新；缺失/损坏 → 隐藏横幅，不报错不归档）
+fn load_member_vote(){
+    if !fs.exists("member-vote.json") { return }
+    let mraw = fs.read("member-vote.json")
+    let mv = mraw.parse_json()
+    if mv == nil { return }
+    let mletter = "" + mv["letter"]
+    if mletter == "" { return }
+    member_vote_flag = "yes"
+    let mauto = "管家替你投了"
+    if ("" + mv["auto"]) == "False" || ("" + mv["auto"]) == "false" { mauto = "你手动改投了" }
+    member_vote_text = mauto + "「" + mletter + "」（" + ("" + mv["slot"]) + "）——" + ("" + mv["reason"])
+}
 // ═══ 部件 4/16：条目编辑：target_id / add_person / update_bill_total / cycle_slot / clear_cancel_pending
 // ═══ 源文件 bundle-src/40-case-edits.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // 解析"作用目标"：选中优先，否则最新一条并明示
@@ -3237,6 +3261,17 @@ fn set_bill_cleared(id_str){
 // v0.10.0 WP5：分享结案回顾到群（matrix.send_message 真发；数字全来自审计字段）
 // === v0.10.0 WP3-A：群智收敛三动作（降级路径） ===
 // ① 发投票到群：文字投票卡（matrix.send_message 真发）；非 Rinx 宿主诚实降级文案可复制。
+// === v0.10.2 WP1：成员端「改投首选」（Outbox：app 写请求文件，伴生进程消费发信） ===
+//   撤回语义=再发一条字母（归票 latest-wins 幂等，qx-converge 单测在案）。
+fn member_revote(){
+    let _w = fs.write("member-revote.json", {letter: "A", reason: "手动改投首选"}.to_json())
+    if _w == nil {
+        set_hint("改投请求已登记——伴生进程（qx-member-agent）下一轮发出；没跑伴生进程不会发（场外组件，诚实边界）")
+    } else {
+        set_hint("改投登记失败：" + ("" + _w))
+    }
+}
+
 fn converge_slots_text(){
     return "A. 周六-上午    B. 周六-下午    C. 周六-晚上\n       D. 周日-上午    E. 周日-下午"
 }
@@ -3263,7 +3298,10 @@ fn start_converge(){
                 set_hint("投票卡已发到群 ✓——成员回复字母后，回来点「刷新计票」")
                 audit("converge_start", "#" + converge_case_id + "（文字投票卡）")
             } else {
-                set_hint("发投票失败：" + r.error + "（可用下方文案手动转发）")
+                // 发送失败也要把文案交还用户（隐藏中的输入框在详情态不可见——hint 明示位置；
+                //   列表态输入框可见即可复制；e2e/伴生进程可读 msg_input 取回同源文案）
+                ui.msg_input.set_text(body)
+                set_hint("发投票失败：" + r.error + "——投票文案已在输入框，复制转发到群即可")
             }
         })
     } else {
@@ -3930,6 +3968,19 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                 ButtonFlat{text: "去拍板" height: 36 padding: Inset{left: 12 right: 12} on_click: || enter_chat()
                     draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
                     draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}}
+        }
+        // === v0.10.2 WP1：成员端「替我投票」横幅（双实例牵线的成员侧回执之家）——
+        //   伴生进程 qx-member-agent 自治投票后写 member-vote.json；此处只读显示 +
+        //   「改投首选」Outbox 动作（写 member-revote.json，伴生进程消费发信）。
+        if member_vote_flag == "yes" {
+            RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                padding: Inset{left: 12 right: 12 top: 8 bottom: 8}
+                show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                Label{width: Fill text: member_vote_text draw_text.color: #x2f7d4f draw_text.text_style.font_size: 9}
+                ButtonFlat{text: "改投首选" height: 32 padding: Inset{left: 10 right: 10} on_click: || member_revote()
+                    draw_bg +: {border_radius: 16.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
+                    draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: font_bold_cjk{font_size: 8}}}
+            }
         }
         // v0.10.2：搜索框迁入「怎么用？」说明卡（见本文件尾部 howto 卡）——HTML 屏 01
         //   无此元素，主页逐元素对齐基准稿；功能保留，展开说明卡即可达（回归 R-12 同步适配）。

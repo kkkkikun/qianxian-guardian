@@ -70,6 +70,8 @@ fn rebuild_lines(){
     if light_proposing == 0 && light_conflict == 0 && light_tailing == 0 {
         guard_light = guard_light + " · 无异常"
     }
+    // v0.10.2 WP1：成员端投票状态随每次重建刷新（伴生进程写文件 → UI 即见）
+    load_member_vote()
     // === v0.9.0 WP2：守护灯 chips（标题行 + 分色计数 chips，HTML 规范 01 屏） ===
     guard_chip_text.clear()
     guard_chip_kind.clear()

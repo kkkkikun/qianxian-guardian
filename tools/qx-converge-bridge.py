@@ -84,7 +84,8 @@ def main():
     jail = pathlib.Path(args.jail)
     acc = json.loads(pathlib.Path("/home/kikun/MyProject/Agentic-octos/test-accounts.json").read_text())
     a = acc["accounts"][args.account]
-    client = MatrixClient(acc["homeserver"], a["username"], a["password"])
+    client = MatrixClient(acc["homeserver"], a["username"], a["password"],
+                          token_path=f"/tmp/qx-matrix-token-{a['username']}.cache")
     client.login()
     print(f"[converge-bridge] 已登录 {a['username']}；room={args.room} case=#{args.case_id}", flush=True)
 

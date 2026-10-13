@@ -105,6 +105,8 @@ fn load(){
         }
         // pv == nil 或 prs == nil：同样兜底，不报错
     }
+    // v0.10.2 WP1：成员端投票状态读回（member-vote.json；伴生进程写入）
+    load_member_vote()
     // v0.10.2：AI 通道死亡闩锁读回（ai_state.json {"dead":"yes"}；缺失/损坏=通道未知，按活处理）
     if fs.exists("ai_state.json") {
         let araw = fs.read("ai_state.json")
@@ -220,3 +222,18 @@ fn save(){
     write_agent_brief()
 }
 
+
+// v0.10.2 WP1：member-vote.json → 扁平显示串（load 与 rebuild_lines 双调用，
+//   伴生进程写新票后 UI 滚动即刷新；缺失/损坏 → 隐藏横幅，不报错不归档）
+fn load_member_vote(){
+    if !fs.exists("member-vote.json") { return }
+    let mraw = fs.read("member-vote.json")
+    let mv = mraw.parse_json()
+    if mv == nil { return }
+    let mletter = "" + mv["letter"]
+    if mletter == "" { return }
+    member_vote_flag = "yes"
+    let mauto = "管家替你投了"
+    if ("" + mv["auto"]) == "False" || ("" + mv["auto"]) == "false" { mauto = "你手动改投了" }
+    member_vote_text = mauto + "「" + mletter + "」（" + ("" + mv["slot"]) + "）——" + ("" + mv["reason"])
+}

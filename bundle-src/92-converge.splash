@@ -4,6 +4,17 @@
 // v0.10.0 WP5：分享结案回顾到群（matrix.send_message 真发；数字全来自审计字段）
 // === v0.10.0 WP3-A：群智收敛三动作（降级路径） ===
 // ① 发投票到群：文字投票卡（matrix.send_message 真发）；非 Rinx 宿主诚实降级文案可复制。
+// === v0.10.2 WP1：成员端「改投首选」（Outbox：app 写请求文件，伴生进程消费发信） ===
+//   撤回语义=再发一条字母（归票 latest-wins 幂等，qx-converge 单测在案）。
+fn member_revote(){
+    let _w = fs.write("member-revote.json", {letter: "A", reason: "手动改投首选"}.to_json())
+    if _w == nil {
+        set_hint("改投请求已登记——伴生进程（qx-member-agent）下一轮发出；没跑伴生进程不会发（场外组件，诚实边界）")
+    } else {
+        set_hint("改投登记失败：" + ("" + _w))
+    }
+}
+
 fn converge_slots_text(){
     return "A. 周六-上午    B. 周六-下午    C. 周六-晚上\n       D. 周日-上午    E. 周日-下午"
 }
@@ -30,7 +41,10 @@ fn start_converge(){
                 set_hint("投票卡已发到群 ✓——成员回复字母后，回来点「刷新计票」")
                 audit("converge_start", "#" + converge_case_id + "（文字投票卡）")
             } else {
-                set_hint("发投票失败：" + r.error + "（可用下方文案手动转发）")
+                // 发送失败也要把文案交还用户（隐藏中的输入框在详情态不可见——hint 明示位置；
+                //   列表态输入框可见即可复制；e2e/伴生进程可读 msg_input 取回同源文案）
+                ui.msg_input.set_text(body)
+                set_hint("发投票失败：" + r.error + "——投票文案已在输入框，复制转发到群即可")
             }
         })
     } else {

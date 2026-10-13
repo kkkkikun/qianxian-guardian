@@ -1183,6 +1183,59 @@ if not (_btn_ok and _refresh_ok and _plan_ok):
 rec(29, "群智收敛降级路径（收敛提案链路）", _plan_ok,
     f"收敛提案={_plan_ok}（三按钮集={sorted(_seen_btn)} 计票显示={_refresh_ok}）")
 
+# ---- R-32/R-33/R-34：WP1 双实例牵线（成员端自治）----
+# R-32（app 侧，card-host 可驱）：jail 注入 member-vote.json → 主页「替我投票」横幅出现
+#   → 点「改投首选」→ Outbox 文件 member-revote.json 落盘（伴生进程消费语义）。
+_mv = JAIL / "member-vote.json"
+_mv.write_text(_json2.dumps({"card_key": "t1", "letter": "B", "slot": "周六-下午",
+                             "reason": "首选撞期，顺延到 周六-下午", "auto": True}, ensure_ascii=False))
+# 回列表模式（_vis 过滤零矩形——隐藏/虚拟化控件不可点；R-25 同源）
+for _m32 in range(4):
+    ws = snap()["s"]
+    if _vis(ws, "全部", "Label") is not None and _vis(ws, "改投首选", "Button") is None:
+        # 已在列表态但横幅未出 → 点「全部」tab 触发 rebuild_lines（读回 member-vote.json）
+        _tb = _vis(ws, "全部", "Label")
+        if _tb:
+            _x, _y = center(_tb)
+            get(f"/click?x={_x}&y={_y}")
+            time.sleep(1.2)
+            continue
+    if _vis(ws, "改投首选", "Button") is not None:
+        break
+    _bk = _vis(ws, "返回列表", "Button") or _vis(ws, "回到守护列表", "Button")
+    if _bk:
+        _x, _y = center(_bk)
+        get(f"/click?x={_x}&y={_y}")
+        time.sleep(1.4)
+    else:
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=-2400")
+        time.sleep(0.9)
+ws = snap()["s"]
+_banner_ok = any("替你投了" in t for t, r in labels(ws))
+_rv_btn = _vis(ws, "改投首选", "Button")
+_rv_ok = False
+if _rv_btn:
+    x, y = center(_rv_btn)
+    get(f"/click?x={x}&y={y}")
+    time.sleep(1.4)
+    _rv_ok = (JAIL / "member-revote.json").exists()
+rec(32, "成员端「替我投票」横幅 + 改投 Outbox", _banner_ok and _rv_ok,
+    f"横幅={_banner_ok} outbox落盘={_rv_ok}")
+
+# R-33/R-34：成员端自治策略与归票幂等的纯函数层（真房主链 e2e 在 tools/qx-wp1-e2e.py，
+#   回归环境不重复起 palpo——诚实分工：纯函数自测在回归，真房证据在 e2e 文件）
+import subprocess as _sp2
+_ROOT = JAIL  # 占位防误用；真正的工作目录是仓库根
+_ROOT = pathlib.Path(__file__).resolve().parents[3]
+_r33 = _sp2.run([sys.executable, "tools/qx-member-agent.py", "--selftest"],
+                capture_output=True, text=True, cwd=str(_ROOT))
+rec(33, "成员端自治投票策略（顺延/全撞弃权）", "7/7 PASS" in _r33.stdout,
+    _r33.stdout.strip().splitlines()[-1] if _r33.stdout.strip() else _r33.stderr.strip()[:60])
+_r34 = _sp2.run([sys.executable, "tools/qx-converge.py"],
+                capture_output=True, text=True, cwd=str(_ROOT))
+rec(34, "归票幂等（latest-wins 改票）自测", "PASS" in _r34.stdout,
+    _r34.stdout.strip().splitlines()[-1] if _r34.stdout.strip() else _r34.stderr.strip()[:60])
+
 # ---- R-30/R-31：WP0 防回退断言（任务书验收口径；静态扫描类，附诚实边界） ----
 import re as _re
 import pathlib as _pl
@@ -1206,7 +1259,7 @@ rec(31, "AI 迟到回调代际守卫在案（静态；动态见 s4 证据）", _
 
 # ---- 收尾 ----
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v10：29 步既有 + WP0 防回退 2 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v11：29 步既有 + WP0 防回退 2 步 + WP1 成员端 3 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):

@@ -67,6 +67,11 @@ let plan_lines = []
 // thinking_open：「思考中」气泡悬挂标记（回合间无其他入栈，结果到达时 pop 摘除替换）。
 // last_me_text：最近一条用户消息原文（降级快捷动作「用本地规则建守护」/「重试 AI」用）。
 let ai_dead = "no"
+// === v0.10.2 WP1：成员端「替我投票」可视（双实例牵线的成员侧） ===
+// 伴生进程 qx-member-agent.py 自治投票后写 jail member-vote.json；
+// app 只读显示 + 「改投首选」写 member-revote.json（Outbox，伴生进程消费）。
+let member_vote_flag = "no"
+let member_vote_text = ""
 let thinking_open = "no"
 let last_me_text = ""
 // === v0.8.0 W1（调研报告 P0）：拍板反馈回路 —— 拒绝不是死路，是改道入口 ===

@@ -108,6 +108,19 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
                     draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}}
         }
+        // === v0.10.2 WP1：成员端「替我投票」横幅（双实例牵线的成员侧回执之家）——
+        //   伴生进程 qx-member-agent 自治投票后写 member-vote.json；此处只读显示 +
+        //   「改投首选」Outbox 动作（写 member-revote.json，伴生进程消费发信）。
+        if member_vote_flag == "yes" {
+            RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                padding: Inset{left: 12 right: 12 top: 8 bottom: 8}
+                show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
+                Label{width: Fill text: member_vote_text draw_text.color: #x2f7d4f draw_text.text_style.font_size: 9}
+                ButtonFlat{text: "改投首选" height: 32 padding: Inset{left: 10 right: 10} on_click: || member_revote()
+                    draw_bg +: {border_radius: 16.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
+                    draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: font_bold_cjk{font_size: 8}}}
+            }
+        }
         // v0.10.2：搜索框迁入「怎么用？」说明卡（见本文件尾部 howto 卡）——HTML 屏 01
         //   无此元素，主页逐元素对齐基准稿；功能保留，展开说明卡即可达（回归 R-12 同步适配）。
         // === #11 外环修：取消确认态变体（根组件 if 不随状态重算，必须放闭包内）===
