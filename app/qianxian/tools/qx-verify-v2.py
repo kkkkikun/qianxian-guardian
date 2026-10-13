@@ -1394,6 +1394,67 @@ except Exception as _e:
     _m38_ev = f"异常 {_e}"
 rec(38, "邮件通路否定用例（无服务诚实降级+文案兜底）", _m38_ok, _m38_ev)
 
+# ---- R-39/R-40：WP5 主动回合扩场景（守护进程驱动，jail 级断言）----
+#   确定性构造：slot_day 取明天/昨天的星期词，守护进程一轮即出结果；
+#   催收/催拍板路径纯模板（零模型零网络）——天气回合不在构造内，不触发网络。
+import subprocess as _sp3
+from datetime import datetime as _dt, timedelta as _td
+_WD = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+_today = (_dt.utcnow() + _td(hours=8)).date()
+_tmrw_wd = _WD[(_today + _td(days=1)).weekday()]
+_yst_wd = _WD[(_today - _td(days=1)).weekday()]
+
+# R-39：临期催拍板（T-24h 仍 Proposing → pending_plan 含 PLAN confirm + 命中文案）
+_j39 = pathlib.Path("/tmp/qx-wp5-nudge")
+_sp3.run(["rm", "-rf", str(_j39)], check=False)
+_j39.mkdir(parents=True, exist_ok=True)
+(_j39 / "cases.json").write_text(_json2.dumps({"seq": 1, "cases": [
+    {"id": 1, "text": "测试", "activity": "骑车", "place": "深圳湾", "status": "Proposing",
+     "people": "", "bill_total": "", "receipt_activity": "", "receipt_place": "",
+     "receipt_text": "", "receipt_done": "", "slot_day": _tmrw_wd, "slot_part": "上午",
+     "conflict": "no", "slot_init_asked": "", "bill_cleared": "no",
+     "target_date": (_today + _td(days=1)).isoformat()}]}, ensure_ascii=False))
+_r39 = _sp3.run([sys.executable, "tools/qx-proactive-butler.py", "--jail", str(_j39), "--once"],
+                capture_output=True, text=True, cwd=str(_ROOT), timeout=60)
+_pp39 = _j39 / "pending_plan.json"
+_39ok = False
+if _pp39.exists():
+    _pv = _json2.loads(_pp39.read_text())
+    _39ok = _pv.get("trigger") == "proactive_nudge" and 'PLAN{"op":"confirm","id":"1"}' in (_pv.get("reply") or "")
+rec(39, "临期催拍板主动回合（PLAN confirm 提案落盘）", _39ok,
+    (_r39.stdout.strip().splitlines() or ["（无输出）"])[-1] + (" | 提案在案" if _39ok else " | 无提案"))
+
+# R-40：梯度催收主动化（T+1 未清 → PLAN draft_dunning 落盘；活动当天未清 → 沉默留痕对照）
+_j40 = pathlib.Path("/tmp/qx-wp5-dunning")
+_sp3.run(["rm", "-rf", str(_j40)], check=False)
+_j40.mkdir(parents=True, exist_ok=True)
+(_j40 / "cases.json").write_text(_json2.dumps({"seq": 2, "cases": [
+    {"id": 1, "text": "测试", "activity": "骑车", "place": "", "status": "Completed",
+     "people": "阿明,小红", "bill_total": "300", "receipt_activity": "", "receipt_place": "",
+     "receipt_text": "", "receipt_done": "", "slot_day": _yst_wd, "slot_part": "下午",
+     "conflict": "no", "slot_init_asked": "", "bill_cleared": "no",
+     "target_date": (_today - _td(days=1)).isoformat()},
+    {"id": 2, "text": "测试", "activity": "唱歌", "place": "", "status": "Confirmed",
+     "people": "阿明", "bill_total": "100", "receipt_activity": "", "receipt_place": "",
+     "receipt_text": "", "receipt_done": "", "slot_day": _WD[_today.weekday()], "slot_part": "晚上",
+     "conflict": "no", "slot_init_asked": "", "bill_cleared": "no",
+     "target_date": _today.isoformat()}]}, ensure_ascii=False))
+(_j40 / "payments.json").write_text(_json2.dumps({"payments": ["1"], "persons": ["阿明"], "amounts": ["100"]}))
+_r40 = _sp3.run(["timeout", "60", sys.executable, "tools/qx-proactive-butler.py", "--jail", str(_j40), "--once"],
+                capture_output=True, text=True, cwd=str(_ROOT))
+_pp40 = _j40 / "pending_plan.json"
+_sp40 = _j40 / "suppressed.json"
+_40a = False
+_40b = False
+if _pp40.exists():
+    _pv = _json2.loads(_pp40.read_text())
+    _40a = _pv.get("trigger") == "proactive_dunning" and 'PLAN{"op":"draft_dunning","id":"1"}' in (_pv.get("reply") or "") \
+        and "200.00" in (_pv.get("reply") or "")
+if _sp40.exists():
+    _40b = "dunning_not_due" in _sp40.read_text()
+rec(40, "梯度催收主动回合（T+1 落盘）+ 未到期沉默留痕对照", _40a and _40b,
+    f"提案={_40a} 留痕对照={_40b}")
+
 # ---- R-30/R-31：WP0 防回退断言（任务书验收口径；静态扫描类，附诚实边界） ----
 import re as _re
 import pathlib as _pl
@@ -1417,7 +1478,7 @@ rec(31, "AI 迟到回调代际守卫在案（静态；动态见 s4 证据）", _
 
 # ---- 收尾 ----
 # ---- 收尾 ----
-print(f"\n=== {len(RESULTS)} 项回归汇总（v14：29 步既有 + WP0 2 步 + WP1 3 步 + WP2 2 步 + WP3/4 各 1 步） ===", flush=True)
+print(f"\n=== {len(RESULTS)} 项回归汇总（v15：29 步既有 + WP0 2 步 + WP1 3 步 + WP2 2 步 + WP3/4 各 1 步 + WP5 2 步） ===", flush=True)
 passed = sum(1 for _, _, ok, _ in RESULTS if ok)
 print(f"PASS {passed}/{len(RESULTS)}", flush=True)
 for i, (rid, name, ok, ev) in enumerate(RESULTS, 1):

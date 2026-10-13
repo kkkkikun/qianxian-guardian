@@ -156,6 +156,8 @@ def is_outdoor(case):
 # ---------------- 模型通路 ----------------
 
 def kimi_direct_turn(prompt: str, key: str, timeout=90):
+    if not key:
+        raise RuntimeError("无 Kimi key（.secrets/kimi-api-key 缺失）——天气主动回合不可用")
     """direct 模式：Kimi Coding Plan chat completions（OpenAI 兼容）。"""
     import requests
     r = requests.post(
@@ -274,6 +276,7 @@ def main():
     ap.add_argument("--mode", choices=["direct", "kernel"], default="direct")
     ap.add_argument("--interval", type=int, default=300)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--once", action="store_true", help="跑一轮即退出（回归/e2e 用）")
     ap.add_argument("--proxy", default="")
     ap.add_argument("--kimi-key-file", default="/home/kikun/MyProject/Agentic-octos/.secrets/kimi-api-key")
     ap.add_argument("--octos-bin", default="/home/kikun/MyProject/Agentic-octos/repos/octos/target/release/octos")
@@ -281,7 +284,9 @@ def main():
     args = ap.parse_args()
 
     jail = pathlib.Path(args.jail)
-    key = pathlib.Path(args.kimi_key_file).read_text().strip()
+    # WP5：key 惰性读——催收/催拍板路径纯模板不需要模型；只有天气回合用得到时才读
+    _kf = pathlib.Path(args.kimi_key_file)
+    key = _kf.read_text().strip() if _kf.exists() else ""
     kernel = None
     if args.mode == "kernel":
         # 内核 profile 指到 moonshot-coding（key 只进 env_vars，无 ambient 陷阱）
@@ -318,9 +323,84 @@ def main():
             cid = case.get("id")
             act = case.get("activity") or "聚会"
             day = resolve_target_date(case)
-            if day is None or case.get("status") != "Confirmed":
+            if day is None:
                 continue
             days_to = (day - today).days
+            status = "" + (case.get("status") or "")
+
+            # === WP5-B：临期催拍板（T-24h 仍 Proposing；AGENT.md 约定从「被问才说」升级为「到点主动说」）===
+            if status == "Proposing" and days_to == 1:
+                nmark = f"{cid}:{day.isoformat()}:nudge"
+                if nmark not in state:
+                    if (jail / PENDING_PLAN_FILE).exists():
+                        pass  # 提案卡单槽契约：有未消费提案时不覆盖，下轮再写
+                    else:
+                        slot0 = f"{case.get('slot_day', '')}-{case.get('slot_part', '')}"
+                        reply = (f"⏰ 临期催拍板：#{cid}「{act}」（{slot0} · {case.get('place') or '地点未抽取到'}）"
+                                 "明天开始，还是「待拍板」状态。信息齐了的话请确认落地——"
+                                 "拍板即确认，回执/提醒/日历一条龙就位。\n"
+                                 f'PLAN{{"op":"confirm","id":"{cid}"}}')
+                        pending = {"id": cid, "trigger": "proactive_nudge",
+                                   "reply": reply, "at": beijing_now().isoformat()}
+                        if args.dry_run:
+                            print(f"[proactive][dry] #{cid} 催拍板提案", flush=True)
+                        else:
+                            (jail / PENDING_PLAN_FILE).write_text(
+                                json.dumps(pending, ensure_ascii=False, indent=1))
+                            print(f"[proactive] #{cid} 临期催拍板提案已写", flush=True)
+                        state[nmark] = beijing_now().isoformat()
+                        save_state(jail, state)
+                continue
+
+            # === WP5-A：梯度催收主动化（活动日后 T+1/T+3/T+7，有账未清才醒）===
+            if status in ("Confirmed", "Completed") and days_to <= 0 \
+                    and ("" + (case.get("bill_total") or "")) != "" \
+                    and ("" + (case.get("bill_cleared") or "")) != "yes":
+                days_after = -days_to
+                tier = {1: "T+1", 3: "T+3", 7: "T+7"}.get(days_after)
+                dmark = f"{cid}:{day.isoformat()}:dunning"
+                if tier and (dmark + tier) not in state:
+                    if (jail / PENDING_PLAN_FILE).exists():
+                        pass  # 单槽契约同上
+                    else:
+                        # 金额全由代码算（payments.json 求和），模型零参与
+                        total_f = float((case.get("bill_total") or "0") or 0)
+                        paid_f = 0.0
+                        pf = jail / "payments.json"
+                        if pf.exists():
+                            try:
+                                pd = json.loads(pf.read_text())
+                                for pc, pa in zip(pd.get("payments", []), pd.get("amounts", [])):
+                                    if str(pc) == str(cid):
+                                        paid_f += float(pa)
+                            except Exception:
+                                pass
+                        out_f = total_f - paid_f
+                        reply = (f"💰 催收梯度 {tier}：#{cid}「{act}」结束已 {days_after} 天，"
+                                 f"账目还差 ¥{out_f:.2f} 未收齐（总额 ¥{total_f:.2f}）。"
+                                 "我起草催收文案你过目——拍板后生成草稿，可群可邮件（人审）。\n"
+                                 f'PLAN{{"op":"draft_dunning","id":"{cid}"}}')
+                        pending = {"id": cid, "trigger": "proactive_dunning", "tier": tier,
+                                   "reply": reply, "at": beijing_now().isoformat()}
+                        if args.dry_run:
+                            print(f"[proactive][dry] #{cid} 催收提案（{tier}，差 ¥{out_f:.2f}）", flush=True)
+                        else:
+                            (jail / PENDING_PLAN_FILE).write_text(
+                                json.dumps(pending, ensure_ascii=False, indent=1))
+                            print(f"[proactive] #{cid} 催收提案（{tier}）已写", flush=True)
+                        state[dmark + tier] = beijing_now().isoformat()
+                        save_state(jail, state)
+                elif tier is None and days_after >= 0 and days_after < 8:
+                    # 沉默留痕对照：未清但不在梯度窗口——记录一次「为什么不醒」（可回看可审计）
+                    smark = dmark + f":note-{days_after}"
+                    if smark not in state:
+                        record_suppressed(jail, "dunning_not_due",
+                                          f"#{cid} {act}：账未清但活动后第 {days_after} 天，不在 T+1/T+3/T+7 梯度，不发起催收回合")
+                        state[smark] = beijing_now().isoformat()
+                        save_state(jail, state)
+
+            if status != "Confirmed":
+                continue
             if days_to != 1:  # T-24h 到点
                 continue
             slot = f"{case.get('slot_day', '')}-{case.get('slot_part', '')}"
@@ -399,6 +479,8 @@ def main():
             state[mark] = beijing_now().isoformat()
             save_state(jail, state)
 
+        if args.once:
+            return
         time.sleep(args.interval)
 
 
