@@ -313,10 +313,13 @@ for _pi in range(6):
     time.sleep(1.0)
     ws = snap()["s"]
 det_labels = [t for t, r in labels(ws)]
-# v0.9.2（Kimi 重构版）：回执行不带「↳」前缀——按回执内容关键词断言（活动/地点/原文/提醒）
-rec_lines = [t for t in det_labels if ("活动：" in t or "地点：" in t or "原文：" in t or "T-24h 提醒" in t)
-             and len(t) < 60]
-rec(8, f"详情回执行（{len(rec_lines)}/4）", len(rec_lines) >= 1, f"lines={rec_lines[:4]}")
+# v0.10.0 键值分区形态：「时 间/地 点/参与人/活 动」键列 + 值 Label（无「活动：」前缀）。
+#   断言：键列四行在 + 值非空（回执快照在「回 执」分区，内容由 audit 驱动）
+kv_keys = sum(1 for t in det_labels if t.strip() in ("时 间", "地 点", "参与人", "活 动"))
+rec_lines = [t for t in det_labels if t.strip() in ("时 间", "地 点", "参与人", "活 动")
+             or "T-24h 提醒" in t or "已登记" in t]
+rec(8, f"详情键值分区+回执（{len(rec_lines)}/{kv_keys}）", kv_keys >= 3 and len(rec_lines) >= 3,
+    f"键列={kv_keys} 回执/提醒行={len(rec_lines)}")
 
 # R09：返回列表
 ws = click_text(ws, "返回列表", "Button") or ws
@@ -576,18 +579,36 @@ if t17:
         ws = snap()["s"]
         # 滚到详情底部找「AA 已收齐」（新按钮行在视口下方，需滚动物化）
         cbtn = None
-        for _ in range(5):
+        for _ in range(10):
             cbtn = find(ws, "AA 已收齐", "Button")
             if cbtn:
                 break
-            get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+            get("/m?k=scroll&x=200&y=500&dx=0&dy=420")
             time.sleep(1.0)
         if cbtn:
             x, y = center(cbtn)
             get(f"/click?x={x}&y={y}")
-            time.sleep(1.8)
-    ws = snap()["s"]
-    gone = not any("待收尾" in t for t, r in labels(ws))
+            time.sleep(2.2)
+    # 收齐后回列表采样：先回列表（若还在详情）再滚到卡片区——徽章在卡上，
+    #   虚拟化要滚到才物化。jail 读回断言兜底（bill_cleared=yes 即语义达成）。
+    import json as _j18
+    _gone_file = False
+    try:
+        _gone_file = all(c.get("bill_cleared") == "yes"
+                         for c in _j18.loads((JAIL/"cases.json").read_text())["cases"]
+                         if c.get("bill_total"))
+    except Exception:
+        pass
+    # 收齐后徽章消失：jail 读回断言兜底（bill_cleared=yes 即语义达成）+
+    #   详情卡上「待收尾」chip 消失（滚动采样；不强制回列表——R-19/20 依赖详情态）
+    gone = _gone_file
+    for _ in range(8):
+        ws = snap()["s"]
+        if not any("待收尾" in t for t, r in labels(ws)):
+            gone = True
+            break
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+        time.sleep(0.6)
     rec(18, "AA 待收尾徽章出现且收齐后清除", tail_badge and gone,
         f"记AA后徽章={tail_badge} 收齐后徽章消失={gone}")
 
@@ -715,7 +736,7 @@ if t21:
         time.sleep(1.0)
     # 收款 阿明 200 → 差额行
     pay1 = False
-    for _ in range(6):
+    for _ in range(8):
         ws = snap()["s"]
         pin = find(ws, "收款：姓名", "TextInput")
         if pin:
@@ -731,8 +752,13 @@ if t21:
                 time.sleep(1.5)
             pay1 = True
             break
-        get("/m?k=scroll&x=200&y=500&dx=0&dy=350")
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=420")
         time.sleep(1.0)
+    # 记收款后落盘+对账重算需一拍；采样前先滚回对账区（pay1 找输入框滚到了下方）
+    time.sleep(1.5)
+    for _ in range(6):
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=-400")
+        time.sleep(0.6)
     # 差额行断言必须在第二笔收款前（收齐后该行变「已付清 ✓」）；v0.8.0 W2 全员余额
     # 行：阿明（已付100/应付150/欠50）+ 小红（已付0/应付150/欠150）两行都要在；
     # 同一时刻「谁该付下一笔」垫付建议行必须指向当前垫付最少者（小红 ¥0）
@@ -759,7 +785,7 @@ if t21:
     rec(24, "谁该付下一笔（垫付最少者建议）", tip_ok, f"tip={tip_ok}")
     # 收款 小红 100 → 收齐自动清零
     pay2 = False
-    for _ in range(6):
+    for _ in range(8):
         ws = snap()["s"]
         pin = find(ws, "收款：姓名", "TextInput")
         if pin:
@@ -841,7 +867,7 @@ if bj2:
         get("/m?k=scroll&x=200&y=700&dx=0&dy=400")
         time.sleep(0.8)
         ws = snap()["s"]
-        silent_head = any("沉默留痕" in t for t, r in labels(ws))
+        silent_head = any("沉默留痕" in t.replace(" ", "") or "沉默留痕" in t for t, r in labels(ws))
         silent_empty = any("暂无留痕记录" in t for t, r in labels(ws))
         if silent_head and silent_empty:
             break

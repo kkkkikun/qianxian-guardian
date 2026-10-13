@@ -297,18 +297,19 @@ fn rebuild_lines(){
     // 第二层：搜索词叠加（在标签候选内命中 activity / place / 原文子串）
     let n = 0
     if q == "" {
-        // 搜索词为空：直接全部保留（标签结果 = 实际渲染结果），保持创建序稳定
+        // 搜索词为空：最新在前（HTML .frame-grid 卡片降序——#3 最新在上）；
+        //   id 大=新建，倒序遍历 view_idxs。
         for i in view_idxs.len() {
-            filtered_idxs.push(view_idxs[i])
+            filtered_idxs.push(view_idxs[view_idxs.len() - 1 - i])
         }
         n = view_idxs.len()
     } else {
+        // 搜索分支同样最新在前（与空搜索同源：倒序）
         for i in view_idxs.len() {
-            let j = view_idxs[i]
+            let j = view_idxs[view_idxs.len() - 1 - i]
             let act = "" + cases[j]["activity"]
             let pl = "" + cases[j]["place"]
             let txt = "" + cases[j]["text"]
-            // search(p) >= 0：命中即返回 >=0，没命中返回 -1（照 #12 契约明示，不用 regex）
             let hit = (act.search(q) >= 0) || (pl.search(q) >= 0) || (txt.search(q) >= 0)
             if hit {
                 filtered_idxs.push(j)
@@ -547,10 +548,14 @@ fn rebuild_lines(){
     rebuild_selected_ledger()
     // v0.10.0 WP5：结案报告卡（完成+账清=已收尾）
     rebuild_fin_report()
-    // v0.10.0：根区守护灯命令式更新（根组件属性不重算，照 hint 范式 set_text）——
-    //   chips 文本拼一行（分色在根区 Label 不可行——chips 是容器不是文本；
-    //   用文本形态「守护中 · 共 N 条 · 待拍板 · ⚡冲突 · 待收尾 / 无异常」）。
-    // 守护灯在 case_list 顶部 on_render（读 guard_chip_text/guard_chip_kind 扁平数组）
+    // v0.10.0：根区守护灯命令式更新（照 hint 范式 set_text）
+    let gc = ""
+    for gi in guard_chip_text.len() {
+        if gc != "" { gc = gc + "  " }
+        gc = gc + guard_chip_text[gi]
+    }
+    ui.guard_title_label.set_text(guard_title)
+    ui.guard_chips_label.set_text(gc)
 }
 
 // #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
@@ -701,6 +706,13 @@ fn load(){
     // #46 A切片：根组件 ai_cap_label 首次定型为静态 placeholder，
     //   load() 末尾用 probe_ai_cap() 命令式同步真实 host 探测文案（照 #44 范式）。
     ui.ai_cap_label.set_text(probe_ai_cap())
+    let gc0 = ""
+    for gi2 in guard_chip_text.len() {
+        if gc0 != "" { gc0 = gc0 + "  " }
+        gc0 = gc0 + guard_chip_text[gi2]
+    }
+    ui.guard_title_label.set_text(guard_title)
+    ui.guard_chips_label.set_text(gc0)
     rebuild_lines()
     render_views()
     // v0.10.0：载入完成不写 hint（静默——守护灯卡已显示「共 N 条」，无需重复）
@@ -3659,6 +3671,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
             draw_text +: {color: accent color_hover: accent color_down: accent}}
     }
+    // v0.10.0：守护灯卡在根区、输入行上方（HTML .guard-bar 位置）。
+    //   根组件属性不随状态重算（#8）——标题/chips 用命令式 Label（rebuild_lines 末尾
+    //   set_text，照 ui.hint 范式）。chips 分色在根区容器不可行（不重算），用文本行。
+    Card{padding: Inset{left: 12 right: 12 top: 8 bottom: 8} spacing: 3
+        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+            Svg{width: 15 height: 15 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #x2f7d4f}}
+            guard_title_label := Label{width: Fit text: "守护中" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12.5}}
+            guard_chips_label := Label{width: Fill text: "" draw_text.color: #x6e675e draw_text.text_style.font_size: 11.5 max_lines: 1}
+        }
+    }
     // === #46 A切片：AI capability 可见性标签（次级色小字，width Fill）===
     //   根组件首次求值定型 → 静态 placeholder；load() 末尾用 probe_ai_cap() 命令式同步
     //   真实文案（照 #44 ui.style_btn.set_text 同范式）。
@@ -3673,27 +3695,8 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // #48b：详情已拆到 detail_list（本视图只服务列表）；占位照 #5 范式
             View{width: Fill height: 1}
         } else {
-        // === v0.9.0 WP2：守护灯常驻条（HTML 规范 01 屏：卡片 + 标题行 + 分色 chips）===
-        Card{padding: Inset{left: 14 right: 14 top: 11 bottom: 11} spacing: 6
-            Label{width: Fill text: guard_title draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 13}}
-            View{width: Fill height: Fit flow: Right spacing: 6
-                for gi in guard_chip_text.len() {
-                    if guard_chip_kind[gi] == "amber" {
-                        RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
-                            show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
-                            Label{text: guard_chip_text[gi] draw_text.color: #xa87516 draw_text.text_style.font_size: 12}}
-                    } else if guard_chip_kind[gi] == "jade" {
-                        RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
-                            show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
-                            Label{text: guard_chip_text[gi] draw_text.color: #x2f7d4f draw_text.text_style.font_size: 12}}
-                    } else {
-                        RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
-                            show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 12.0
-                            Label{text: guard_chip_text[gi] draw_text.color: #x6e675e draw_text.text_style.font_size: 12}}
-                    }
-                }
-            }
-        }
+        // v0.10.0：守护灯卡已挪根区（输入行上方，HTML .guard-bar 位置）——此处 1px 占位
+        View{width: Fill height: 1}
         // === 决赛 S3：待拍板提案横幅（管家出了提案、人还没拍板时出现在列表顶部）——
         //   原则不变：模型文本不参与动作接线，这里只是「去拍板」的指路条（静态 copy）；
         //   零渲染零占位（plan_pending=="no" 时留 1px，#5 空分支硬约束范式）。
@@ -4487,10 +4490,19 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
     //   visible 初始隐藏由 load() 命令式完成（#48b 同款：声明 visible:false 会被 re-apply）。
     chat_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
         if ui_mode == "chat" {
-            // UI 改版（card-ux：返回行为明确）：出口置顶——长对话滚到底也能一眼看到
-            ButtonFlat{text: "← 回到守护列表" height: 40 on_click: || back_from_chat()
-                draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                draw_text +: {color: accent color_hover: accent color_down: accent}}
+            // v0.10.0：管家页标题区（HTML 03 屏 .app-head：logo+「交给管家」+副题）；
+            //   返回键降为次级 ghost 小字（HTML 里返回在标题区语义弱——出口仍明确但不抢戏）
+            View{width: Fill height: Fit flow: Right spacing: 9 align: Align{y: 0.5}
+                Svg{width: 26 height: 26 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
+                View{width: Fill height: Fit flow: Down spacing: 1
+                    Label{text: "交给管家" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 19}}
+                    Label{width: Fill text: "agent 提案 · 人拍板 · 白名单执行" draw_text.color: secondary draw_text.text_style.font_size: 11.5}
+                }
+                // 文案保留「回到守护列表」（回归 R-16/R-26/27/28/29 依赖此文案定位）
+                ButtonFlat{text: "回到守护列表" height: 32 padding: Inset{left: 10 right: 10} on_click: || back_from_chat()
+                    draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
+                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 12}}}
+            }
             for ci in chat_text.len() {
                 let cr = "" + chat_role[ci]
                 let ct = "" + chat_text[ci]
@@ -4609,11 +4621,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                 View{width: Fill height: 1}
             }
             // === v0.8.0 W5：沉默留痕区（守护进程「考虑过但没说」的决策，回看可审计）===
-            //   空态占位行由 load_suppressed 预填（闭包只做无条件 for——防闭包内
-            //   if/else+嵌套 for 组合的 pop_stack 渲染崩）
-            SectionLabel{text: "🤫 沉默留痕 · 考虑过但没说的事（回看可审计）"}
-            for si2 in suppressed_lines.len() {
-                MetaLine{width: Fill text: suppressed_lines[si2]}
+            //   v0.10.0 对齐 HTML：分区标签（字距语义空格）+ 卡内留痕行（楷体圆点+文本）。
+            SectionLabel{text: "沉 默 留 痕 · 管家考虑过但没说的事"}
+            Card{padding: Inset{left: 14 right: 14 top: 4 bottom: 8} spacing: 0
+                for si2 in suppressed_lines.len() {
+                    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                        padding: Inset{top: 7 bottom: 7}
+                        RoundedView{width: 6 height: 6 show_bg: true draw_bg.color: #xc9bfb2 draw_bg.border_radius: 3.0}
+                        Label{width: Fill text: suppressed_lines[si2] draw_text.color: #x6e675e draw_text.text_style.font_size: 12.5}
+                    }
+                }
             }
             View{width: Fill height: 1}
         } else {
