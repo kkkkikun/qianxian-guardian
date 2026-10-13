@@ -26,7 +26,7 @@
   },
   "id": "qianxian",
   "integrity": {
-    "bundle_blake3": "1b329b0ad7dc05b2744b2803a80870fafe50be41c37000806de81fedb341e356"
+    "bundle_blake3": "49149726863d72d2f209076c09f62e39de3afb99c4f63eb6abc4e034cdcaa20e"
   },
   "name": "牵线",
   "network": {
@@ -36,5 +36,5 @@
   "storage": {
     "max_bytes": null
   },
-  "version": "0.9.2"
+  "version": "0.10.0"
 }

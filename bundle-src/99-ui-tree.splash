@@ -1094,6 +1094,11 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
     action_row := View{width: Fill height: Fit flow: Right spacing: 8 margin: Inset{top: 10}
         // === v0.9.0 WP2：动作坞降为次级行——主行动（确认/标记完成）按状态进详情闭包
         //   （朱砂通栏）；此处只留次级与危险操作，与 HTML 规范 02 屏 dock 一致。 ===
+        // v0.10.2：补「改时间」——冲突横幅承诺「改个时段即解开」，此前详情页只有
+        //   重新收敛（回 Proposing，不动槽位），真正改时段的入口埋在说明卡里（真缺口）。
+        ButtonFlat{text: "改时间" height: 44 padding: Inset{left: 14 right: 14} on_click: || cycle_slot("" + selected_id)
+            draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
+            draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 9}}}
         ButtonFlat{text: "重新收敛" height: 44 padding: Inset{left: 14 right: 14} on_click: || reschedule_case()
             draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
             draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f}}
