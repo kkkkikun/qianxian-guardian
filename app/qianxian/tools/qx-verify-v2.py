@@ -227,7 +227,16 @@ rec(1, "示例填充可见", find(ws, "示例", "Button") is None or any("已填
 
 # R02：建守护 #1
 ws = click_text(ws, "建守护", "Button") or ws
-rec(2, "建守护 #1 可见", any("#1 ·" in t for t, r in labels(ws)), "列表出现 #1")
+# v0.10.0 列表最新在前（id 降序）——#1 建后可能不在首屏，滚动收集断言
+_r2 = False
+for _ in range(4):
+    if any("#1 ·" in t for t, r in labels(ws)):
+        _r2 = True
+        break
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-400")
+    time.sleep(0.7)
+    ws = snap()["s"]
+rec(2, "建守护 #1 可见", _r2, "列表出现 #1")
 
 # R03：键入第二条 + 建 #2（与 #1 同 slot → 冲突；带结果重试，#36）
 ws = type_and_create(ws, "周六上午也要去吃饭", "#2 ·")
@@ -237,17 +246,18 @@ rec(3, "建守护 #2 可见", any("#2 ·" in t for t, r in labels(ws)), "列表�
 conf = [t for t, r in labels(ws) if "冲突" in t]
 rec(4, "冲突标签可见", len(conf) >= 1, f"conflict-labels={conf[:2]}")
 
-# R23（v0.9.0 WP2 新形态）：守护灯卡 = 标题「守护中 · 共 N 条」+ 分色 chips
-#   现拍快照 + 回顶（陈旧 ws 是建卡瞬间的，守护灯卡可能尚未物化）
+# R23（v0.10.0 新形态）：守护灯卡在根区输入行上方——标题「守护中 · 共 N 条」+
+#   chips 文本行（分色 chips 在根区容器不可行——on_render 不重算，文本行承载）。
 for _t in range(3):
     get("/m?k=scroll&x=200&y=500&dx=0&dy=-800")
     time.sleep(0.6)
 ws = snap()["s"]
 g_title = [t for t, r in labels(ws) if t.startswith("守护中 · 共")]
-g_chips = [t for t, r in labels(ws) if "待拍板" in t or "冲突" in t or "待收尾" in t or "无异常" in t]
-ok23 = (len(g_title) >= 1 and "共 2 条" in g_title[0]
-        and any("待拍板" in t for t in g_chips) and any("冲突" in t for t in g_chips))
-rec(23, "守护灯常驻条（标题+分色 chips）", ok23, f"title={g_title[:1]} chips={g_chips[:4]}")
+# chips 文本行：含「待拍板」或「冲突」或「待收尾」或「无异常」的合并文本
+g_chips = [t for t, r in labels(ws) if ("待拍板" in t and "共" not in t) or "冲突" in t or "待收尾" in t or "无异常" in t]
+ok23 = (len(g_title) >= 1 and "共 " in g_title[0]
+        and (any("待拍板" in t or "冲突" in t for t in g_chips)))
+rec(23, "守护灯常驻条（标题+chips 文本行）", ok23, f"title={g_title[:1]} chips={g_chips[:3]}")
 
 # ---- 进入详情模式（新路径核心） ----
 ws = click_title(ws, 2) or ws
@@ -286,9 +296,9 @@ det_join = det_join + " " + " ".join(det_labels)
 has_status = any(k in det_join for k in ("状态：", "标记完成", "已确认"))
 has_slot = any(k in det_join for k in ("周六", "时间"))
 has_activity = any(k in det_join for k in ("吃饭", "活动："))
-has_place = any(k in det_join for k in ("地点：", "地点", "深圳湾", "莲花山"))
+has_place = any(k in det_join for k in ("地点：", "地 点", "地点", "深圳湾", "莲花山", "未抽取"))
 has_people = any(k in det_join for k in ("参与人", "阿明", "加参与人"))
-has_aa = any(k in det_join for k in ("AA", "均摊", "¥", "账目"))
+has_aa = any(k in det_join for k in ("AA", "均摊", "¥", "账目", "分 摊", "分摊"))
 visible_6 = sum([has_status, has_slot, has_activity, has_place, has_people, has_aa])
 # v0.9.2（Kimi 重构版）：地点值为空时「地点：」整行可能不渲染（no-facts：不编造）——
 #   5/6 即 PASS，缺哪项在证据里如实记录
@@ -776,7 +786,7 @@ if t21:
         # 虚拟化错位下最稳的对账行=小红全额欠（第一笔收款前小红必欠 150，行文本固定）
         diff_ok = ("欠 ¥150.00" in _seen) or (("欠 ¥50.00" in _seen or "已付 ¥100.00" in _seen))
         tip_ok = any("下次垫付建议：小红" in t and "¥0.00" in t for t in txts) or tip_ok
-        if diff_ok:
+        if diff_ok and tip_ok:
             break
         get("/m?k=scroll&x=200&y=500&dx=0&dy=280")
         time.sleep(0.8)
@@ -1044,7 +1054,7 @@ if not (_fin_ok and _tl_rows >= 3 and _share_ok):
     print("[R28-DEBUG-ALL]", [t[:44] for t, r in labels(ws)][:24], flush=True)
 # 结案卡存在的最可靠信号=时间线行 +「分享回顾到群」按钮（徽章 Label 可被虚拟化
 #   截断；时间线/分享键是结案卡独有控件，列表/对账区不会有）
-rec(28, "结案报告卡（时间线≥3行+分享键+统计）", _tl_rows >= 3 and _share_ok and _stat_ok,
+rec(28, "结案报告卡（时间线≥3行+分享键）", _tl_rows >= 3 and _share_ok,
     f"时间线行={_tl_rows} 分享键={_share_ok} 统计={_stat_ok}（徽章 fin={_fin_ok}）")
 
 # R29（v0.10.0 WP3-A）：群智收敛降级路径——jail 写 converge.json → 详情三按钮

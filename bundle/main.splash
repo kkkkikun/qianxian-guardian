@@ -265,6 +265,7 @@ let guard_light = ""
 let guard_chip_text = []
 let guard_chip_kind = []
 let guard_title = "守护中"
+let guard_chips_text = ""
 let case_stage = []          // 生命周期阶段：-1=已取消（不画线）0=待拍板 1=已确认 2=已完成未收尾 3=已收尾
 let case_bill_cleared = []   // 每条守护的 bill_cleared（chips「待收尾」与红线收尾段用）
 let case_conflict_with = []  // v0.9.0 WP2：冲突横幅紧凑文案「与 #N·活动」（闭包只读）
@@ -549,13 +550,13 @@ fn rebuild_lines(){
     // v0.10.0 WP5：结案报告卡（完成+账清=已收尾）
     rebuild_fin_report()
     // v0.10.0：根区守护灯命令式更新（照 hint 范式 set_text）
-    let gc = ""
+    // v0.10.0：守护灯文本写全局（home_chrome 的 on_render 闭包每次 render 重建时
+    //   读全局——无需命令式 set_text，控件不在树也不报错）
+    guard_chips_text = ""
     for gi in guard_chip_text.len() {
-        if gc != "" { gc = gc + "  " }
-        gc = gc + guard_chip_text[gi]
+        if guard_chips_text != "" { guard_chips_text = guard_chips_text + "  " }
+        guard_chips_text = guard_chips_text + guard_chip_text[gi]
     }
-    ui.guard_title_label.set_text(guard_title)
-    ui.guard_chips_label.set_text(gc)
 }
 
 // #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
@@ -706,13 +707,6 @@ fn load(){
     // #46 A切片：根组件 ai_cap_label 首次定型为静态 placeholder，
     //   load() 末尾用 probe_ai_cap() 命令式同步真实 host 探测文案（照 #44 范式）。
     ui.ai_cap_label.set_text(probe_ai_cap())
-    let gc0 = ""
-    for gi2 in guard_chip_text.len() {
-        if gc0 != "" { gc0 = gc0 + "  " }
-        gc0 = gc0 + guard_chip_text[gi2]
-    }
-    ui.guard_title_label.set_text(guard_title)
-    ui.guard_chips_label.set_text(gc0)
     rebuild_lines()
     render_views()
     // v0.10.0：载入完成不写 hint（静默——守护灯卡已显示「共 N 条」，无需重复）
@@ -1152,11 +1146,15 @@ fn render_views(){
     // #48b（S3 扩为三视图）：按 ui_mode 只刷当前可见视图
     //   （多个都刷会在单次 eval 内成倍 on_render 指令，实测超 instruction limit；
     //    且此处若递归调用自身=无限循环，黑板 #48 引以为戒）
+    // v0.10.0：home_chrome 也是 on_render 容器——需同步 render（初始 list 态+模式切换）。
     if ui_mode == "detail" {
+        ui.home_chrome.render()
         ui.detail_list.render()
     } else if ui_mode == "chat" {
+        ui.home_chrome.render()
         ui.chat_list.render()
     } else {
+        ui.home_chrome.render()
         ui.case_list.render()
     }
 }
@@ -1180,6 +1178,8 @@ fn on_tap_card(id){
     ui.case_list.set_visible(false)
     ui.chat_list.set_visible(false)
     ui.detail_list.set_visible(true)
+    // v0.10.0：详情态主页 chrome 也隐藏（详情有自己的返回键+标题）
+    ui.home_chrome.set_visible(false)
     // UI 改版（card-ux：操作就近分组）：状态三键只在详情模式显示——
     //   列表/聊天模式下「确认这条守护」没有目标语境，隐藏而非常驻
     ui.action_row.set_visible(true)
@@ -1194,6 +1194,8 @@ fn back_to_list(){
     ui.chat_list.set_visible(false)
     ui.case_list.set_visible(true)
     ui.action_row.set_visible(false)
+    // 回列表：主页 chrome 恢复
+    ui.home_chrome.set_visible(true)
     render_views()
     ui.hint.set_text("已返回列表；点卡片看单条详情")
 }
@@ -1281,6 +1283,8 @@ fn enter_chat(){
     ui.detail_list.set_visible(false)
     ui.chat_list.set_visible(true)
     ui.action_row.set_visible(false)
+    // v0.10.0：主页 chrome（标题/输入行/守护灯卡/AI 行/hint）聊天态隐藏——管家页有自己的标题区
+    ui.home_chrome.set_visible(false)
     render_views()
 }
 fn back_from_chat(){
@@ -1288,6 +1292,8 @@ fn back_from_chat(){
     ui.chat_list.set_visible(false)
     ui.case_list.set_visible(true)
     ui.action_row.set_visible(false)
+    // 回列表：主页 chrome 恢复
+    ui.home_chrome.set_visible(true)
     render_views()
     ui.hint.set_text("已回到守护列表；点卡片看单条详情")
 }
@@ -3645,50 +3651,55 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
     //   标题 21（HTML 规范 .app-head h2）：首屏纵向空间让给守护列表这一核心内容
     // v0.10.0：红线结品牌图标（附录 B 寓意：一根朱砂线绕成结，两端各牵一颗圆点——
     //   把人和人牵到一起）。Svg 控件引 bundle 资产 icon.svg（pdftools 同款 draw_svg 范式）。
-    // HTML .app-head：图标 + 标题/副题上下两行（紧凑；副题单行不换行）
-    View{width: Fill height: Fit flow: Right spacing: 9 align: Align{y: 0.5}
-        Svg{width: 28 height: 28 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
-        View{width: Fill height: Fit flow: Down spacing: 1
-            Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 19}}
-            Label{width: Fill text: "把群消息丢给管家，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 11.5 max_lines: 1}
+    // v0.10.0：主页 chrome（标题区/输入行/守护灯卡/AI 行/hint）——聊天态整块隐藏
+    //   （管家页有自己的标题区，主页这五块在聊天态是冗余）。
+    // v0.10.0：主页 chrome 容器——on_render 条件渲染（照 case_list/detail_list 同款：
+    //   命令式 set_visible 对复合 View 不可靠（#48b 同类坑），用 on_render 的
+    //   ui_mode 分支才真正随模式切换显隐）。聊天态渲染 1px 占位（空分支硬约束）。
+    // v0.10.0：主页展示块（标题区+守护灯卡）——on_render 条件渲染，聊天态整块隐藏
+    //   （管家页有自己的标题区）。这两个块都是纯展示（无命令式 ui.x 引用），
+    //   进 on_render 安全。输入行（msg_input）+AI 行+hint 有命令式引用，常驻根区。
+    home_chrome := View{width: Fill height: Fit flow: Down spacing: 10 on_render: || {
+        if ui_mode == "chat" {
+            View{width: Fill height: 1}
+        } else {
+            // HTML .app-head：图标 + 标题/副题上下两行（紧凑；副题单行不换行）
+            View{width: Fill height: Fit flow: Right spacing: 9 align: Align{y: 0.5}
+                Svg{width: 28 height: 28 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
+                View{width: Fill height: Fit flow: Down spacing: 1
+                    Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 19}}
+                    Label{width: Fill text: "把群消息丢给管家，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 11.5 max_lines: 1}
+                }
+            }
+            // 守护灯卡在输入行上方（HTML .guard-bar 位置）；文本读全局（on_render 重建时取最新）
+            Card{padding: Inset{left: 12 right: 12 top: 8 bottom: 8} spacing: 3
+                View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                    Svg{width: 15 height: 15 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #x2f7d4f}}
+                    Label{width: Fit text: guard_title draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12}}
+                    Label{width: Fill text: guard_chips_text draw_text.color: #x6e675e draw_text.text_style.font_size: 11 max_lines: 1}
+                }
+            }
         }
-    }
+    }}
+    // === 输入行（HTML .composer：卡面容器 + 透明 input；msg_input 命令式引用常驻） ===
     RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
         padding: Inset{left: 14 right: 6 top: 5 bottom: 5}
         show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
         draw_bg.shadow_color: #x2b272212 draw_bg.shadow_radius: 8.0 draw_bg.shadow_offset: vec2(0.0, 1.0)
-            // UI 改版：输入行只留两键——「交给管家」唯一主行动，「建守护」次级描边；
-            //   输入框融入卡面（HTML 规范 .composer：卡面容器 + 透明 input）。占位恢复 12 字单行。
-            msg_input := TextInput{width: Fill height: 40 empty_text: "粘贴群消息，如：周六骑车"
+        msg_input := TextInput{width: Fill height: 40 empty_text: "粘贴群消息，如：周六骑车"
             draw_bg +: {color: #fffdfa color_hover: #fffdfa color_focus: #fffdfa color_empty: #fffdfa border_radius: 10.0}
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: #xa89e91 color_empty_hover: #xa89e91}}
-        // === 决赛 S3：管家是主入口（agent 驱动全流程），朱砂主按钮 ===
         ButtonFlat{text: "交给管家" height: 40 padding: Inset{left: 14 right: 14} on_click: || butler_send()
             draw_bg +: {border_radius: 20.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-            draw_text +: {color: #ffffff color_hover: #ffffff color_down: #ffffff text_style: theme.font_bold{font_size: 13}}}
-        // 手动路径保留（无 AI 宿主时的完整降级；本地规则分诊），次级视觉：描边
+            draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 13}}}
         ButtonFlat{text: "建守护" height: 40 padding: Inset{left: 12 right: 12} on_click: || add_case()
             draw_bg +: {border_radius: 20.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
             draw_text +: {color: accent color_hover: accent color_down: accent}}
     }
-    // v0.10.0：守护灯卡在根区、输入行上方（HTML .guard-bar 位置）。
-    //   根组件属性不随状态重算（#8）——标题/chips 用命令式 Label（rebuild_lines 末尾
-    //   set_text，照 ui.hint 范式）。chips 分色在根区容器不可行（不重算），用文本行。
-    Card{padding: Inset{left: 12 right: 12 top: 8 bottom: 8} spacing: 3
-        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-            Svg{width: 15 height: 15 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #x2f7d4f}}
-            guard_title_label := Label{width: Fit text: "守护中" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12.5}}
-            guard_chips_label := Label{width: Fill text: "" draw_text.color: #x6e675e draw_text.text_style.font_size: 11.5 max_lines: 1}
-        }
-    }
-    // === #46 A切片：AI capability 可见性标签（次级色小字，width Fill）===
-    //   根组件首次求值定型 → 静态 placeholder；load() 末尾用 probe_ai_cap() 命令式同步
-    //   真实文案（照 #44 ui.style_btn.set_text 同范式）。
     ai_cap_label := Label{width: Fill text: "AI 服务：探测中…"
         draw_text.color: #xa89e91 draw_text.text_style.font_size: 11.5}
-    // v0.10.0：hint 默认空（介绍文字不占固定位——用户已看过使用说明；
-    //   仅操作反馈/错误时出现）。load() 末尾的「已载入 N 个」也不再写 hint（见 load()）。
     hint := Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
+
     case_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 10 on_render: || {
         // === #31f：详情模式分支（列表/详情互斥，同一 ScrollY 内无高度竞争）===
         if ui_mode == "detail" {
