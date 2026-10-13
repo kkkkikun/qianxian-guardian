@@ -85,6 +85,15 @@ git clone https://github.com/kkkkikun/qianxian-guardian.git
 应用本身不联网；伴生进程（提醒/主动复核/群投票归票）是宿主侧场外组件，定位与 guardian 相同。
 详见 [PRIVACY.md](PRIVACY.md) 与 [bundle/AGENT.md](bundle/AGENT.md)（agent 契约 v4）。
 
+### 实机宿主实拍
+
+官方 OctoSense 桌面 shell（源码构建）里作为系统应用运行（筛选/输入/建守护全可用）：
+
+<p align="center">
+  <img src="evidence/host-desktop-20261014.png" width="760" alt="牵线运行在官方 OctoSense 桌面 shell 中（2026-10-14 实拍）">
+  <br><sub>官方桌面 shell 实拍：牵线以系统应用身份运行，窗口内为 app 真实界面（2026-10-14）</sub>
+</p>
+
 ## 界面预览（v0.10.1）
 
 | 守护列表（守护灯卡 + 红线生命周期） | 详情（对账表 + 恒等注脚 + 垫付建议） | 冲突态（琥珀横幅 + 双卡） |
