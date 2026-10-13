@@ -885,6 +885,26 @@ else:
 #   放全套末尾：进聊天视图会切 ui_mode/清选中态，插在中间会打断 R17-R22 的剧本链。
 #   区块在聊天视图最底（提案卡之后）——ScrollYView 虚拟化，先滚到底再断言。
 ws = snap()["s"]
+# v0.10.2：详情态输入区已隐藏（HTML 02 复刻）——须先回列表再打字。
+#   隐藏控件在 /snap 里带零矩形（[0,0,0,0]）但仍在树——find 不过滤会点到 (0,0)。
+#   且 R-22 的滚动会把详情返回键送出视口（虚拟化零矩形）——先回顶再找。
+def _vis(ws_, sub, ty=None):
+    w = find(ws_, sub, ty)
+    if w and (w.get("r") or [0, 0, 0, 0])[2] > 0:
+        return w
+    return None
+for _r25 in range(4):
+    if _vis(ws, "交给管家", "Button") is not None:
+        break
+    bk0 = _vis(ws, "返回列表", "Button")
+    if bk0:
+        bx, by = center(bk0)
+        get(f"/click?x={bx}&y={by}")
+        time.sleep(1.4)
+    else:
+        get("/m?k=scroll&x=200&y=500&dx=0&dy=-2400")
+        time.sleep(0.9)
+    ws = snap()["s"]
 ws = type_text(ws, "在吗")
 bj2 = find(ws, "交给管家", "Button")
 if bj2:
@@ -904,7 +924,9 @@ if bj2:
     rec(25, "沉默留痕区（诚实空态）", silent_head and silent_empty,
         f"区块标题={silent_head} 空态文案={silent_empty}")
 else:
-    rec(25, "交给管家按钮可见", False, "列表模式未找到按钮")
+    _dbg_btns = [(w.get("t") or "") for w in ws if w.get("ty") == "Button"]
+    _dbg_labs = [t for t, r in labels(ws)][:8]
+    rec(25, "交给管家按钮可见", False, f"列表模式未找到按钮；btns={_dbg_btns} labs={_dbg_labs}")
 
 # R26（v0.10.0 WP4）：主动提案接入——jail 写 pending_plan.json → 进聊天视图
 #   提案卡渲染（主动预警 sys + op 行 + 拍板键）；拍板后改期落盘+文件消费。

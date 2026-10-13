@@ -22,6 +22,7 @@ let ledger_head = ""
 let ledger_tip = ""      // 「谁该付下一笔」垫付建议（Settle Up 同款事前消解）
 let ledger_name = []
 let ledger_paid_show = []
+let ledger_due_show = []   // v0.10.2：HTML 02 屏四列账表补「应付」列
 let ledger_state = []
 let ledger_kind = []
 let ledger_total_line = ""
@@ -60,6 +61,7 @@ fn rebuild_selected_ledger(){
     ledger_tip = ""
     ledger_name = []
     ledger_paid_show = []
+    ledger_due_show = []
     ledger_state = []
     ledger_kind = []
     ledger_total_line = ""
@@ -94,21 +96,24 @@ fn rebuild_selected_ledger(){
         let diff = due_i - mine
         if diff > 0.005 {
             ledger_name.push(who)
-            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_paid_show.push("¥" + cut2(mine))
+            ledger_due_show.push("¥" + cut2(due_i))
             ledger_state.push("欠 ¥" + cut2(diff))
             ledger_kind.push("due")
             ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 欠 ¥" + cut2(diff))
             ledger_diff.push("due")
         } else if diff < -0.005 {
             ledger_name.push(who)
-            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_paid_show.push("¥" + cut2(mine))
+            ledger_due_show.push("¥" + cut2(due_i))
             ledger_state.push("多垫 ¥" + cut2(0 - diff))
             ledger_kind.push("ok")
             ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 多垫 ¥" + cut2(0 - diff) + "（收齐时找齐）")
             ledger_diff.push("ok")
         } else {
             ledger_name.push(who)
-            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_paid_show.push("¥" + cut2(mine))
+            ledger_due_show.push("¥" + cut2(due_i))
             ledger_state.push("清 ✓")
             ledger_kind.push("ok")
             ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 已付清 ✓")

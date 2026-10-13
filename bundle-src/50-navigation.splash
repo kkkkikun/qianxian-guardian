@@ -101,6 +101,11 @@ fn on_tap_card(id){
     ui.detail_list.set_visible(true)
     // v0.10.0：详情态主页 chrome 也隐藏（详情有自己的返回键+标题）
     ui.home_chrome.set_visible(false)
+    // v0.10.2：详情态输入行+AI 行一并隐藏（HTML 02 屏顶部无输入区；
+    //   详情有自己的参与人/AA/收款输入行。RoundedView 容器 set_visible 实证可靠——
+    //   #48b 不可靠教训针对的是 plain View 容器；composer 是 RoundedView）
+    ui.composer.set_visible(false)
+    ui.cap_row.set_visible(false)
     // UI 改版（card-ux：操作就近分组）：状态三键只在详情模式显示——
     //   列表/聊天模式下「确认这条守护」没有目标语境，隐藏而非常驻
     ui.action_row.set_visible(true)
@@ -115,8 +120,10 @@ fn back_to_list(){
     ui.chat_list.set_visible(false)
     ui.case_list.set_visible(true)
     ui.action_row.set_visible(false)
-    // 回列表：主页 chrome 恢复
+    // 回列表：主页 chrome + 输入区恢复
     ui.home_chrome.set_visible(true)
+    ui.composer.set_visible(true)
+    ui.cap_row.set_visible(true)
     render_views()
     set_hint("已返回列表；点卡片看单条详情")
 }
@@ -204,17 +211,24 @@ fn enter_chat(){
     ui.detail_list.set_visible(false)
     ui.chat_list.set_visible(true)
     ui.action_row.set_visible(false)
-    // v0.10.0：主页 chrome（标题/输入行/守护灯卡/AI 行/hint）聊天态隐藏——管家页有自己的标题区
+    // v0.10.0：主页 chrome（标题/守护灯卡）聊天态隐藏——管家页有自己的标题区
     ui.home_chrome.set_visible(false)
+    // 聊天输入依赖 composer：从详情（输入区隐藏）进入时强制恢复
+    ui.composer.set_visible(true)
+    ui.cap_row.set_visible(true)
     render_views()
 }
 fn back_from_chat(){
     ui_mode = "list"
     ui.chat_list.set_visible(false)
+    ui.composer.set_visible(true)
+    ui.cap_row.set_visible(true)
     ui.case_list.set_visible(true)
     ui.action_row.set_visible(false)
-    // 回列表：主页 chrome 恢复
+    // 回列表：主页 chrome + 输入区恢复
     ui.home_chrome.set_visible(true)
+    ui.composer.set_visible(true)
+    ui.cap_row.set_visible(true)
     render_views()
     set_hint("已回到守护列表；点卡片看单条详情")
 }

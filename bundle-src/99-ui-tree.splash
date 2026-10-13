@@ -62,7 +62,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
     }}
     // === 输入行（HTML .composer：卡面容器 + 透明 input；msg_input 命令式引用常驻） ===
     //   HTML：input 13px 透明底；按钮 min-height 38 / radius 19 / padding 0 22。
-    RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+    composer := RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
         padding: Inset{left: 14 right: 6 top: 6 bottom: 6}
         show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
         draw_bg.shadow_color: #x2b272212 draw_bg.shadow_radius: 8.0 draw_bg.shadow_offset: vec2(0.0, 1.0)
@@ -79,7 +79,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
     // .composer margin-bottom:6
     View{width: Fill height: 6}
     // === HTML .cap-line：ⓘ 图标 + 11.5px faint，padding 0 4（ai_cap_label 命令式 set_text 常驻） ===
-    View{width: Fill height: Fit flow: Right spacing: 5 align: Align{y: 0.5} padding: Inset{left: 4 right: 4}
+    cap_row := View{width: Fill height: Fit flow: Right spacing: 5 align: Align{y: 0.5} padding: Inset{left: 4 right: 4}
         Svg{width: 12 height: 12 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/info.svg") color: #xa89e91}}
         ai_cap_label := Label{width: Fill text: "AI 服务：探测中…"
             draw_text.color: #xa89e91 draw_text.text_style.font_size: 8}
@@ -641,9 +641,9 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                 draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 9}}}
                         }
                     }
-                    // ── 标题行：#N·活动 + 状态 chips ──
-                    View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                        Label{width: Fill text: case_lines[sel] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 12}}
+                    // ── 标题行：#N·活动 + 状态 chips（chips 紧跟标题，HTML 02 屏 .d-nav gap 8）──
+                    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                        Label{width: Fit text: case_lines[sel] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 12}}
                         if case_statuses[sel] == "Confirmed" {
                             RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 3 bottom: 3}
                                 show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
@@ -785,7 +785,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     }
                     if case_receipt[sel].len() > 0 {
                         Label{width: Fill text: "回 执" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
-                        View{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{left: 12 right: 12 top: 9 bottom: 9}
+                        RoundedView{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{left: 12 right: 12 top: 9 bottom: 9}
                             show_bg: true draw_bg.color: #xf7f2ec draw_bg.border_radius: 10.0
                             for _ri in case_receipt[sel].len() {
                                 Label{width: Fill text: case_receipt[sel][_ri] draw_text.color: #x6e675e draw_text.text_style.font_size: 8}
@@ -802,15 +802,17 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         Card{padding: Inset{left: 14 right: 14 top: 10 bottom: 10} spacing: 7
                             // 表头
                             View{width: Fill height: Fit flow: Right spacing: 8
-                                Label{width: 84 text: "成员" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                                Label{width: 64 text: "成员" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
                                 Label{width: Fill text: "已付" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                                Label{width: Fill text: "应付" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
                                 Label{width: Fit text: "状态" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
                             }
                             // 行（闭包内 for+if/else 无嵌套 for——安全组合）
                             for li in ledger_name.len() {
                                 View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                                    Label{width: 84 text: ledger_name[li] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 9}}
+                                    Label{width: 64 text: ledger_name[li] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 9}}
                                     Label{width: Fill text: ledger_paid_show[li] draw_text.color: #x6e675e draw_text.text_style.font_size: 9}
+                                    Label{width: Fill text: ledger_due_show[li] draw_text.color: #x6e675e draw_text.text_style.font_size: 9}
                                     if ledger_kind[li] == "due" {
                                         Label{width: Fit text: ledger_state[li] draw_text.color: #xa87516 draw_text.text_style: font_bold_cjk{font_size: 9}}
                                     } else {
@@ -822,7 +824,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             Label{width: Fill text: ledger_total_line draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 9}}
                             Label{width: Fill text: "✓ 按分取整 · 尾差由垫付最多者承担 · 总计恒等" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 8}
                             if ledger_tip != "" {
-                                View{width: Fill height: Fit padding: Inset{left: 11 right: 11 top: 8 bottom: 8}
+                                RoundedView{width: Fill height: Fit padding: Inset{left: 11 right: 11 top: 8 bottom: 8}
                                     show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 10.0
                                     Label{width: Fill text: ledger_tip draw_text.color: #x6e675e draw_text.text_style.font_size: 8}}
                             }
@@ -930,10 +932,10 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
         if ui_mode == "chat" {
             // v0.10.0：管家页标题区（HTML 03 屏 .app-head：logo+「交给管家」+副题）；
             //   返回键降为次级 ghost 小字（HTML 里返回在标题区语义弱——出口仍明确但不抢戏）
-            View{width: Fill height: Fit flow: Right spacing: 9 align: Align{y: 0.5}
-                Svg{width: 26 height: 26 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
-                View{width: Fill height: Fit flow: Down spacing: 1
-                    Label{text: "交给管家" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 13}}
+            View{width: Fill height: Fit flow: Right spacing: 12 align: Align{y: 0.5}
+                Svg{width: 40 height: 40 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
+                View{width: Fill height: Fit flow: Down spacing: 3
+                    Label{text: "交给管家" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 15}}
                     Label{width: Fill text: "agent 提案 · 人拍板 · 白名单执行" draw_text.color: secondary draw_text.text_style.font_size: 8}
                 }
                 // 文案保留「回到守护列表」（回归 R-16/R-26/27/28/29 依赖此文案定位）
@@ -988,7 +990,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     // ── 头章行：op 徽标 + 目标 ──
                     // HTML .plan-head：浅底 #FCF8F1 + border-bottom 发丝线分隔（上圆角继承卡片，下直角）
                     View{width: Fill height: Fit flow: Down spacing: 0
-                        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                        RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                             padding: Inset{left: 14 right: 14 top: 11 bottom: 11}
                             show_bg: true draw_bg.color: #xfcf8f1
                             RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 2 bottom: 3}
