@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" font-family="PingFang SC,Noto Sans CJK SC,sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#C7402F"/>
+    </marker>
+    <marker id="arg" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#6E675E"/>
+    </marker>
+  </defs>
+  <rect width="980" height="560" rx="18" fill="#F7F2EC"/>
+  <rect x="1" y="1" width="978" height="558" rx="18" fill="none" stroke="#E9DFD2"/>
+
+  <!-- 用户 -->
+  <rect x="30" y="46" width="170" height="64" rx="12" fill="#2B2722"/>
+  <text x="115" y="72" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F2EC">你（组织者）</text>
+  <text x="115" y="94" text-anchor="middle" font-size="12" fill="#A89E91">只做一件事：拍板</text>
+
+  <!-- 牵线 app 主体 -->
+  <rect x="260" y="30" width="440" height="180" rx="14" fill="#FFFDFA" stroke="#E9DFD2"/>
+  <text x="480" y="56" text-anchor="middle" font-size="17" font-weight="700" fill="#2B2722">牵线 app（Splash script-app）</text>
+  <rect x="278" y="70" width="196" height="120" rx="10" fill="#F7F2EC" stroke="#E9DFD2"/>
+  <text x="376" y="92" text-anchor="middle" font-size="13" font-weight="600" fill="#2B2722">UI：列表/详情/管家页</text>
+  <text x="376" y="112" text-anchor="middle" font-size="11.5" fill="#6E675E">提案卡 · diff · 红线生命周期</text>
+  <text x="376" y="130" text-anchor="middle" font-size="11.5" fill="#6E675E">徽章/横幅/账表/结案卡</text>
+  <rect x="486" y="70" width="196" height="120" rx="10" fill="#F7F2EC" stroke="#E9DFD2"/>
+  <text x="584" y="92" text-anchor="middle" font-size="13" font-weight="600" fill="#2B2722">确定性状态机</text>
+  <text x="584" y="112" text-anchor="middle" font-size="11.5" fill="#6E675E">PLAN 白名单校验（12 op）</text>
+  <text x="584" y="130" text-anchor="middle" font-size="11.5" fill="#6E675E">抽取/分诊/冲突/对账全代码算</text>
+  <text x="584" y="148" text-anchor="middle" font-size="11.5" fill="#C7402F">抽不到写「未抽取到」</text>
+
+  <!-- 内核 agent -->
+  <rect x="770" y="46" width="180" height="70" rx="12" fill="#FFFDFA" stroke="#C7402F" stroke-width="1.5"/>
+  <text x="860" y="74" text-anchor="middle" font-size="15" font-weight="700" fill="#C7402F">管家 agent</text>
+  <text x="860" y="94" text-anchor="middle" font-size="11.5" fill="#6E675E">octos 内核 · 宿主回合通道</text>
+
+  <!--  jail 落盘 -->
+  <rect x="260" y="250" width="440" height="74" rx="12" fill="#FFFDFA" stroke="#E9DFD2"/>
+  <text x="480" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2722">本机 jail 落盘（cases/audit/…）</text>
+  <text x="480" y="300" text-anchor="middle" font-size="11.5" fill="#6E675E">读回断言：每次变更落盘 + 审计链；证据包可离线校验</text>
+
+  <!-- 伴生进程 -->
+  <rect x="30" y="250" width="200" height="120" rx="12" fill="#F1ECE4" stroke="#E9DFD2"/>
+  <text x="130" y="276" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2722">伴生进程</text>
+  <text x="130" y="298" text-anchor="middle" font-size="11.5" fill="#6E675E">提醒桥 · 主动复核</text>
+  <text x="130" y="316" text-anchor="middle" font-size="11.5" fill="#6E675E">归票桥 · 成员端自治</text>
+  <text x="130" y="338" text-anchor="middle" font-size="10.5" fill="#A87516">场外组件·契约文件进出 jail</text>
+
+  <!-- 宿主服务 -->
+  <rect x="260" y="380" width="440" height="100" rx="12" fill="#FFFDFA" stroke="#E9DFD2"/>
+  <text x="480" y="406" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2722">宿主服务（逐项声明·诚实降级）</text>
+  <text x="480" y="428" text-anchor="middle" font-size="12" fill="#6E675E">octos.turn.start · matrix.send_message</text>
+  <text x="480" y="448" text-anchor="middle" font-size="12" fill="#6E675E">device_calendar · glance · mail.review_send</text>
+  <text x="480" y="468" text-anchor="middle" font-size="10.5" fill="#A87516">无服务/无平台 → 真实错误透出 + 降级兜底，绝不假装成功</text>
+
+  <!-- 外部世界 -->
+  <rect x="770" y="380" width="180" height="100" rx="12" fill="#FFFDFA" stroke="#E9DFD2"/>
+  <text x="860" y="408" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2722">外部世界</text>
+  <text x="860" y="430" text-anchor="middle" font-size="11.5" fill="#6E675E">Matrix 群 · 系统日历</text>
+  <text x="860" y="448" text-anchor="middle" font-size="11.5" fill="#6E675E">glance 速览屏 · 邮件</text>
+  <text x="860" y="466" text-anchor="middle" font-size="11.5" fill="#6E675E">open-meteo 天气</text>
+
+  <!-- 箭头：用户→app -->
+  <line x1="200" y1="78" x2="256" y2="78" stroke="#C7402F" stroke-width="2.4" marker-end="url(#ar)"/>
+  <text x="228" y="66" text-anchor="middle" font-size="11" fill="#C7402F">群消息</text>
+
+  <!-- app⇄内核 agent -->
+  <line x1="700" y1="66" x2="764" y2="66" stroke="#C7402F" stroke-width="2.4" marker-end="url(#ar)"/>
+  <text x="732" y="54" text-anchor="middle" font-size="11" fill="#C7402F">turn 回合</text>
+  <line x1="764" y1="96" x2="700" y2="96" stroke="#C7402F" stroke-width="2.4" marker-end="url(#ar)"/>
+  <text x="732" y="112" text-anchor="middle" font-size="11" fill="#C7402F">PLAN 提案（仅文本）</text>
+
+  <!-- 用户拍板 → 状态机 -->
+  <line x1="115" y1="110" x2="115" y2="150" stroke="#C7402F" stroke-width="2.4" marker-end="url(#ar)"/>
+  <line x1="115" y1="150" x2="584" y2="150" stroke="#C7402F" stroke-width="2" stroke-dasharray="5 4"/>
+  <line x1="584" y1="150" x2="584" y2="186" stroke="#C7402F" stroke-width="2.4" marker-end="url(#ar)"/>
+  <text x="130" y="144" font-size="11" fill="#C7402F">拍板（唯一执行门）</text>
+
+  <!-- app → jail -->
+  <line x1="480" y1="210" x2="480" y2="244" stroke="#6E675E" stroke-width="2" marker-end="url(#arg)"/>
+  <text x="492" y="232" font-size="11" fill="#6E675E">白名单动作落盘</text>
+
+  <!-- 伴生 ⇄ jail -->
+  <line x1="230" y1="287" x2="254" y2="287" stroke="#6E675E" stroke-width="2" marker-end="url(#arg)"/>
+  <text x="242" y="276" text-anchor="middle" font-size="10.5" fill="#6E675E">契约文件</text>
+
+  <!-- jail → 宿主服务 -->
+  <line x1="480" y1="324" x2="480" y2="374" stroke="#6E675E" stroke-width="2" marker-end="url(#arg)"/>
+
+  <!-- 宿主服务 → 外部 -->
+  <line x1="700" y1="430" x2="764" y2="430" stroke="#6E675E" stroke-width="2" marker-end="url(#arg)"/>
+
+  <!-- 底部一句 -->
+  <text x="490" y="530" text-anchor="middle" font-size="13" fill="#6E675E">agent 提案 · 人拍板 · 白名单执行 · 全程可审计</text>
+</svg>

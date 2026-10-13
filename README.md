@@ -71,6 +71,13 @@ git clone https://github.com/kkkkikun/qianxian-guardian.git
 | 越权 | 模型直接改了状态 | PLAN 只是单行文本提案；白名单前置校验；人点「拍板」才执行；拒绝理由注入下一轮改写 |
 | 打扰 | agent 频繁主动打扰 | 阈值不满足就沉默——但**留痕**：每条「考虑过没说」的决策都落盘可回看 |
 
+### 架构一图
+
+<p align="center">
+  <img src="docs/readme/architecture.svg" alt="牵线架构：用户群消息进 app，管家 agent 经宿主内核回合只产出 PLAN 文本提案，人拍板后白名单动作落本机 jail；伴生进程（提醒/主动复核/归票/成员端）经契约文件进出 jail；宿主服务逐项声明、诚实降级" width="820">
+  <br><sub>agent 只产出文本提案；拍板是唯一执行门；伴生进程不碰状态机，只读写契约文件</sub>
+</p>
+
 ## 架构与权限
 
 | 申请的服务 | 用途 |
