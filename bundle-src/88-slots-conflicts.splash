@@ -1,0 +1,92 @@
+// ═══ 部件 10/16：set_slot（改期落库）与 mark_conflicts（冲突全量重算）
+// ═══ 源文件 bundle-src/88-slots-conflicts.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+fn set_slot(id_str, nd, np){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再改时间")
+        return
+    }
+    let cur = -1
+    for si in cases.len() {
+        if "" + cases[si]["id"] == id_str { cur = si }
+    }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
+    }
+    if cases[cur]["status"] == "Cancelled" {
+        ui.hint.set_text("该守护已取消，改时间无效（#" + id_str + "）")
+        return
+    }
+    if nd == "" && np == "" {
+        ui.hint.set_text("改期需要时间（星期几/时段至少其一）")
+        return
+    }
+    // C4 重建数组（改 slot 两字段 + slot_init_asked 归零，其余原样保留）
+    let new_cases = []
+    for ri in cases.len() {
+        if ri == cur {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": nd, "slot_part": np,
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": "", "bill_cleared": cases[ri]["bill_cleared"]})
+        } else {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": cases[ri]["slot_day"], "slot_part": cases[ri]["slot_part"],
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": cases[ri]["slot_init_asked"], "bill_cleared": cases[ri]["bill_cleared"]})
+        }
+    }
+    cases = new_cases
+    mark_conflicts()
+    let my_conflict = "" + cases[cur]["conflict"]
+    rebuild_lines()
+    // 决赛 S1：统一走 save() 咽喉
+    save()
+    slot_save_result = save_result
+    render_views()
+    if slot_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（保存失败，仅在内存）")
+    } else if my_conflict == "yes" {
+        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（与另一条同时段，仍冲突）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（已无冲突）")
+    }
+}
+
+// 冲突全量重算（cycle_slot 同款逻辑抽出复用；set_slot / create_case_from_plan 共用）
+fn mark_conflicts(){
+    // S4：Completed（活动已结束）不再参与时段冲突
+    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" && cases[a1]["status"] != "Completed" { cases[a1]["conflict"] = "no" } }
+    for a2 in cases.len() {
+        if cases[a2]["status"] == "Cancelled" || cases[a2]["status"] == "Completed" { continue }
+        let d2 = "" + cases[a2]["slot_day"]
+        let p2 = "" + cases[a2]["slot_part"]
+        if d2 == "" || p2 == "" { continue }
+        for a3 in cases.len() {
+            if a3 == a2 { continue }
+            if cases[a3]["status"] == "Cancelled" { continue }
+            let d3 = "" + cases[a3]["slot_day"]
+            let p3 = "" + cases[a3]["slot_part"]
+            if d3 == "" || p3 == "" { continue }
+            if d3 == d2 && p3 == p2 {
+                cases[a2]["conflict"] = "yes"
+                cases[a3]["conflict"] = "yes"
+            }
+        }
+    }
+}
+

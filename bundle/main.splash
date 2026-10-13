@@ -1,3 +1,5 @@
+// ═══ 部件 1/16：全局状态与基础工具（扁平数组/草稿/audit/count_people/状态徽章映射）
+// ═══ 源文件 bundle-src/10-state.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // 「牵线」聚会筹办守护 — script-app 主提交物（A 路线）
 // 无 AI 完整可用：本地规则分诊 → 提案 → 确认 → 活动簿，全部确定性可复现。
 // AI 仅为可选增强（有 octos.* 宿主服务时才出现按钮），不可用时明确降级。
@@ -270,6 +272,8 @@ let case_stage = []          // 生命周期阶段：-1=已取消（不画线）
 let case_bill_cleared = []   // 每条守护的 bill_cleared（chips「待收尾」与红线收尾段用）
 let case_conflict_with = []  // v0.9.0 WP2：冲突横幅紧凑文案「与 #N·活动」（闭包只读）
 let case_conflict_other = [] // v0.10.1：冲突对方「#N·活动」单独扁平化——横幅按 HTML 分段（加粗对方）
+// ═══ 部件 2/16：rebuild_lines：cases → 扁平数组投影（on_render 只读这些，硬约束 #4/#5）
+// ═══ 源文件 bundle-src/20-rebuild.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 fn rebuild_lines(){
     // === #10/#12 新增：筛选下标数组 + 计数串在这里重建（filter 逻辑放函数上下文，不进 on_render） ===
     // #12 叠加：先用 current_filter 过一遍得到「标签总数 M」与候选 idxs；
@@ -568,6 +572,8 @@ fn rebuild_lines(){
     }
 }
 
+// ═══ 部件 3/16：持久化：load（损坏兜底）/ write_agent_brief / save（唯一落盘咽喉）
+// ═══ 源文件 bundle-src/30-persist.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
 //   cases 不是数组 / seq 不是数字），不覆盖现有数据，而是把坏文件改名为
 //   cases.corrupt-<n>.json（<n> 用文件里的 seq；seq 不是数字时用固定名
@@ -778,6 +784,8 @@ fn save(){
     write_agent_brief()
 }
 
+// ═══ 部件 4/16：条目编辑：target_id / add_person / update_bill_total / cycle_slot / clear_cancel_pending
+// ═══ 源文件 bundle-src/40-case-edits.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // 解析"作用目标"：选中优先，否则最新一条并明示
 fn target_id(){
     if selected_id > 0 {
@@ -1088,6 +1096,8 @@ fn clear_cancel_pending(hint_text){
     }
 }
 
+// ═══ 部件 5/16：视图导航与筛选：render_views / on_tap_card / 列表-详情-聊天进出 / 筛选 / 搜索 / 回执风格
+// ═══ 源文件 bundle-src/50-navigation.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // === #16 新增：切换「怎么用」说明卡的展开/收起 ===
 // 用字符串标记（#13 实证：函数返回布尔在调用点 == false 不可靠）。
 // 触发后再走 render_views()，让 on_render 闭包按新 flag 重渲染。
@@ -1388,6 +1398,8 @@ fn style_label_for(s){
     return "标准"
 }
 
+// ═══ 部件 6/16：本地规则分诊与建守护：triage / guess_* / add_case / build_case_from_text
+// ═══ 源文件 bundle-src/60-triage.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清
 // === #19 修改：加「约定/聚会语气」门槛
 //   时间词 + 活动词 / 约定语气词 / 聚会场景词 才自动建守护。
@@ -1559,6 +1571,8 @@ fn build_case_from_text(text, level){
     }
 }
 
+// ═══ 部件 7/16：生命周期动作：confirm / reschedule / cancel / undo_cancel（白名单动作端）
+// ═══ 源文件 bundle-src/70-lifecycle.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 fn confirm_case(){
     // 同意 → 放弃任何待确认 + 关掉撤销窗口（操作后用户应当看到最新状态）
     clear_cancel_pending("")
@@ -1780,6 +1794,8 @@ fn undo_cancel(){
     }
 }
 
+// ═══ 部件 8/16：管家回合：probe_ai_cap / ai_timeout / chat_push / build_agent_turn / butler_send
+// ═══ 源文件 bundle-src/80-butler-turn.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // === 决赛 S3：管家模式 —— agent 驱动全流程，人只拍板 ===
 // 唯一 AI 通道：octos.turn.start（Rinx 宿主仅接受 {text} 单参数，其他键直接报错——源码级核实）。
 // 回包自由文本：尾部带 PLAN{...}（单行 JSON，扁平字符串字段）即为机器提案，
@@ -1899,6 +1915,8 @@ fn butler_send(){
 // === 决赛 S3：PLAN{...} 提案解析 ===
 // 决赛 S4b 兼容修：宿主字符串方法表没有 index_of/last_index_of（Rinx vendored makepad
 //   6cf0385 实测 "method index_of not found on string" 崩掉整段回调；最新 card-host 的
+// ═══ 部件 9/16：PLAN 协议：plan_parse / 词表归一 / 提案卡文案 / 拍板执行 / 拒绝回路
+// ═══ 源文件 bundle-src/85-plan.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 //   string.rs 方法表同样没有——该路径此前从未被任何宿主真正执行过）。改用 split 原语
 //   （新旧两代方法表都有）实现：协议保证 PLAN 为单行、扁平全字符串字段。
 fn plan_parse(reply){
@@ -2464,6 +2482,8 @@ fn decline_reason_self(){ decline_finish("self", "") }
 // === S3 新增白名单动作：显式改时间（reschedule 提案的执行端；与 cycle_slot 的
 //   5 槽轮换互补——这里写入显式 day/part，词表归一由 plan_parse 前置保证）===
 let slot_save_result = "ok"
+// ═══ 部件 10/16：set_slot（改期落库）与 mark_conflicts（冲突全量重算）
+// ═══ 源文件 bundle-src/88-slots-conflicts.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 fn set_slot(id_str, nd, np){
     if id_str == "" || id_str == "0" {
         ui.hint.set_text("先选中一条守护再改时间")
@@ -2554,6 +2574,8 @@ fn mark_conflicts(){
     }
 }
 
+// ═══ 部件 11/16：AA 账本与结案：paid_total / 均摊取整 / rebuild_selected_ledger / rebuild_fin_report / add_payment / export_evidence
+// ═══ 源文件 bundle-src/90-ledger.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // === v0.6.0 S-P2：确定性对账（数字全部由代码从状态算出——no-facts 的计算端落点） ===
 // paid_total(ci)：该守护已收总额（f64，由字符串金额求和）
 fn paid_total(ci){
@@ -2901,6 +2923,8 @@ fn export_evidence(id_str){
     }
 }
 
+// ═══ 部件 12/16：日历：Hinnant 历法换算 / ICS 生成导出 / set_completed / set_bill_cleared
+// ═══ 源文件 bundle-src/91-calendar.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // === 决赛 v0.4.0 S2 地基：绝对日期解析（槽位词 → 下一该周几的 YYYY-MM-DD） ===
 // local_time() 返回 {year month day hour minute second weekday}（weekday 0=周日），
 // card-host 为 UTC（SCRIPT-API ✓ run）——北京 UTC+8 用 hour 修正跨日。
@@ -3085,6 +3109,8 @@ fn set_bill_cleared(id_str){
     }
 }
 
+// ═══ 部件 13/16：群智收敛（WP3-A 降级路径）/ 结案分享到群 / 确认后动作（ICS+日历写入链）
+// ═══ 源文件 bundle-src/92-converge.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // === 决赛 v0.4.0 S6：确认后动作（ICS 自动导出 + 群分享 + 提醒登记提示） ===
 // v0.10.0 WP5：分享结案回顾到群（matrix.send_message 真发；数字全来自审计字段）
 // === v0.10.0 WP3-A：群智收敛三动作（降级路径） ===
@@ -3380,6 +3406,8 @@ fn calendar_write_case(id_str){
     })
 }
 
+// ═══ 部件 14/16：create_case_from_plan / json_field / publish_glance / 示例 / 导出 / 清空全部 / 启动 load
+// ═══ 源文件 bundle-src/93-misc.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // 管家 create 提案的执行端：字段由提案给定（非本地猜测），空字段保持空（no-facts）；
 // id 守卫与 build_case_from_text 同款；冲突走 mark_conflicts 全量重算
 fn create_case_from_plan(){
@@ -3614,6 +3642,8 @@ fn clear_all_data(){
 
 start_timeout(0.05, || load())
 
+// ═══ 部件 15/16：设计 token（HTML 附录 A 对照）与组件工厂 Card/Badge/SectionLabel
+// ═══ 源文件 bundle-src/95-tokens.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 let ink = #x2b2722
 let secondary = #x6e675e
 let accent = #xc7402f
@@ -3655,6 +3685,8 @@ let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_te
 let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 14}
 let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
 
+// ═══ 部件 16/16：根 UI 树：home_chrome / composer / cap-line / case_list（卡片）/ detail_list / chat_list / action_row / home-foot
+// ═══ 源文件 bundle-src/99-ui-tree.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 // v0.10.1：根区 spacing 归零——HTML .screen 的纵向节奏（14/14/6/16）用显式 spacer 逐段还原，
 //   统一 spacing 做不到逐段精确（复刻基准：research/kimi示例UI.html 屏 01）。
 SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 top: 22 bottom: 16} spacing: 0 draw_bg.color: #xf7f2ec

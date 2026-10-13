@@ -1,0 +1,349 @@
+// ═══ 部件 11/16：AA 账本与结案：paid_total / 均摊取整 / rebuild_selected_ledger / rebuild_fin_report / add_payment / export_evidence
+// ═══ 源文件 bundle-src/90-ledger.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// === v0.6.0 S-P2：确定性对账（数字全部由代码从状态算出——no-facts 的计算端落点） ===
+// paid_total(ci)：该守护已收总额（f64，由字符串金额求和）
+fn paid_total(ci){
+    let id_str = "" + cases[ci]["id"]
+    let total = 0
+    for i in pay_case.len() {
+        if pay_case[i] == id_str {
+            let v = pay_amount[i].to_f64()
+            if v > 0 { total = total + v }
+        }
+    }
+    return total
+}
+// rebuild_selected_ledger()：为选中守护构建对账明细（on_render 只读扁平数组）
+// 副作用：自动推导 bill_cleared（人人差额≤0 或 已收≥总额 且 有账）→ 原位写回 cases
+// v0.9.0 WP2：重构为表列并行数组（成员/已付/状态/色标）——HTML 规范 02 屏 AA 对账表
+let ledger_lines = []
+let ledger_diff = []     // 平行色标："due"（欠，琥珀）/"ok"（清，玉绿）
+let ledger_head = ""
+let ledger_tip = ""      // 「谁该付下一笔」垫付建议（Settle Up 同款事前消解）
+let ledger_name = []
+let ledger_paid_show = []
+let ledger_state = []
+let ledger_kind = []
+let ledger_total_line = ""
+// v0.8.0 W2：正数 f64 取整（to_chars 扫整数位，不依赖 math.floor——两代宿主方法表
+// 有差异，main.splash 既有代码全部手工字符扫描，同源零新依赖）。
+fn ifloor(x){
+    let s = "" + x
+    let cs = s.to_chars()
+    let dot = -1
+    for i in cs.len() {
+        if cs[i] == 46 { dot = i }
+    }
+    if dot < 0 { return x }
+    let out = ""
+    for i in dot {
+        if cs[i] == 45 { out = out + "-" } else { out = out + ("" + (cs[i] - 48)) }
+    }
+    return out.to_f64()
+}
+// v0.8.0 W2：按分取整的每人应付（舍入规则写死——blueprint 口径）：
+//   总额×100 取整为总分数 tc；base = floor(tc÷n)；前 rem = tc−base×n 人各 +1 分；
+//   尾差落在名单末位之前——总计恒等于总额，永不超收/少收（Tricount 同款语义，
+//   Splitwise「从不改变任何人的总余额」）。数字全部由代码算出，模型零参与。
+fn due_for_idx(total_f, n, idx){
+    let tc = ifloor(total_f * 100.0 + 0.5)
+    let base = ifloor(tc / n)
+    let rem = tc - base * n
+    let mine = base
+    if idx < rem { mine = base + 1 }
+    return mine / 100.0
+}
+fn rebuild_selected_ledger(){
+    ledger_lines = []
+    ledger_diff = []
+    ledger_head = ""
+    ledger_tip = ""
+    ledger_name = []
+    ledger_paid_show = []
+    ledger_state = []
+    ledger_kind = []
+    ledger_total_line = ""
+    let ci = -1
+    for i in cases.len() {
+        if cases[i]["id"] == selected_id { ci = i }
+    }
+    if ci < 0 { return }
+    let bt = "" + cases[ci]["bill_total"]
+    if bt == "" { return }
+    let total_f = bt.to_f64()
+    if total_f <= 0 { return }
+    let ppl = "" + cases[ci]["people"]
+    let n = count_people(ppl)
+    if n <= 0 { return }
+    let paid_all = paid_total(ci)
+    ledger_head = "总额 ¥" + cut2(total_f) + " × " + ("" + n) + " 人 · 已收 ¥" + cut2(paid_all)
+    // v0.9.0 WP2：表列并行数组——成员 | 已付 | 状态（欠=琥珀/清=玉绿），总计行单列
+    let idx = 0
+    for nm in ppl.split(",") {
+        let who = nm.trim()
+        if who == "" { continue }
+        let due_i = due_for_idx(total_f, n, idx)
+        // 同人可能多笔——求和
+        let mine = 0
+        for q in pay_person.len() {
+            if pay_case[q] == ("" + cases[ci]["id"]) && pay_person[q] == who {
+                let v = pay_amount[q].to_f64()
+                if v > 0 { mine = mine + v }
+            }
+        }
+        let diff = due_i - mine
+        if diff > 0.005 {
+            ledger_name.push(who)
+            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_state.push("欠 ¥" + cut2(diff))
+            ledger_kind.push("due")
+            ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 欠 ¥" + cut2(diff))
+            ledger_diff.push("due")
+        } else if diff < -0.005 {
+            ledger_name.push(who)
+            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_state.push("多垫 ¥" + cut2(0 - diff))
+            ledger_kind.push("ok")
+            ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 应付 ¥" + cut2(due_i) + " / 多垫 ¥" + cut2(0 - diff) + "（收齐时找齐）")
+            ledger_diff.push("ok")
+        } else {
+            ledger_name.push(who)
+            ledger_paid_show.push("已付 ¥" + cut2(mine))
+            ledger_state.push("清 ✓")
+            ledger_kind.push("ok")
+            ledger_lines.push(who + "：已付 ¥" + cut2(mine) + " / 已付清 ✓")
+            ledger_diff.push("ok")
+        }
+        idx = idx + 1
+    }
+    ledger_total_line = "合计：已收 ¥" + cut2(paid_all) + " / 总额 ¥" + cut2(total_f) + (if paid_all >= total_f { " · 已收齐 ✓" } else { " · 还差 ¥" + cut2(total_f - paid_all) })
+    // v0.8.0 W2：「谁该付下一笔」——当前垫付最少的成员先补（事前压低欠款概率）
+    if paid_all < total_f {
+        let min_paid = -1
+        let min_who = ""
+        let idx2 = 0
+        for nm2 in ppl.split(",") {
+            let who2 = nm2.trim()
+            if who2 == "" { continue }
+            let mine2 = 0
+            for q2 in pay_person.len() {
+                if pay_case[q2] == ("" + cases[ci]["id"]) && pay_person[q2] == who2 {
+                    let v2 = pay_amount[q2].to_f64()
+                    if v2 > 0 { mine2 = mine2 + v2 }
+                }
+            }
+            if min_paid < 0 || mine2 < min_paid {
+                min_paid = mine2
+                min_who = who2
+            }
+            idx2 = idx2 + 1
+        }
+        if min_who != "" {
+            ledger_tip = "下次垫付建议：" + min_who + "（当前垫付最少 ¥" + cut2(min_paid) + "）——收款先找 TA"
+        }
+    }
+    // 自动清零判定：已收 ≥ 总额 → bill_cleared=yes（确定性推导，替代手动）
+    if paid_all >= total_f && cases[ci]["bill_cleared"] != "yes" {
+        cases[ci]["bill_cleared"] = "yes"
+        audit("bill_auto_cleared", "#" + ("" + cases[ci]["id"]) + " 已收 ¥" + cut2(paid_all))
+    } else if paid_all < total_f && cases[ci]["bill_cleared"] == "yes" {
+        cases[ci]["bill_cleared"] = "no"
+    }
+}
+
+// === v0.10.0 WP5：结案报告卡推导（活动完成+账清=已收尾后渲染） ===
+//   数据全部来自既有审计字段/状态机：四统计（到场=参与人数、人均=总额÷人数、
+//   当日天气=查不到如实显示「未查询」、周期天数=create→末事件审计跨度）+
+//   状态变迁时间线（create/confirm/complete/收款/bill_auto_cleared 带 UTC+8 时间戳）。
+//   零编造：审计里找不到的事件行不渲染；统计算不出就显示「—」。
+let fin_show = "no"
+let fin_title = ""
+let fin_stat_people = ""
+let fin_stat_per = ""
+let fin_stat_weather = ""
+let fin_stat_days = ""
+let fin_timeline = []
+fn rebuild_fin_report(){
+    fin_show = "no"
+    fin_title = ""
+    fin_stat_people = ""
+    fin_stat_per = ""
+    fin_stat_weather = ""
+    fin_stat_days = ""
+    fin_timeline = []
+    let ci = -1
+    for i in cases.len() {
+        if cases[i]["id"] == selected_id { ci = i }
+    }
+    if ci < 0 { return }
+    if cases[ci]["status"] != "Completed" { return }
+    if ("" + cases[ci]["bill_cleared"]) != "yes" { return }
+    fin_show = "yes"
+    let id_str = "" + cases[ci]["id"]
+    let act = "" + cases[ci]["activity"]
+    if act == "" { act = "聚会" }
+    fin_title = "#" + id_str + " · " + act + " · 已收尾"
+    // 四统计（确定性）
+    let ppl = "" + cases[ci]["people"]
+    let n = count_people(ppl)
+    if n > 0 {
+        fin_stat_people = ("" + n) + "/" + ("" + n) + " 人"
+    } else {
+        fin_stat_people = "—"
+    }
+    let bt = "" + cases[ci]["bill_total"]
+    let total_f = bt.to_f64()
+    if total_f > 0 && n > 0 {
+        fin_stat_per = "¥" + cut2(total_f / n) + "/人"
+    } else {
+        fin_stat_per = "—"
+    }
+    // 天气：历史天气不在状态机里（不编造）——如实显示
+    fin_stat_weather = "未查询"
+    // 周期天数：create 事件 → 最后一个事件（审计跨度，天）
+    let first_z = -1
+    let last_z = -1
+    let tl_rows = []
+    for ai in audit_log.len() {
+        let row = "" + audit_log[ai]
+        let seg = row.split(" | ")
+        if seg.len() >= 4 {
+            let dtl = "" + seg[3]
+            if dtl.search("#" + id_str) >= 0 || (seg[2] == "create" && tl_rows.len() == 0) {
+                let ts = "" + seg[0]
+                // ts = "YYYY-MM-DDTHH:MM:SSZ+8" → 取 MM-DD HH:MM
+                let dsp = ts
+                let parts2 = ts.split("-")
+                if parts2.len() >= 3 {
+                    let daypart = parts2[2].split("T")
+                    dsp = parts2[1] + "-" + daypart[0] + " " + daypart[1].split("Z")[0]
+                }
+                let lbl = "" + seg[2]
+                if lbl == "create" { lbl = "守护诞生" }
+                if lbl == "confirm" { lbl = "拍板确认" }
+                if lbl == "complete" { lbl = "活动完成" }
+                if lbl == "payment" { lbl = "收到款项" }
+                if lbl == "bill_auto_cleared" { lbl = "账目清零" }
+                if lbl == "bill_cleared" { lbl = "账目清零" }
+                let keep = "no"
+                if seg[2] == "create" { keep = "yes" }
+                if seg[2] == "confirm" { keep = "yes" }
+                if seg[2] == "complete" { keep = "yes" }
+                if seg[2] == "payment" { keep = "yes" }
+                if seg[2] == "bill_auto_cleared" { keep = "yes" }
+                if seg[2] == "bill_cleared" { keep = "yes" }
+                if keep == "yes" {
+                    fin_timeline.push(lbl + " · " + dsp)
+                    // 日期天数（跨日计算）
+                    let dy = parts2[0].to_f64()
+                    let dm = parts2[1].to_f64()
+                    let dd = daypart[0].to_f64()
+                    let z = days_from_civil(dy, dm, dd)
+                    if first_z < 0 { first_z = z }
+                    last_z = z
+                }
+            }
+        }
+    }
+    if first_z >= 0 && last_z >= first_z {
+        fin_stat_days = ("" + (last_z - first_z + 1)) + " 天"
+    } else {
+        fin_stat_days = "—"
+    }
+}
+
+// === v0.6.0 S-P2：记收款（详情面板入口；解析 "姓名 金额"） ===
+let pay_draft = ""
+fn set_pay_draft(s2){ pay_draft = s2 }
+fn add_payment(){
+    let raw = ("" + pay_draft).trim()
+    if raw == "" { ui.hint.set_text("格式：姓名 金额（如：阿明 150）"); return }
+    // 取最后一个空格分段：前段=姓名，后段=金额
+    let sp = raw.split(" ")
+    if sp.len() < 2 { ui.hint.set_text("格式：姓名 金额（如：阿明 150）"); return }
+    let amt = sp[sp.len() - 1]
+    let who = ""
+    for i in sp.len() - 1 {
+        if i > 0 { who = who + " " }
+        who = who + sp[i]
+    }
+    who = who.trim()
+    let amt_f = amt.to_f64()
+    if who == "" || amt_f <= 0 { ui.hint.set_text("金额要大于 0（格式：姓名 金额）"); return }
+    let id_str = "" + selected_id
+    let ci = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { ci = i }
+    }
+    if ci < 0 { ui.hint.set_text("先选中一条守护再记收款"); return }
+    pay_case.push(id_str)
+    pay_person.push(who)
+    pay_amount.push("" + amt_f)
+    let r = fs.write("payments.json", {payments: pay_case, persons: pay_person, amounts: pay_amount}.to_json())
+    pay_save_result = "ok"
+    if r != nil { pay_save_result = "fail" }
+    audit("payment", "#" + id_str + " " + who + " ¥" + cut2(amt_f))
+    rebuild_lines()
+    save()
+    render_views()
+    ui.hint.set_text("已记收款：" + who + " ¥" + cut2(amt_f) + "（差额见对账行；收齐自动清待收尾）")
+}
+
+// === v0.6.0 P4：Evidence Pack 导出（case 快照 + 审计链 + 确定性断言） ===
+// === v0.8.0 W5+W8 增补：沉默留痕纳入 + 守护回放（Devin Session Insights 同款统计） ===
+fn export_evidence(id_str){
+    let ci = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { ci = i }
+    }
+    if ci < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    // 确定性断言：应付 = bill_total/人数，已收 = 收款求和，差 = 应付-已收
+    let bt = "" + cases[ci]["bill_total"]
+    let total_f = bt.to_f64()
+    let n = count_people("" + cases[ci]["people"])
+    let paid = paid_total(ci)
+    let due = 0
+    if n > 0 { due = total_f / n }
+    // W8 守护回放：审计链按 action 统计 + 首/末事件（时间线符号标注在 replay.actions）
+    let replay_actions = ""
+    let replay_kinds = []
+    let replay_counts = []
+    for ai in audit_log.len() {
+        let seg = ("" + audit_log[ai]).split(" | ")
+        if seg.len() >= 3 {
+            let ak = seg[2]
+            let hit = -1
+            for rk in replay_kinds.len() {
+                if replay_kinds[rk] == ak { hit = rk }
+            }
+            if hit >= 0 {
+                replay_counts[hit] = replay_counts[hit] + 1
+            } else {
+                replay_kinds.push(ak)
+                replay_counts.push(1)
+            }
+        }
+    }
+    for rk in replay_kinds.len() {
+        if replay_actions != "" { replay_actions = replay_actions + "; " }
+        replay_actions = replay_actions + replay_kinds[rk] + "×" + ("" + replay_counts[rk])
+    }
+    // W5 沉默留痕随包导出（「为什么没做」也是证据链的一环）
+    let sup_e = []
+    if fs.exists("suppressed.json") {
+        let sv = ("" + fs.read("suppressed.json")).parse_json()
+        if sv != nil { sup_e = sv }
+    }
+    let first_ev = ""
+    let last_ev = ""
+    if audit_log.len() > 0 { first_ev = "" + audit_log[0] }
+    if audit_log.len() > 0 { last_ev = "" + audit_log[audit_log.len() - 1] }
+    let ev = {case: cases[ci], ledger: {total: bt, people_count: ("" + n), due_per_person: cut2(due), paid_total: cut2(paid), outstanding: cut2(total_f - paid)}, assertion: {rule: "due_per_person = bill_total / count_people; paid_total = sum(payments); outstanding = bill_total - paid_total", bill_total: bt, people_count: ("" + n), paid_total: cut2(paid), computed_outstanding: cut2(total_f - paid)}, audit: audit_log, replay: {actions_summary: replay_actions, first_event: first_ev, last_event: last_ev, rule: "全程审计链可回放；提案出处与拍板 actor（user/agent）逐条在案"}, suppressed: sup_e}
+    let r = fs.write("evidence/case-" + id_str + ".json", ev.to_json())
+    if r == nil {
+        ui.hint.set_text("证据包已导出：evidence/case-" + id_str + ".json（快照+审计链+回放统计+沉默留痕，可离线校验）")
+    } else {
+        ui.hint.set_text("证据包导出失败：" + ("" + r))
+    }
+}
+

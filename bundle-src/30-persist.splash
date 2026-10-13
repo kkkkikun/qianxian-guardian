@@ -1,0 +1,212 @@
+// ═══ 部件 3/16：持久化：load（损坏兜底）/ write_agent_brief / save（唯一落盘咽喉）
+// ═══ 源文件 bundle-src/30-persist.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// #13：损坏兜底。cases.json 存在但内容不是预期结构（parse_json 失败 / v 为 nil /
+//   cases 不是数组 / seq 不是数字），不覆盖现有数据，而是把坏文件改名为
+//   cases.corrupt-<n>.json（<n> 用文件里的 seq；seq 不是数字时用固定名
+//   cases.corrupt.json，允许覆盖上一次的备份），然后以空状态启动并在 hint 明示。
+//   绝不 silently 丢掉用户数据——数据是本应用唯一资产。
+fn load(){
+    let hint = "已载入 " + "" + cases.len() + " 个聚会守护"
+    let hint_suffix = ""
+    if fs.exists("cases.json") {
+        let raw = fs.read("cases.json")
+        let v = raw.parse_json()
+        let bad = (v == nil)
+        let parsed_cases = []
+        let parsed_seq = 0
+        let seq_is_num = false
+        if !bad {
+            // 校验 v["cases"] 是数组、v["seq"] 是数字；任何一个不达标即视为损坏
+            let raw_cases = v["cases"]
+            let raw_seq = v["seq"]
+            if raw_cases != nil {
+                // 数组的真值特征：可取 .len()。非数组对象/字符串/数字在这里调用
+                // .len() 在 Splash 不会报错，会返回不预期的值；改用 "长度 > 0 且
+                // 第一项是字典" 这种保守判定（cases 至少有一个对象）。
+                if raw_cases.len() > 0 {
+                    let first = raw_cases[0]
+                    if first != nil {
+                        parsed_cases = raw_cases
+                    }
+                } else if raw_cases.len() == 0 {
+                    // 空数组是合法状态（用户清空了），接纳
+                    parsed_cases = raw_cases
+                }
+                // 注意：raw_cases.len() 对非数组可能不抛错，但后续 rebuild_lines
+                // 会读到一致行为；如果 parsed_cases 保持 []，后面 bad 会被翻成 true
+            }
+            if raw_seq != nil {
+                // 数字判定：加 0 后与原值一致；否则把 seq_is_num 留 false
+                let as_num = raw_seq + 0
+                if "" + as_num == "" + raw_seq {
+                    seq_is_num = true
+                    parsed_seq = as_num
+                }
+            }
+            // 校验通过的条件：raw_cases != nil 且 raw_seq != nil 且 seq_is_num
+            // parsed_cases 已经接受了空数组；非数组场景下 parsed_cases 仍为 []
+            // 但 cases.len()=0 会让重建前后一致，行为也可接受——为安全起见，
+            // 仍然以「cases 是数组且 seq 是数字」双门控判定损坏。
+            if raw_cases == nil || !seq_is_num {
+                bad = true
+            }
+        }
+        if bad {
+            // 备份坏文件：<n> 优先用文件里的 seq（即使非数字也允许为字串后缀），
+            // 不可得时用固定名 cases.corrupt.json（覆盖上一次备份）
+            let backup_name = "cases.corrupt.json"
+            if raw_seq != nil {
+                backup_name = "cases.corrupt-" + "" + raw_seq + ".json"
+            }
+            // 注：Splash 的 fs 无 rename（只有 exists/read/read_bytes/write/
+            // append/list/mkdir/remove，见 SCRIPT-API §Storage）。改用
+            // 「把原文写进备份文件」实现等效效果：不删原文件，内容不丢。
+            let original_text = fs.read("cases.json")
+            let _ = fs.write(backup_name, original_text)
+            // 内存回到空态：cases=[], seq=0
+            cases = []
+            seq = 0
+            hint = "发现损坏的守护数据，已备份为 " + backup_name + " 并重新开始"
+            hint_suffix = ""
+        } else {
+            // 校验通过：正常载入
+            cases = parsed_cases
+            seq = parsed_seq
+            hint = "已载入 " + "" + cases.len() + " 个聚会守护"
+            // #13 第 4 条：列表较长时提示用筛选/搜索
+            if cases.len() > 20 {
+                hint_suffix = "，列表较长，建议用筛选或搜索"
+            }
+        }
+    } else {
+        // 首次启动：无文件，按空态走
+        if cases.len() > 20 {
+            hint_suffix = "，列表较长，建议用筛选或搜索"
+        }
+    }
+    // #43：载入 pref.json（与 cases.json 同一 fs.read/parse_json 范式）。
+    // 内容 {"receipt_style": "standard|brief|emoji"}；文件不存在 / parse 失败 /
+    // 字段非法一律回落到 "standard"，**不报错不归档**——preference 损坏不影响
+    // 用户的聚会数据（与 cases 损坏的"备份改名"语义不同，preference 是偏好不是资产）。
+    // 字段校验：仅三档合法（"standard"/"brief"/"emoji"），其他值按兜底走。
+    if fs.exists("pref.json") {
+        let praw = fs.read("pref.json")
+        let pv = praw.parse_json()
+        let pbad = (pv == nil)
+        if !pbad {
+            let prs = pv["receipt_style"]
+            if prs != nil {
+                let prs_str = "" + prs
+                if prs_str == "standard" || prs_str == "brief" || prs_str == "emoji" {
+                    receipt_style = prs_str
+                }
+                // 其他值（含空串）走兜底：receipt_style 保持 "standard"
+            }
+        }
+        // pv == nil 或 prs == nil：同样兜底，不报错
+    }
+    // #48b：detail_list 初始隐藏（命令式，声明里写 visible:false 会被 render() 的
+    //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
+    ui.detail_list.set_visible(false)
+    // v0.6.0：读 payments.json（按人收款，独立文件）
+    // v0.8.0 修真实 bug：这里原写成 to_json()（字符串→json 字符串），payments 字段
+    //   取不到 → 重启后收款记录静默丢失、对账归零。与 cases.json 同款 parse_json。
+    if fs.exists("payments.json") {
+        let praw = fs.read("payments.json")
+        let pdata = praw.parse_json()
+        if pdata != nil && pdata.payments != nil {
+            for pi in pdata.payments.len() {
+                pay_case.push("" + pdata.payments[pi])
+                pay_person.push("" + pdata.persons[pi])
+                pay_amount.push("" + pdata.amounts[pi])
+            }
+        }
+    }
+    // v0.10.0 WP5：读 audit.json（审计链持久化；parse 失败→空，不报错不归档）
+    if fs.exists("audit.json") {
+        let araw = fs.read("audit.json")
+        let av = araw.parse_json()
+        if av != nil && av.audit != nil {
+            audit_log = []
+            for ei in av.audit.len() {
+                audit_log.push("" + av.audit[ei])
+            }
+        }
+    }
+    // S3：chat_list 同款初始隐藏 + 管家欢迎语（仅首次，重启不重复）
+    ui.chat_list.set_visible(false)
+    // UI 改版：状态三键初始隐藏（列表模式下无目标语境；进详情时命令式显示）
+    ui.action_row.set_visible(false)
+    if chat_text.len() == 0 {
+        chat_role.push("sys")
+        chat_text.push("把群消息丢给管家：我来分诊、查冲突、出提案，你只管拍板。（无 AI 服务时自动降级本地规则）")
+    }
+    // #44 外环修：根组件按钮文案在首次求值已定型（当时 receipt_style 还是 "standard"），
+    //   load() 此刻读回的偏好不会反映到标签——重启后按钮显示「标准」实际却是 emoji 档
+    //   （首次点击才自愈）。照 ui.hint.set_text 同范式命令式同步。
+    ui.style_btn.set_text("风格：" + style_label_for(receipt_style))
+    // #46 A切片：根组件 ai_cap_label 首次定型为静态 placeholder，
+    //   load() 末尾用 probe_ai_cap() 命令式同步真实 host 探测文案（照 #44 范式）。
+    ui.ai_cap_label.set_text(probe_ai_cap())
+    rebuild_lines()
+    render_views()
+    // v0.10.0：载入完成不写 hint（静默——守护灯卡已显示「共 N 条」，无需重复）
+    if hint_suffix != "" {
+        ui.hint.set_text(hint_suffix)
+    }
+}
+
+// #13：写入失败可见。fs.write 在出错时返回错误值（非 nil/非 true），save() 把这个
+//   信号向上层返回：调用点根据返回值决定是否覆盖"成功"提示为失败提示，避免 silently
+//   告诉用户「已保存」但实际没落盘——同样是不丢用户数据的兜底。
+// 用**字符串标记**返回成败，不用布尔：#13 外环复验发现该 runtime 下
+// 函数返回的 true/false 在调用点 `ok == false` 比较中不可靠（写入明明成功
+// 却走进失败分支）。字符串比较已在多处验证可靠。
+let save_result = "ok"
+let brief_save_result = "ok"   // #45：agent-brief.json 落盘结果（独立标记，best-effort）
+// #45 C 切片：agent 自适应提示——agent 优先读 agent-brief.json（紧凑摘要，省上下文）。
+//   字段全部 "" + x 字符串化，与 cases.json 字段一一对应；status 保留以便 agent
+//   区分 Confirmed / Proposing。**best-effort**：brief_save_result 失败只扁平落全局
+//   字符串（照 save_result 范式），不打 hint、不影响 cases.json 保存语义——
+//   brief 是辅助件，cases.json 才是事实源；与"错误不静默编造"不冲突（不编造、
+//   只是辅助件降级，下次 save() 会自然重写）。
+fn write_agent_brief(){
+    let rows = []
+    for i in cases.len() {
+        let row = {
+            id: "" + cases[i]["id"],
+            activity: "" + cases[i]["activity"],
+            slot_day: "" + cases[i]["slot_day"],
+            slot_part: "" + cases[i]["slot_part"],
+            place: "" + cases[i]["place"],
+            status: "" + cases[i]["status"]
+        }
+        rows.push(row)
+    }
+    let payload = {seq: seq, cases: rows}.to_json()
+    let br = fs.write("agent-brief.json", payload)
+    if br == nil { brief_save_result = "ok" }
+    else {
+        let bm = "" + br
+        if bm == "" { brief_save_result = "ok" } else { brief_save_result = "fail" }
+    }
+    // === 决赛 S2：宿主 agent 的 files.* 只读 accounts/<hash>/（默认 accounts/device/），
+    //   官方模式是 app 把给 agent 看的数据写到该子目录（AI-SERVICES email-action 范式）。
+    //   同一份 brief 双写到 accounts/device/ ——失败 best-effort（目录可能不被 jail 自动创建），
+    //   不改根下副本（根副本供调试/直接查看）。AGENT.md v3 指面板 agent 优先读 accounts/device/。
+    fs.write("accounts/device/agent-brief.json", payload)
+}
+fn save(){
+    let r = fs.write("cases.json", {cases: cases, seq: seq}.to_json())
+    // SCRIPT-API §Storage：fs.write 成功返回 nil；失败返回一个错误值。
+    if r == nil { save_result = "ok" }
+    else {
+        let msg = "" + r
+        if msg == "" { save_result = "ok" } else { save_result = "fail" }
+    }
+    // #45：save() 是唯一落盘咽喉——建卡/改期/取消/AA/清空全部路径都过这里，
+    //   因此在 save() 末尾同步刷一份 agent-brief.json，agent 就能拿到最新状态。
+    //   brief 是辅助件（cases.json 才是事实源），失败不阻断、不打 hint。
+    write_agent_brief()
+}
+

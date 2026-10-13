@@ -1,0 +1,312 @@
+// ═══ 部件 4/16：条目编辑：target_id / add_person / update_bill_total / cycle_slot / clear_cancel_pending
+// ═══ 源文件 bundle-src/40-case-edits.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// 解析"作用目标"：选中优先，否则最新一条并明示
+fn target_id(){
+    if selected_id > 0 {
+        for i in cases.len() {
+            if cases[i]["id"] == selected_id { return {id: selected_id, fallback: false} }
+        }
+        // 选中 id 已被删除/不存在：降级到最新一条
+    }
+    if cases.len() > 0 { return {id: cases[cases.len() - 1]["id"], fallback: true} }
+    return {id: 0, fallback: true}
+}
+
+// === #8 保留：清除取消二次确认态（任何非「取消」按钮/动作都放弃确认） ===
+// === #23：追加参与人（逗号分隔，上限 10 人） ===
+//   C4 重建数组 / C6 闭包用 selected_id / C7 字符串标记
+let people_save_result = "ok"
+fn add_person(id_str, raw){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再添加参与人")
+        return
+    }
+    let name = "" + raw
+    name = name.trim()
+    if name == "" {
+        ui.hint.set_text("请先输入姓名（多个用逗号分隔）")
+        return
+    }
+    let cur = -1
+    for pi in cases.len() {
+        if "" + cases[pi]["id"] == id_str { cur = pi }
+    }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
+    }
+    let old = "" + cases[cur]["people"]
+    // v0.9.0 WP1：分隔符归一（、，;；→ 逗号）——与 plan_parse 同源，防中文名单断裂
+    let name2 = norm_people_list("" + name)
+    let added = []
+    for nm in name2.split(",") {
+        let one = nm.trim()
+        if one != "" { added.push(one) }
+    }
+    if added.len() == 0 {
+        ui.hint.set_text("没解析到有效姓名（多个请用逗号分隔）")
+        return
+    }
+    // 上限 10 人（手册纪律：先检查再写）
+    let total = 0
+    if old != "" {
+        for ex in old.split(",") { if ex.trim() != "" { total = total + 1 } }
+    }
+    if total + added.len() > 10 {
+        ui.hint.set_text("参与人已达上限 10 人，未添加")
+        return
+    }
+    let merged = old
+    for an in added {
+        if merged == "" { merged = an } else { merged = merged + "," + an }
+    }
+// C4：重建数组（#38 修：必须保留 slot_init_asked，否则 add_person 会把
+        //   首次点改时间的"再点一次才填"标记清掉，导致反复弹窗）
+        let new_cases = []
+        for qi in cases.len() {
+            if qi == cur {
+                new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
+                    "activity": cases[qi]["activity"], "place": cases[qi]["place"],
+                    "status": cases[qi]["status"],
+                    "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
+                    "conflict": cases[qi]["conflict"], "people": merged,
+                    "bill_total": cases[qi]["bill_total"],
+                    "receipt_activity": cases[qi]["receipt_activity"],
+                    "receipt_place": cases[qi]["receipt_place"],
+                    "receipt_text": cases[qi]["receipt_text"],
+                    "receipt_done": cases[qi]["receipt_done"],
+                    "slot_init_asked": cases[qi]["slot_init_asked"], "bill_cleared": cases[qi]["bill_cleared"]})
+            } else {
+                new_cases.push({"id": cases[qi]["id"], "text": cases[qi]["text"],
+                    "activity": cases[qi]["activity"], "place": cases[qi]["place"],
+                    "status": cases[qi]["status"],
+                    "slot_day": cases[qi]["slot_day"], "slot_part": cases[qi]["slot_part"],
+                    "conflict": cases[qi]["conflict"], "people": cases[qi]["people"],
+                    "bill_total": cases[qi]["bill_total"],
+                    "receipt_activity": cases[qi]["receipt_activity"],
+                    "receipt_place": cases[qi]["receipt_place"],
+                    "receipt_text": cases[qi]["receipt_text"],
+                    "receipt_done": cases[qi]["receipt_done"],
+                    "slot_init_asked": cases[qi]["slot_init_asked"], "bill_cleared": cases[qi]["bill_cleared"]})
+            }
+        }
+    cases = new_cases
+    rebuild_lines()
+    // 决赛 S1：收口唯一落盘咽喉（原直写 fs.write 绕过 write_agent_brief，
+    //   导致参与人变更后 agent 拿到的 brief 滞后一步）
+    save()
+    people_save_result = save_result
+    render_views()
+    people_draft = ""
+    if people_save_result == "fail" {
+        ui.hint.set_text("已加 " + "" + added.len() + " 人（保存失败，仅在内存）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 参与人：" + merged)
+    }
+}
+
+// === #30 新增：AA 收账总额（保存=原样写入 bill_total；展示由 bill_display 正向守卫兜底）
+//   C4 重建数组 / C7 字符串标记 bill_save_result / 不在循环内嵌套 if 赋值（避 C9）
+//   不做 trim 之外的格式校验——bill_display 的 total_f > 0 守卫天然处理空/0/负数/垃圾
+fn update_bill_total(id_str, raw){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再记 AA 总额")
+        return
+    }
+    let trimmed = ("" + raw).trim()
+    let cur = -1
+    for bi in cases.len() {
+        if "" + cases[bi]["id"] == id_str { cur = bi }
+    }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
+    }
+// C4：重建数组（cur 分支写 trimmed，其余保留原 bill_total；#38 同 add_person 补 slot_init_asked）
+        let new_cases = []
+        for bi2 in cases.len() {
+            if bi2 == cur {
+                new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
+                    "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
+                    "status": cases[bi2]["status"],
+                    "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
+                    "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
+                    "bill_total": trimmed,
+                    "receipt_activity": cases[bi2]["receipt_activity"],
+                    "receipt_place": cases[bi2]["receipt_place"],
+                    "receipt_text": cases[bi2]["receipt_text"],
+                    "receipt_done": cases[bi2]["receipt_done"],
+                    "slot_init_asked": cases[bi2]["slot_init_asked"], "bill_cleared": cases[bi2]["bill_cleared"]})
+            } else {
+                new_cases.push({"id": cases[bi2]["id"], "text": cases[bi2]["text"],
+                    "activity": cases[bi2]["activity"], "place": cases[bi2]["place"],
+                    "status": cases[bi2]["status"],
+                    "slot_day": cases[bi2]["slot_day"], "slot_part": cases[bi2]["slot_part"],
+                    "conflict": cases[bi2]["conflict"], "people": cases[bi2]["people"],
+                    "bill_total": cases[bi2]["bill_total"],
+                    "receipt_activity": cases[bi2]["receipt_activity"],
+                    "receipt_place": cases[bi2]["receipt_place"],
+                    "receipt_text": cases[bi2]["receipt_text"],
+                    "receipt_done": cases[bi2]["receipt_done"],
+                    "slot_init_asked": cases[bi2]["slot_init_asked"], "bill_cleared": cases[bi2]["bill_cleared"]})
+            }
+        }
+    cases = new_cases
+    rebuild_lines()
+    // 决赛 S1：同 add_person，收口 save() 咽喉
+    save()
+    bill_save_result = save_result
+    render_views()
+    bill_draft = ""
+    if bill_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " AA 总额已记（保存失败，仅在内存）")
+    } else if trimmed == "" {
+        ui.hint.set_text("#" + id_str + " 已清空 AA 总额")
+    } else {
+        ui.hint.set_text("#" + id_str + " AA 总额：" + trimmed)
+    }
+}
+
+// === #22 重启：改时间（5 个常见槽位轮换） ===
+//   手册约束：C4 对象字段动态赋值不可靠 → **重建整个 cases 数组**再整体替换；
+//   C7 布尔返回不可靠 → 字符串标记；C6 闭包不捕获循环变量 → 用 selected_id。
+let cycle_save_result = "ok"
+fn cycle_slot(id_str){
+    if id_str == "" || id_str == "0" {
+        ui.hint.set_text("先选中一条守护再改时间")
+        return
+    }
+    let cur = -1
+    for ci in cases.len() {
+        if "" + cases[ci]["id"] == id_str { cur = ci }
+    }
+    if cur < 0 {
+        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        return
+    }
+    if cases[cur]["status"] == "Cancelled" {
+        ui.hint.set_text("该守护已取消，改时间无效（#" + id_str + "）")
+        return
+    }
+    // 5 个常见槽位序列（确定性，无日期计算——本 runtime 无时钟 API）
+    let sd = "" + cases[cur]["slot_day"]
+    let sp = "" + cases[cur]["slot_part"]
+    // === #27：时段未抽取时不静默编造初值。
+    //   sd/sp 任一为空 = 用户原话里没抽到时间点。如果直接走下面的轮换逻辑，
+    //   会被强行写入"周六-上午"——这是替用户编造了一个时间。
+    //   改为：第一次点只提示 + 翻 slot_init_asked="yes"（重建数组走 C4/C5），
+    //   第二次点（sasked=="yes"）才真正写入；写入后顺手把标记归零（表示已接受）。
+    let sasked = "" + cases[cur]["slot_init_asked"]
+    if (sd == "" || sp == "") && sasked == "" {
+        let new_cases_ask = []
+        for ai in cases.len() {
+            let mk = "" + cases[ai]["slot_init_asked"]
+            if ai == cur { mk = "yes" }
+            new_cases_ask.push({"id": cases[ai]["id"], "text": cases[ai]["text"],
+                "activity": cases[ai]["activity"], "place": cases[ai]["place"],
+                "status": cases[ai]["status"],
+                "slot_day": cases[ai]["slot_day"], "slot_part": cases[ai]["slot_part"],
+                "conflict": cases[ai]["conflict"], "people": cases[ai]["people"],
+                "receipt_activity": cases[ai]["receipt_activity"],
+                "receipt_place": cases[ai]["receipt_place"],
+                "receipt_text": cases[ai]["receipt_text"],
+                "receipt_done": cases[ai]["receipt_done"],
+                "slot_init_asked": mk, "bill_cleared": cases[ai]["bill_cleared"]})
+        }
+        cases = new_cases_ask
+        // 决赛 S1：收口 save() 咽喉（原直写 fs.write）
+        save()
+        cycle_save_result = save_result
+        render_views()
+        if cycle_save_result == "fail" {
+            ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）（保存标记失败，仅在内存）")
+        } else {
+            ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）")
+        }
+        return
+    }
+    let nd = "周六"
+    let np = "上午"
+    if sd == "周六" && sp == "上午" { nd = "周六"  np = "下午" }
+    if sd == "周六" && sp == "下午" { nd = "周六"  np = "晚上" }
+    if sd == "周六" && sp == "晚上" { nd = "周日"  np = "上午" }
+    if sd == "周日" && sp == "上午" { nd = "周日"  np = "下午" }
+    if sd == "周日" && sp == "下午" { nd = "周六"  np = "上午" }
+    // C4：重建整个数组（逐个 push 新对象，key 带引号）。
+    //   #27 同步预置 slot_init_asked：当前这条刚走完首次确认→写入路径，
+    //   把标记归零（""）表示「已接受默认值，不再追问」；其余保持原值。
+    let new_cases = []
+    for ri in cases.len() {
+        if ri == cur {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": nd, "slot_part": np,
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": "", "bill_cleared": cases[ri]["bill_cleared"]})
+        } else {
+            new_cases.push({"id": cases[ri]["id"], "text": cases[ri]["text"],
+                "activity": cases[ri]["activity"], "place": cases[ri]["place"],
+                "status": cases[ri]["status"],
+                "slot_day": cases[ri]["slot_day"], "slot_part": cases[ri]["slot_part"],
+                "conflict": cases[ri]["conflict"], "people": cases[ri]["people"],
+                "bill_total": cases[ri]["bill_total"],
+                "receipt_activity": cases[ri]["receipt_activity"],
+                "receipt_place": cases[ri]["receipt_place"],
+                "receipt_text": cases[ri]["receipt_text"],
+                "receipt_done": cases[ri]["receipt_done"],
+                "slot_init_asked": cases[ri]["slot_init_asked"], "bill_cleared": cases[ri]["bill_cleared"]})
+        }
+    }
+    cases = new_cases
+    // 重算冲突：先全置 no，再同槽互标 yes（S4：Completed 不参与）
+    for a1 in cases.len() { if cases[a1]["status"] != "Cancelled" && cases[a1]["status"] != "Completed" { cases[a1]["conflict"] = "no" } }
+    for a2 in cases.len() {
+        if cases[a2]["status"] == "Cancelled" || cases[a2]["status"] == "Completed" { continue }
+        let d2 = "" + cases[a2]["slot_day"]
+        let p2 = "" + cases[a2]["slot_part"]
+        if d2 == "" || p2 == "" { continue }
+        for a3 in cases.len() {
+            if a3 == a2 { continue }
+            if cases[a3]["status"] == "Cancelled" { continue }
+            let d3 = "" + cases[a3]["slot_day"]
+            let p3 = "" + cases[a3]["slot_part"]
+            if d3 == "" || p3 == "" { continue }
+            if d3 == d2 && p3 == p2 {
+                cases[a2]["conflict"] = "yes"
+                cases[a3]["conflict"] = "yes"
+            }
+        }
+    }
+    let my_conflict = "" + cases[cur]["conflict"]
+    rebuild_lines()
+    // 决赛 S1：收口 save() 咽喉（原直写 fs.write）
+    save()
+    cycle_save_result = save_result
+    render_views()
+    let label_new = nd + "-" + np
+    if cycle_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（保存失败，仅在内存）")
+    } else if my_conflict == "yes" {
+        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（与另一条同时段，仍冲突）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（已无冲突）")
+    }
+}
+
+fn clear_cancel_pending(hint_text){
+    cancel_pending_id = 0
+    cancel_prev_status = ""
+    cancel_pending_deadline = 0
+    // === #25：撤销窗口也跟着归零，避免"换操作"后旧撤销目标还能被恢复 ===
+    cancelled_last_id = 0
+    if hint_text != "" {
+        ui.hint.set_text(hint_text)
+    }
+}
+

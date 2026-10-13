@@ -1,0 +1,173 @@
+// ═══ 部件 6/16：本地规则分诊与建守护：triage / guess_* / add_case / build_case_from_text
+// ═══ 源文件 bundle-src/60-triage.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// 本地规则分诊：命中时间/地点/约定动词才值得建 Case；纯闲聊 → 澄清
+// === #19 修改：加「约定/聚会语气」门槛
+//   时间词 + 活动词 / 约定语气词 / 聚会场景词 才自动建守护。
+//   只有时间词（如"3月15日下午"可能是工作/政务安排）→ "time_only"：
+//   走到 add_case 里的澄清卡分支，给「仍然建守护」入口，绝不直接拦死用户。
+//   三档返回："time"=完整命中自动建；"verb"=只有活动词无时间（保留旧行为）；
+//   "time_only"=只有时间词需澄清；"none"=既无时间也无意图。
+fn triage(text){
+    let hit_time = regex("周|明天|后天|今天|\\d+月\\d+|上午|下午|晚上|周末|\\d+号|\\d+点", "").test(text)
+    // 活动词（保留原词表）
+    let hit_act = regex("聚|吃饭|骑车|爬山|看电影|约|唱歌|打球|露营|烧烤|逛街|喝茶", "").test(text)
+    // 约定语气词：约/一起/咱们/大家/集合/报名/接龙/约吗/来吗/安排
+    let hit_commit = regex("约|一起|咱们|大家|集合|报名|接龙|约吗|来吗|安排", "").test(text)
+    // 聚会场景词：聚餐/团建/生日/聚会/聚会吧
+    let hit_scene = regex("聚餐|团建|生日|聚会|聚会吧", "").test(text)
+    let hit_verb = hit_act || hit_commit || hit_scene
+    if hit_time && hit_verb { return "time" }
+    if hit_time { return "time_only" }
+    if hit_verb { return "verb" }
+    return "none"
+}
+
+// 极简抽取：只做关键词呈现，不编造结构化事实（防编造：抽不到就留空）
+// === #19 修改：删除 "聚会" 兜底——抽不到就返回空串
+//   「卡片」与「回执」的活动字段随后落到 case_activity_lines 既有占位逻辑
+//   （"（未抽取到）"）——绝不编造一个看似合理的活动名。
+fn guess_activity(text){
+    let words = ["骑车", "吃饭", "聚餐", "爬山", "看电影", "唱歌", "打球", "露营", "烧烤", "逛街", "喝茶", "聚会"]
+    for w in words {
+        if text.search(w) >= 0 { return w }
+    }
+    return ""
+}
+
+fn guess_place(text){
+    let spots = ["深圳湾", "莲花山", "梧桐山", "海岸城", "欢乐谷", "世界之窗", "大梅沙", "小梅沙", "东湖", "红树林"]
+    for s in spots {
+        if text.search(s) >= 0 { return s }
+    }
+    return ""
+}
+
+// === #17b 新增：抽取「星期几」=== 命中「周一/周二/周三/周四/周五/周六/周日」
+//   或「今天/明天/后天」（按序列映射）。
+// 抽不到留 ""，不编造。
+fn guess_slot_day(text){
+    // 注：search 是子串匹配，故「星期一/星期天」也能命中「周一」/「周日」。
+    let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    for d in days {
+        if text.search(d) >= 0 { return d }
+    }
+    // 「今天/明天/后天」是相对时间，本 runtime 无时钟 API，无 anchor「今天」返回，
+    // 所以也留空——宁可空着不猜。
+    return ""
+}
+
+// === #17b 新增：抽取「时段」=== 命中「上午/中午/下午/晚上」之一即返回；抽不到留 ""。
+fn guess_slot_part(text){
+    let parts = ["上午", "中午", "下午", "晚上"]
+    for p in parts {
+        if text.search(p) >= 0 { return p }
+    }
+    return ""
+}
+
+fn add_case(){
+    // 建守护算"非取消按钮" → 放弃任何待确认 + 关掉撤销窗口
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    let text = ui.msg_input.text()
+    if text == "" {
+        ui.hint.set_text("先输入一条群消息，例如：周六上午去深圳湾骑车")
+        return
+    }
+    // === #19 新增：「仍然建守护」二次确认态的第二次按压
+    //   若首次按下后已落在 force_create_pending="yes" 且原文未改，
+    //   则此次直接落库（按用户主动意图走）。用 force 作为 level 标签便于
+    //   后续 hint / 日志溯源，但本质上仍按完整 case 走。
+    if force_create_pending == "yes" && text == force_create_text {
+        force_create_pending = "no"
+        force_create_text = ""
+        force_create_deadline = 0
+        build_case_from_text(text, "force")
+        return
+    }
+    // 原文变了 / 超时已自动清空 → 重新走分诊（不沿用旧 force_create_text）
+    if force_create_pending == "yes" {
+        force_create_pending = "no"
+        force_create_text = ""
+        force_create_deadline = 0
+    }
+    let level = triage(text)
+    if level == "time_only" {
+        // === #19 新增：仅命中时间词 → 澄清卡（不直接拦死）
+        //   「有时间，但这看起来不像聚会安排——要牵线跟这条吗？」
+        //   + 给「仍然建守护」入口：用户再点一次「建守护」即按 force 走。
+        //   不清空 msg_input（让用户能直接看到原文 + 二次按压）。
+        force_create_pending = "yes"
+        force_create_text = text
+        force_create_deadline = 1
+        ui.hint.set_text("有时间，但这看起来不像聚会安排——要牵线跟这条吗？再点一次「建守护」即可（仍是您主动）")
+        start_timeout(5.0, || {
+            if force_create_pending == "yes" {
+                force_create_pending = "no"
+                force_create_text = ""
+                force_create_deadline = 0
+                ui.hint.set_text("「仍然建守护」确认已过期（5s 内未再点），未建守护")
+            }
+        })
+        return
+    }
+    if level == "none" {
+        ui.hint.set_text("澄清卡：这条消息里没看到时间或聚会意图，不建守护（规则分诊未命中）")
+        return
+    }
+    build_case_from_text(text, level)
+}
+
+// === #19 新增：建守护的实际落库逻辑（拆出来供 add_case 复用）
+//   把「时间词+约定词」自动建 与 「仍然建守护」用户主动强制建 两条路径
+//   共享同一段落库代码，避免双份冲突检测 / 落盘逻辑漂移。
+//   level 入参保留 "time" / "verb" / "force" 三种标签，
+//   仅用于 hint 文案溯源——业务行为完全相同（不编造、不漏存）。
+fn build_case_from_text(text, level){
+    seq = seq + 1
+    // #13 第 3 条：id 撞库守卫。load() 后异常场景下 cases 有内容而 seq == 0，
+    //   上面 seq+1 得 1，会与已有 id=1 撞。这里取 max(seq, 已有最大 id) + 1，
+    //   保证新 id 一定大于任何已有 id。
+    let max_existing_id = 0
+    for i in cases.len() {
+        let cid = cases[i]["id"]
+        if cid > max_existing_id { max_existing_id = cid }
+    }
+    if seq <= max_existing_id {
+        seq = max_existing_id + 1
+    }
+    // === #27：slot_init_asked 字段预置（C5）。case 对象带这个标记后，cycle_slot
+    //   才能在「时段未抽取」时进入二次确认：第一次点只翻标记 + 提示，第二次点
+    //   才真正写入「周六-上午」初值。初值 "" 表示从未问过。
+    cases.push({"id": seq, "text": text, "activity": guess_activity(text), "place": guess_place(text), "status": "Proposing", "people": "", "bill_total": "", "receipt_activity": "", "receipt_place": "", "receipt_text": "", "receipt_done": "", "slot_day": guess_slot_day(text), "slot_part": guess_slot_part(text), "conflict": "no", "slot_init_asked": "", "bill_cleared": "no"})
+    audit("create", "槽位=" + guess_slot_day(text) + "-" + guess_slot_part(text) + " level=" + level)
+    // === #17b：新建后做冲突检测（不阻断用户，照常往下推进）===
+    // 双方 slot_day + slot_part 都非空 + 相同 → 新条目标 conflict:"yes"。
+    // 同时把已有那一条也翻成 conflict:"yes"（互相知道对方在）。
+    let new_day = "" + cases[cases.len() - 1]["slot_day"]
+    let new_part = "" + cases[cases.len() - 1]["slot_part"]
+    if new_day != "" && new_part != "" {
+        for ci in cases.len() - 1 {
+            if cases[ci]["status"] == "Cancelled" { continue }
+            let od = "" + cases[ci]["slot_day"]
+            let op = "" + cases[ci]["slot_part"]
+            if od == "" || op == "" { continue }
+            if od == new_day && op == new_part {
+                cases[cases.len() - 1]["conflict"] = "yes"
+                cases[ci]["conflict"] = "yes"
+                break
+            }
+        }
+    }
+    selected_id = seq  // 新建后自动选中，体验闭环
+    ui.msg_input.set_text("")
+    rebuild_lines()
+    save()   // 结果写入全局 save_result
+    render_views()
+    if save_result == "fail" {
+        ui.hint.set_text("保存失败：守护数据可能未落盘（已建守护 #" + "" + seq + "，分诊命中：" + level + "）")
+    } else {
+        ui.hint.set_text("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，点卡片可展开详情")
+    }
+}
+

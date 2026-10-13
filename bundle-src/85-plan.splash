@@ -1,0 +1,567 @@
+// ═══ 部件 9/16：PLAN 协议：plan_parse / 词表归一 / 提案卡文案 / 拍板执行 / 拒绝回路
+// ═══ 源文件 bundle-src/85-plan.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+//   string.rs 方法表同样没有——该路径此前从未被任何宿主真正执行过）。改用 split 原语
+//   （新旧两代方法表都有）实现：协议保证 PLAN 为单行、扁平全字符串字段。
+fn plan_parse(reply){
+    plan_pending = "no"
+    plan_clear_stage = 0
+    let raw = "" + reply
+    // 按 "PLAN{" 切分定位提案；协议保证每回复至多一个 PLAN
+    let parts = raw.split("PLAN{")
+    if parts.len() < 2 { return }
+    let tail = parts[1]
+    // 提案 JSON 到行尾；行内取到最后一个 }（扁平无嵌套，值内若含 } 会拼回原位）
+    let lines = tail.split("\n")
+    let body = lines[0]
+    let segs = body.split("}")
+    if segs.len() < 2 { return }
+    let inner = ""
+    for si in segs.len() - 1 {
+        if si > 0 { inner = inner + "}" }
+        inner = inner + segs[si]
+    }
+    let js = "{" + inner + "}"
+    let op = json_field(js, "op")
+    if op == "" { return }
+    plan_op = op
+    plan_id = json_field(js, "id")
+    plan_src = trim_n(json_field(js, "text"), 60)
+    plan_activity = trim24(json_field(js, "activity"))
+    plan_day = norm_day(json_field(js, "slot_day"))
+    plan_part = norm_part(json_field(js, "slot_part"))
+    plan_place = trim24(json_field(js, "place"))
+    plan_people = trim24(norm_people_list(json_field(js, "people")))
+    plan_bill = trim24(json_field(js, "bill_total"))
+    // v0.9.0 WP1 缺口 op 字段：mark_paid 的 who/amount
+    plan_who = trim24(json_field(js, "who"))
+    plan_amount = trim24(json_field(js, "amount"))
+    // 摘要 = PLAN 行之前的话（≤60 字）；没有则中性兜底文案（不编造）
+    let head = parts[0]
+    head = head.trim()
+    plan_summary = trim_n(head, 60)
+    if plan_summary == "" { plan_summary = "按消息原文整理的提案（见下方字段）" }
+    build_plan_src_marked()
+    build_plan_lines()
+}
+
+// 槽位词归一：不在词表内的值一律清空（防模型编造时间；词表与 guess_slot_* 同源）
+fn norm_day(d){
+    let days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日", "周末"]
+    for k in days { if d == k { return k } }
+    return ""
+}
+fn norm_part(p){
+    let parts = ["上午", "中午", "下午", "晚上"]
+    for k in parts { if k == p { return k } }
+    return ""
+}
+// v0.9.0 WP1 修真实 bug：人名分隔符归一——模型/用户可能用 、 ， ; ； 分隔，
+//   而 count_people/账本/mark_paid 守卫全部按英文逗号切（真机 e2e 实锤：
+//   「阿明、阿花」被当成一个人名 → mark_paid 被「不在名单」误拒）。
+//   写入端统一：任意分隔 → 英文逗号 + 逐段 trim。
+fn norm_people_list(raw){
+    let t = "" + raw
+    let t2 = ""
+    for seg in t.split("、") {
+        if t2 != "" { t2 = t2 + "," }
+        t2 = t2 + seg
+    }
+    let t3 = ""
+    for seg in t2.split("，") {
+        if t3 != "" { t3 = t3 + "," }
+        t3 = t3 + seg
+    }
+    let t4 = ""
+    for seg in t3.split(";") {
+        if t4 != "" { t4 = t4 + "," }
+        t4 = t4 + seg
+    }
+    let t5 = ""
+    for seg in t4.split("；") {
+        if t5 != "" { t5 = t5 + "," }
+        t5 = t5 + seg
+    }
+    let out = ""
+    for seg in t5.split(",") {
+        let nm = seg.trim()
+        if nm != "" {
+            if out != "" { out = out + "," }
+            out = out + nm
+        }
+    }
+    return out
+}
+
+// === v0.7.0 P5（创意/UI）：提案出处高亮 ===
+// 把提案字段在消息原文中的出现用【】标出——「字段是从原文哪里来的」一眼可验
+// （no-facts 的展示端闭环；纯 split 原语，无 index_of/切片）。
+fn mark_one(src, needle){
+    if needle == "" { return src }
+    let parts = src.split(needle)
+    if parts.len() < 2 { return src }   // 原文中找不到该字段——不标（不硬凑）
+    // 首次出现标【】，其余出现原样拼回（首版把 needle 重复拼了——实机抓出）
+    let out = parts[0] + "【" + needle + "】" + parts[1]
+    for i in parts.len() - 2 {
+        out = out + needle + parts[i + 2]
+    }
+    return out
+}
+let plan_src_marked = ""
+fn build_plan_src_marked(){
+    // 顺序：活动→地点→日期词→时段词→参与人→AA（只标非空且能在原文找到的）
+    let m = "" + plan_src
+    if plan_activity != "" { m = mark_one(m, plan_activity) }
+    if plan_place != "" { m = mark_one(m, plan_place) }
+    if plan_day != "" { m = mark_one(m, plan_day) }
+    if plan_part != "" { m = mark_one(m, plan_part) }
+    if plan_people != "" { m = mark_one(m, plan_people) }
+    if plan_bill != "" { m = mark_one(m, plan_bill) }
+    plan_src_marked = m
+}
+
+// trim_n：截到 ≤n 字（trim24 泛化版；两界切片，决赛改进① 范式）
+fn trim_n(s, n){
+    // 决赛 S4b 兼容定论：旧宿主(Rinx vendored makepad 6cf0385)不支持字符串索引/切片
+    //   （s[a:b] 编译为 index 指令，字符串接收者直接 "cannot index" 崩渲染；to_chars 是
+    //   码点数组也不能拼回字符串）。两侧交集原语只有 split——用 split("") 逐字重建截断：
+    //   split("") 产生 [""，字…，""]，取 cs[1..=chars]。len() 字节计（CJK 保守触发），
+    //   循环上限钳到实际字数（cs.len()-2），绝不越界。
+    let tq = "" + s
+    if tq.len() <= n { return tq }
+    let cs = tq.split("")
+    let chars = cs.len() - 2
+    if chars <= 0 { return tq }
+    let cnt = n
+    if cnt > chars { cnt = chars }
+    let out = ""
+    for i in cnt {
+        out = out + cs[i + 1]
+    }
+    return out
+}
+
+// 展示兜底：空字段显「（未抽取到）」——no-facts 的展示端落点
+fn disp(v){
+    if v == "" { return "（未抽取到）" }
+    return "" + v
+}
+fn slot_disp(){
+    let s = "" + plan_day
+    if s != "" && plan_part != "" { return s + "-" + plan_part }
+    if s != "" { return s }
+    if plan_part != "" { return plan_part }
+    return "（未抽取到）"
+}
+fn plan_op_label(op){
+    if op == "confirm" { return "确认（出回执）" }
+    if op == "reschedule" { return "改期" }
+    if op == "cancel" { return "取消（5 秒内可撤销）" }
+    if op == "add_people" { return "加参与人" }
+    if op == "set_bill" { return "记 AA 总额" }
+    if op == "complete" { return "标记完成（收尾）" }
+    if op == "draft_dunning" { return "生成催收草稿" }
+    if op == "mark_paid" { return "记收款（对账重算）" }
+    if op == "undo" { return "撤销取消（5 秒窗）" }
+    if op == "clear" { return "清空全部（危险·两段确认）" }
+    if op == "export" { return "导出数据/证据包" }
+    if op == "create" { return "新建守护" }
+    return op
+}
+
+// 提案卡逐行内容 + 合法性校验（函数上下文可读 cases；on_render 只读 plan_lines）
+// plan_check="ok" 才允许拍板执行；否则拍板时给出拒绝文案（agent 产生的非法提案进不了状态机）
+let plan_check = ""
+fn build_plan_lines(){
+    plan_lines = []
+    plan_check = ""
+    let op = "" + plan_op
+    if op == "create" {
+        // no-facts 校验：create 必须带消息原文（溯源），且活动/时间/地点至少其一非空
+        if plan_src == "" {
+            plan_check = "提案缺消息原文（text 字段），无法溯源——拒绝执行"
+        } else if plan_activity == "" && plan_place == "" && plan_day == "" {
+            plan_check = "提案字段全空（未抽取到内容）——拒绝执行"
+        }
+        plan_lines.push("新建守护 ｜ 原文（【】=字段出处）：" + plan_src_marked)
+        plan_lines.push("活动：" + disp(plan_activity) + " ｜ 时间：" + slot_disp() + " ｜ 地点：" + disp(plan_place))
+        plan_lines.push("参与人：" + disp(plan_people) + " ｜ AA 总额：" + disp(plan_bill))
+    } else if op == "clear" || (op == "export" && plan_id == "") {
+        // v0.9.0 WP1：无 id 的 op——clear（危险两段式）/ export（全量导出）。
+        //   分支必须有实体语句：空块（仅注释）实证会中断后续求值（真机 clear
+        //   回合回调中断、hint 停留在载入值——2026-10-12 Rinx 实锤）。
+        if op == "clear" {
+            plan_lines.push("op：清空全部守护（危险操作）｜ 当前共 " + ("" + cases.len()) + " 条")
+            if cases.len() == 0 {
+                plan_check = "本来就没有守护，无可清空——拒绝执行"
+            }
+            if plan_clear_stage == 0 {
+                plan_lines.push("⚠ 危险操作：第一次拍板只确认，第二次拍板（8 秒内）才执行")
+            }
+        }
+        if op == "export" {
+            plan_lines.push("op：导出全部守护数据（cases.json 原文）")
+        }
+    } else {
+        let pid = ("" + plan_id).to_f64()
+        let ci = -1
+        for i in cases.len() {
+            if cases[i]["id"] == pid { ci = i }
+        }
+        if pid <= 0 {
+            plan_check = "提案缺目标 id——拒绝执行"
+            plan_lines.push("op：" + plan_op_label(op) + "（目标 id 缺失）")
+        } else if ci < 0 {
+            plan_check = "目标 #" + plan_id + " 不存在——拒绝执行"
+            plan_lines.push("op：" + plan_op_label(op) + " ｜ 目标：#" + plan_id)
+        } else {
+            // === v0.8.0 W1（调研报告 P0）：提案卡 diff 化——拍板前看清「变了什么」 ===
+            //   旧值从 cases 现取，新值从 PLAN 取（Cursor diff 审批同款语义）；
+            //   改期类附冲突预演：纯试算不改状态，改后撞不撞一眼可见。
+            plan_lines.push("op：" + plan_op_label(op) + " ｜ 目标：#" + plan_id + " " + ("" + cases[ci]["activity"]))
+            if op == "confirm" {
+                plan_lines.push("状态：" + status_badge_text("" + cases[ci]["status"]) + " ──▶ 已确认（回执+日历+群通知）")
+            }
+            if op == "reschedule" {
+                if plan_day == "" && plan_part == "" {
+                    plan_check = "改期提案缺时间（slot_day/slot_part 均空）——拒绝执行"
+                }
+                let old_disp = ("" + cases[ci]["slot_day"]) + "-" + ("" + cases[ci]["slot_part"])
+                let same_tag = ""
+                if ("" + cases[ci]["slot_day"]) == plan_day && ("" + cases[ci]["slot_part"]) == plan_part {
+                    same_tag = "（与当前相同，无实际改动）"
+                }
+                plan_lines.push("时间：" + old_disp + " ──▶ " + slot_disp() + same_tag)
+                // 冲突预演（纯试算）：目标槽位上还有几条活跃守护（不含自身）
+                let hits = 0
+                let hit_ids = ""
+                for k in cases.len() {
+                    if k == ci { continue }
+                    let st2 = "" + cases[k]["status"]
+                    if st2 == "Cancelled" || st2 == "Completed" { continue }
+                    if plan_day != "" && plan_part != "" {
+                        if ("" + cases[k]["slot_day"]) == plan_day && ("" + cases[k]["slot_part"]) == plan_part {
+                            hits = hits + 1
+                            if hit_ids != "" { hit_ids = hit_ids + "、" }
+                            hit_ids = hit_ids + "#" + ("" + cases[k]["id"])
+                        }
+                    }
+                }
+                if hits > 0 {
+                    plan_lines.push("冲突预演：⚡改后与 " + hit_ids + " 撞" + plan_day + plan_part + "（仍可拍板，由你权衡）")
+                } else {
+                    plan_lines.push("冲突预演：✓ 改后无冲突")
+                }
+            }
+            if op == "cancel" {
+                plan_lines.push("状态：" + status_badge_text("" + cases[ci]["status"]) + " ──▶ 已取消（拍板后 5 秒内可撤销）")
+            }
+            if op == "complete" {
+                plan_lines.push("状态：" + status_badge_text("" + cases[ci]["status"]) + " ──▶ 已完成（AA 收齐后待收尾徽章自动清）")
+            }
+            if op == "add_people" {
+                if plan_people == "" {
+                    plan_check = "加人提案缺姓名（people 为空）——拒绝执行"
+                }
+                plan_lines.push("参与人：" + disp("" + cases[ci]["people"]) + " ──▶ +" + plan_people)
+            }
+            if op == "set_bill" {
+                let old_bill = "" + cases[ci]["bill_total"]
+                if old_bill == "" { old_bill = "未记账" }
+                plan_lines.push("AA 总额：" + old_bill + " ──▶ " + disp(plan_bill))
+            }
+            // === v0.9.0 WP1 缺口 op：mark_paid / undo（带 id 校验） ===
+            if op == "mark_paid" {
+                if plan_who == "" {
+                    plan_check = "记收款缺姓名（who 为空）——拒绝执行"
+                }
+                let amt_f2 = plan_amount.to_f64()
+                if amt_f2 <= 0 {
+                    plan_check = "记收款金额要大于 0（amount 无效）——拒绝执行"
+                }
+                // who 必须在参与人名单（防记错人——与 UI 记收款同源守卫语义）
+                let in_ppl = "no"
+                for nm4 in ("" + cases[ci]["people"]).split(",") {
+                    if nm4.trim() == plan_who { in_ppl = "yes" }
+                }
+                if in_ppl == "no" && plan_who != "" {
+                    plan_check = plan_who + " 不在 #" + plan_id + " 的参与人名单——拒绝执行"
+                }
+                let paid_now = paid_total(ci)
+                plan_lines.push("收款：" + plan_who + " ¥" + cut2(amt_f2) + "（已收 ¥" + cut2(paid_now) + " ──▶ ¥" + cut2(paid_now + amt_f2) + "）")
+            }
+            if op == "export" {
+                plan_lines.push("op：导出证据包 ｜ 目标：#" + plan_id + " " + ("" + cases[ci]["activity"]))
+            }
+            if op == "undo" {
+                // 撤销窗口：只许撤「刚取消的那条」，且 5 秒窗内（与 UI 撤销钮同源语义）
+                if cases[ci]["status"] != "Cancelled" {
+                    plan_check = "#" + plan_id + " 不是已取消态，无可撤销——拒绝执行"
+                } else if undo_win_open != "yes" || ("" + cancelled_last_id) != ("" + cases[ci]["id"]) {
+                    plan_check = "撤销窗口已过（5 秒）或目标不是刚取消的那条——拒绝执行"
+                }
+                plan_lines.push("撤销取消：#" + plan_id + " ──▶ 恢复为「" + status_badge_text(cancel_prev_status) + "」（拍板时窗口仍开着才生效）")
+            }
+        }
+    }
+    if plan_check == "" { plan_check = "ok" }
+    plan_pending = "yes"
+}
+
+// === 拍板：唯一人工确认点。校验通过才按 op 分发到白名单动作（全部复用既有函数） ===
+fn butler_approve(){
+    if plan_pending != "yes" {
+        ui.hint.set_text("没有待拍板的提案")
+        return
+    }
+    if plan_check != "ok" {
+        chat_push("sys", "提案被拒：" + plan_check)
+        plan_pending = "no"
+        render_views()
+        ui.hint.set_text("提案未通过校验，已放弃（可让管家重新出）")
+        return
+    }
+    let op = "" + plan_op
+    let pid = ("" + plan_id).to_f64()
+    // 审计：管家拍板链路产生的动作 actor=agent（各动作 fn 内 audit 读取）
+    last_actor = "agent"
+    if op == "create" {
+        create_case_from_plan()
+        chat_push("sys", "已拍板：守护 #" + ("" + seq) + " 已建（待拍板态，详情里可确认）")
+    } else if op == "confirm" {
+        selected_id = pid
+        confirm_case()
+        chat_push("sys", "已拍板：#" + plan_id + " 已确认，回执见详情")
+    } else if op == "reschedule" {
+        selected_id = pid
+        set_slot(plan_id, plan_day, plan_part)
+        chat_push("sys", "已拍板：#" + plan_id + " 改期 " + slot_disp())
+    } else if op == "cancel" {
+        selected_id = pid
+        // 预置确认态 → cancel_case 直接走第二段（等效两次点击；人已在提案卡上拍板）
+        cancel_pending_id = pid
+        cancel_case()
+        chat_push("sys", "已拍板：#" + plan_id + " 已取消（5 秒内可撤销）")
+    } else if op == "add_people" {
+        selected_id = pid
+        add_person(plan_id, plan_people)
+        chat_push("sys", "已拍板：#" + plan_id + " 已加参与人 " + plan_people)
+    } else if op == "set_bill" {
+        selected_id = pid
+        update_bill_total(plan_id, plan_bill)
+        chat_push("sys", "已拍板：#" + plan_id + " AA 总额 " + disp(plan_bill))
+    } else if op == "complete" {
+        selected_id = pid
+        set_completed(plan_id)
+        chat_push("sys", "已拍板：#" + plan_id + " 已标记完成（AA 收齐后待收尾徽章自动清）")
+    } else if op == "draft_dunning" {
+        // 确定性组稿：金额/人数/差额全部由代码从状态机算出，模型零参与数字
+        selected_id = pid
+        let ci2 = -1
+        for i in cases.len() {
+            if "" + cases[i]["id"] == plan_id { ci2 = i }
+        }
+        if ci2 < 0 {
+            ui.hint.set_text("找不到 #" + plan_id)
+            last_actor = "user"
+            return
+        }
+        let bt = "" + cases[ci2]["bill_total"]
+        let total_f = bt.to_f64()
+        let n = count_people("" + cases[ci2]["people"])
+        let paid = paid_total(ci2)
+        let out = total_f - paid
+        if bt == "" || total_f <= 0 {
+            chat_push("sys", "#" + plan_id + " 没有记过 AA 总额，无需催收")
+            last_actor = "user"
+            return
+        }
+        if out <= 0.001 {
+            chat_push("sys", "#" + plan_id + " AA 已收齐，无需催收 ✓")
+            last_actor = "user"
+            return
+        }
+        let due = 0
+        if n > 0 { due = total_f / n }
+        let act = "" + cases[ci2]["activity"]
+        if act == "" { act = "聚会" }
+        let head2 = "【催收草稿】#" + plan_id + " " + act + "（" + ("" + cases[ci2]["slot_day"]) + "-" + ("" + cases[ci2]["slot_part"]) + " · " + ("" + cases[ci2]["place"]) + "）：AA 总额 ¥" + cut2(total_f) + "，已收 ¥" + cut2(paid) + "，还差 ¥" + cut2(out) + "。"
+        // === v0.8.0 W3（调研报告 P0）：梯度催收四段式——档位由代码按 target_date 与
+        //   今天（北京）算出，确定性选档；永不公示名单（微信收款公示争议是前车之鉴）。
+        //   事前=垫付建议（账本区 ledger_tip）；T+1 系统口吻不点名；T+3 私发名单（给人
+        //   看的私聊草稿，非群发）；T+7 最后一催+「结束账单」体面出口（Settle Up/Splitwise
+        //   /微信群收款三种行业答案的组合）。
+        let tier = "basic"
+        let td = "" + cases[ci2]["target_date"]
+        if td != "" {
+            let dt = td.split("-")
+            if dt.len() == 3 {
+                let ty = dt[0].to_f64()
+                let tm = dt[1].to_f64()
+                let tdd = dt[2].to_f64()
+                let t = local_time()
+                let shift = 0
+                if t.hour >= 16 { shift = 1 }
+                let today_z = days_from_civil(t.year, t.month, t.day) + shift
+                let target_z = days_from_civil(ty, tm, tdd)
+                let ds = today_z - target_z
+                if ds < 1 { tier = "pre" }
+                else if ds < 3 { tier = "t1" }
+                else if ds < 7 { tier = "t3" }
+                else { tier = "t7" }
+            }
+        }
+        let draft = ""
+        if tier == "pre" {
+            draft = head2 + "活动还没开始，先不动员；活动次日起新梯度提醒会跟上。"
+        } else if tier == "t1" {
+            draft = head2 + "麻烦还没转的伙伴这两天转一下组织者，谢谢～（系统口吻，不点名）"
+        } else if tier == "t3" {
+            // 私发名单：逐人欠款只给组织者本人，请 TA 逐个私聊——不公示
+            let name_list = ""
+            let ppl2 = "" + cases[ci2]["people"]
+            let idx3 = 0
+            for nm3 in ppl2.split(",") {
+                let who3 = nm3.trim()
+                if who3 == "" { continue }
+                let due3 = due_for_idx(total_f, n, idx3)
+                let mine3 = 0
+                for q3 in pay_person.len() {
+                    if pay_case[q3] == ("" + cases[ci2]["id"]) && pay_person[q3] == who3 {
+                        let v3 = pay_amount[q3].to_f64()
+                        if v3 > 0 { mine3 = mine3 + v3 }
+                    }
+                }
+                let diff3 = due3 - mine3
+                if diff3 > 0.005 {
+                    if name_list != "" { name_list = name_list + "；" }
+                    name_list = name_list + who3 + " 差 ¥" + cut2(diff3)
+                }
+                idx3 = idx3 + 1
+            }
+            if name_list == "" {
+                draft = head2 + "差额集中在多垫的人身上，收齐时找齐即可。"
+            } else {
+                draft = "【私发提醒名单】" + act + " AA 还差 ¥" + cut2(out) + "：" + name_list + "。请逐个私聊提醒（勿在群里公示）——数字由 app 按账本算出。"
+            }
+        } else if tier == "t7" {
+            draft = head2 + "【最后一催】还没转的伙伴今天转一下；实在收不齐，就在详情里点「AA 已收齐」体面结账，差额线下算清——别让一场聚会伤了和气。"
+        } else {
+            draft = head2 + "按 " + ("" + n) + " 人均摊每人约 ¥" + cut2(due) + "。麻烦还没转的伙伴今天转一下组织者，谢谢～"
+        }
+        ui.msg_input.set_text(draft)
+        audit("draft_dunning", tier + " #" + plan_id + " 差额 ¥" + cut2(out))
+        chat_push("sys", "催收草稿已生成（梯度 " + tier + " 档，按活动日期确定性选档；金额/差额全部由代码从状态机算出）——已填入输入框，核对后复制发送即可")
+        ui.hint.set_text("催收草稿已生成（" + tier + " 档）——数字全部来自状态机快照，模型零参与")
+        last_actor = "user"
+        return
+    } else if op == "mark_paid" {
+        // v0.9.0 WP1：agent 记收款——复用 UI 记收款函数（含格式/金额/名单守卫+审计+自动清零推导）
+        selected_id = pid
+        set_pay_draft(plan_who + " " + plan_amount)
+        add_payment()
+        chat_push("sys", "已拍板：#" + plan_id + " 记收款 " + plan_who + " ¥" + plan_amount + "（对账与自动清零同步重算）")
+    } else if op == "undo" {
+        selected_id = pid
+        undo_cancel()
+        // 读回真实结果（undo_cancel 内部有窗口守卫，可能未生效——如实转述）
+        let ci3 = -1
+        for i3 in cases.len() {
+            if "" + cases[i3]["id"] == plan_id { ci3 = i3 }
+        }
+        if ci3 >= 0 && cases[ci3]["status"] != "Cancelled" {
+            audit("undo", "#" + plan_id + " 撤销取消（agent 提案）")
+            chat_push("sys", "已拍板：#" + plan_id + " 撤销取消，恢复为 " + status_badge_text("" + cases[ci3]["status"]))
+        } else {
+            chat_push("sys", "撤销未生效（窗口已过）——状态仍为已取消")
+        }
+    } else if op == "clear" {
+        // 危险两段式：复用 clear_all_data 自带两段机制。plan_clear_stage 区分：
+        //   0=首次拍板（挂确认态）→ 1=窗口内第二次（执行）/过期（如实重挂）
+        if plan_clear_stage == 0 {
+            clear_all_data()
+            plan_clear_stage = 1
+            audit("clear_arm", "危险提案第一次拍板（确认态，5s）")
+            chat_push("sys", "⚠ 已确认一次：再点「拍板执行」才真正清空（8 秒内）")
+            ui.hint.set_text("清空提案待二次确认（8 秒）")
+            last_actor = "user"
+            return   // 保持 plan_pending，等第二次拍板
+        } else {
+            if clear_pending_flag == "yes" {
+                clear_all_data()
+                plan_clear_stage = 0
+                audit("clear", "全部守护已清空（agent 提案，两段确认后）")
+                chat_push("sys", "已拍板：全部守护已清空（两段确认完成）")
+            } else {
+                clear_all_data()
+                chat_push("sys", "二次确认窗口已过——已重新挂起确认，再点一次「拍板执行」（8 秒内）")
+                ui.hint.set_text("清空提案重新待确认（8 秒）")
+                last_actor = "user"
+                return
+            }
+        }
+    } else if op == "export" {
+        if plan_id != "" {
+            selected_id = pid
+            export_evidence(plan_id)
+            audit("export", "#" + plan_id + " 证据包（agent 提案）")
+            chat_push("sys", "已拍板：#" + plan_id + " 证据包已导出（evidence/case-" + plan_id + ".json）")
+        } else {
+            export_data()
+            audit("export", "全部守护数据（agent 提案）")
+            chat_push("sys", "已拍板：全部守护数据已屏显（hint 区可复制备份）")
+        }
+    } else {
+        ui.hint.set_text("未知提案类型：" + op)
+        last_actor = "user"
+        return
+    }
+    last_actor = "user"
+    plan_pending = "no"
+    // v0.10.0 WP4：主动提案已落地——清除 pending_plan.json（幂等消费）
+    if fs.exists("pending_plan.json") { fs.remove("pending_plan.json") }
+    render_views()
+}
+
+// === v0.8.0 W1：放弃提案（两段式 + 理由反馈回路） ===
+// 第一次点「放弃」→ 理由快捷项（8 秒不选自动收回，照 cancel_pending 的 start_timeout
+// 同源机制）；选「时间不对/地点不对/理解错了」→ 理由挂 decline_feedback，下一轮管家
+// turn 自动注入【上次提案被拒】——agent 从被拒中改道的闭环；「我自己来」= 纯放弃不注。
+fn butler_decline(){
+    if plan_pending != "yes" { return }
+    if decline_prompt != "yes" {
+        decline_prompt = "yes"
+        start_timeout(8.0, || decline_timeout())
+        render_views()
+        return
+    }
+    decline_finish("", "")
+}
+fn decline_timeout(){
+    if decline_prompt == "yes" {
+        decline_prompt = "no"
+        render_views()
+    }
+}
+fn decline_finish(reason_label, feedback){
+    decline_prompt = "no"
+    plan_pending = "no"
+    if fs.exists("pending_plan.json") { fs.remove("pending_plan.json") }
+    decline_feedback = feedback
+    if reason_label == "self" {
+        chat_push("sys", "已放弃——你在详情里自己动手即可")
+    } else if reason_label == "" {
+        chat_push("sys", "已放弃本次提案（可继续对管家说怎么改）")
+    } else {
+        chat_push("sys", "已拒绝（理由已记录：「" + reason_label + "」）——下一轮管家会带着这个理由改方案")
+    }
+    render_views()
+    ui.hint.set_text("提案已处理")
+}
+fn decline_reason_time(){ decline_finish("时间不对", "时间不对——请重新收敛时段（拿不准可先问用户具体哪天）") }
+fn decline_reason_place(){ decline_finish("地点不对", "地点不对——请重新确认地点") }
+fn decline_reason_intent(){ decline_finish("理解错了", "理解错了意图——请重读消息原文重新收敛") }
+fn decline_reason_self(){ decline_finish("self", "") }
+
+// === S3 新增白名单动作：显式改时间（reschedule 提案的执行端；与 cycle_slot 的
+//   5 槽轮换互补——这里写入显式 day/part，词表归一由 plan_parse 前置保证）===
+let slot_save_result = "ok"

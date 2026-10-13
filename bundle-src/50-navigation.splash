@@ -1,0 +1,302 @@
+// ═══ 部件 5/16：视图导航与筛选：render_views / on_tap_card / 列表-详情-聊天进出 / 筛选 / 搜索 / 回执风格
+// ═══ 源文件 bundle-src/50-navigation.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// === #16 新增：切换「怎么用」说明卡的展开/收起 ===
+// 用字符串标记（#13 实证：函数返回布尔在调用点 == false 不可靠）。
+// 触发后再走 render_views()，让 on_render 闭包按新 flag 重渲染。
+fn toggle_howto(){
+    if howto_show_flag == "yes" {
+        howto_show_flag = "no"
+        ui.hint.set_text("已收起「怎么用」说明卡")
+    } else {
+        howto_show_flag = "yes"
+        ui.hint.set_text("已展开「怎么用」说明卡")
+    }
+    render_views()
+}
+
+// === #31 新增：详情面板八项命令式刷新（hint 模式翻版）
+//   根组件详情面板是「首次定型静态区」，不靠 on_render 重渲染（E1 实证：根属性不随状态重算）。
+//   所以走：rebuild_lines() 末尾统一调用本函数，按 selected_id 找 j，从扁平数组
+//   取值逐个 ui.detail_x.set_text(...)；无选中时统一显示「点选上方卡片查看详情」。
+//   手册 B5（Label 内 \n 不换行） → 回执用固定 4 个 Label，不用换行符。
+//   手册 A2（同父只渲染第一个同类子节点） → 每个详情 Label 都是各自一行的纯叶子。
+//   手册 C9（嵌套 if 条件赋值变空） → 单层 if 归一化，绝不链式。
+#31f：update_detail_panel 已删（面板并入 on_render，见 case_list ui_mode 分支）
+
+// === #31 改造：点卡片 = 选中（详情面板就由选中驱动，卡内不再有长内容——
+//   截断问题整体绕开；on_tap 设 selected_id 并进详情模式（#31f））
+//   保留 #9 toggle_case 名称以减少跨片 diff（仅删分支，不删函数）。
+fn toggle_case(id){
+    if id == 0 {
+        ui.hint.set_text("先选中一条守护再展开/折叠")
+        return
+    }
+    // 切到其他行 → 放弃取消确认态（避免提示与展开态语义混淆）
+    if cancel_pending_id != 0 && cancel_pending_id != id {
+        clear_cancel_pending("")
+    }
+    selected_id = id
+    // 切换该条的展开态
+    for i in case_ids.len() {
+        if case_ids[i] == ("" + id) {
+            if case_expanded[i] == "yes" {
+                case_expanded[i] = "no"
+            } else {
+                case_expanded[i] = "yes"
+            }
+            break
+        }
+    }
+    rebuild_lines()
+    render_views()
+    let idx = -1
+    for i in case_ids.len() {
+        if case_ids[i] == ("" + id) { idx = i; break }
+    }
+    let msg = "已选中 #" + "" + id
+    if idx >= 0 && case_expanded[idx] == "yes" {
+        msg = "已展开 #" + "" + id + "（再点一次可折叠）"
+    } else if idx >= 0 {
+        msg = "已折叠 #" + "" + id + "（点卡片可展开详情）"
+    }
+    ui.hint.set_text(msg)
+}
+
+// === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
+fn render_views(){
+    // #48b（S3 扩为三视图）：按 ui_mode 只刷当前可见视图
+    //   （多个都刷会在单次 eval 内成倍 on_render 指令，实测超 instruction limit；
+    //    且此处若递归调用自身=无限循环，黑板 #48 引以为戒）
+    // v0.10.0：home_chrome 也是 on_render 容器——需同步 render（初始 list 态+模式切换）。
+    if ui_mode == "detail" {
+        ui.home_chrome.render()
+        ui.detail_list.render()
+    } else if ui_mode == "chat" {
+        ui.home_chrome.render()
+        ui.chat_list.render()
+    } else {
+        ui.home_chrome.render()
+        ui.case_list.render()
+    }
+}
+fn on_tap_card(id){
+    // 决赛修：cur_id 来自 case_ids 扁平数组（字符串 id）。字符串落进 selected_id
+    // 会让 target_id 的 `> 0` 判假 → 确认/改期/取消静默回退「最新一条」（多卡下
+    // 确认错卡的实锤 bug）。统一在函数体内转数值（to_f64 放闭包内会中断渲染）。
+    id = ("" + id).to_f64()
+    // #31f：选中即进详情模式（#48b 起列表/详情双 ScrollY 互斥——详情视图重显从
+    //   scroll=0 起步，深位点卡详情必在视口内）
+    if id == 0 {
+        ui.hint.set_text("先建一条守护")
+        return
+    }
+    if cancel_pending_id != 0 && cancel_pending_id != id {
+        clear_cancel_pending("")
+    }
+    selected_id = id
+    ui_mode = "detail"
+    rebuild_lines()
+    ui.case_list.set_visible(false)
+    ui.chat_list.set_visible(false)
+    ui.detail_list.set_visible(true)
+    // v0.10.0：详情态主页 chrome 也隐藏（详情有自己的返回键+标题）
+    ui.home_chrome.set_visible(false)
+    // UI 改版（card-ux：操作就近分组）：状态三键只在详情模式显示——
+    //   列表/聊天模式下「确认这条守护」没有目标语境，隐藏而非常驻
+    ui.action_row.set_visible(true)
+    render_views()
+    ui.hint.set_text("已选中 #" + "" + id + "，详情见下方；「返回列表」回到全部守护")
+}
+
+// === #31f：返回列表模式 ===
+fn back_to_list(){
+    ui_mode = "list"
+    ui.detail_list.set_visible(false)
+    ui.chat_list.set_visible(false)
+    ui.case_list.set_visible(true)
+    ui.action_row.set_visible(false)
+    // 回列表：主页 chrome 恢复
+    ui.home_chrome.set_visible(true)
+    render_views()
+    ui.hint.set_text("已返回列表；点卡片看单条详情")
+}
+
+// === 决赛 S3：管家对话视图进出 ===
+// === v0.8.0 W5（调研报告 P1）：沉默留痕——「AI 考虑过但没说的事，你都能回看」 ===
+//   守护伴生进程（qx-group-butler）每轮检查后，把「条件未满足、决定不打扰」的决策
+//   追加进 jail 的 suppressed.json；app 进聊天视图时读回展示。全场独有的差异化：
+//   别的 agent 炫耀做了什么，这里的 agent 能交代「为什么没做」（arXiv 2605.06717
+//   「被压下的候选推送也要记录，事后可审计」）。解析失败/缺文件 → 诚实显示暂无留痕。
+let suppressed_lines = []
+// === v0.10.0 WP3-A：群智收敛（降级路径：文字投票卡+手动刷新） ===
+//   会话存 jail converge.json（伴生进程读房间消息归票后写入）；
+//   app 只发起投票（matrix.send_message 真发文字卡）+ 读计票显示 + 管家收敛出 PLAN。
+let converge_case_id = ""     // 当前投票会话目标守护 id（""=无会话）
+let converge_summary = ""     // 计票摘要（伴生进程写 converge.json 后 app 读入）
+let converge_winner = ""      // 票数最高字母（平票/零票为 ""）
+let converge_winner_slot = "" // 对应时段（"周日-下午"）
+let suppressed_count = 0
+fn suppressed_kind_label(k){
+    if k == "weather_ok" { return "☀ 天气复核：无雨，未发预警" }
+    if k == "weather_unknown" { return "☁ 天气复核：未查到，提醒照发不带天气" }
+    if k == "not_due" { return "⏳ 提醒未到期" }
+    if k == "dunning" { return "💰 催收未到档" }
+    if k == "conflict_watch" { return "👀 冲突观察" }
+    return k
+}
+fn load_suppressed(){
+    suppressed_lines = []
+    suppressed_count = 0
+    if fs.exists("suppressed.json") {
+        let raw = fs.read("suppressed.json")
+        let v = raw.parse_json()
+        if v != nil {
+            // v = {"entries":[{ts,kind,detail},…]}（bridge 追加写；对象包裹与 cases.json
+            // 同范式——parse_json 只吃对象。只展示最近 5 条防列表撑爆）
+            let arr = v["entries"]
+            if arr == nil { arr = [] }
+            let n5 = arr.len()
+            let start = 0
+            if n5 > 5 { start = n5 - 5 }
+            for i in n5 {
+                if i >= start {
+                    let e = arr[i]
+                    if e != nil {
+                        let dt = "" + e["detail"]
+                        if dt != "" {
+                            suppressed_lines.push(("" + e["ts"]) + " ｜ " + suppressed_kind_label("" + e["kind"]) + " ｜ " + dt)
+                            suppressed_count = suppressed_count + 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // 空态占位行统一在这里保证（含文件缺失/解析失败的所有早退路径——闭包只做
+    // 无条件 for，防闭包内 if/else+嵌套 for 组合的 pop_stack 渲染崩）
+    if suppressed_count == 0 {
+        suppressed_lines.push("暂无留痕记录——伴生守护进程运行后，未触发的提醒/预警都会记在这里")
+    }
+}
+// === v0.10.0 WP4：主动提案接入（守护进程「到点醒来干活」写进 jail 的改期提案） ===
+//   qx-proactive-butler.py 在 T-24h 降水 ≥60% 时把模型起草的 PLAN 写进 pending_plan.json；
+//   进聊天视图时读入并复用 plan_parse 解析进提案卡——人拍板后走既有白名单链，
+//   随后清除文件（一次性提案；放弃则改由用户对管家说怎么改）。
+fn load_pending_plan(){
+    if !fs.exists("pending_plan.json") { return }
+    let v = ("" + fs.read("pending_plan.json")).parse_json()
+    if v == nil { return }
+    let reply = "" + v["reply"]
+    if reply == "" { return }
+    // 提案卡接入（plan_parse 内含合法性校验 + diff 行构建 + plan_pending=yes）
+    plan_parse(reply)
+    if plan_pending == "yes" {
+        let rain = "" + v["precip"]
+        if rain == "" { rain = "≥60" }
+        chat_push("sys", "⛈ 主动预警：管家凌晨复核发现活动日降水概率 " + rain + "%（open-meteo）——已备好改期提案，请拍板")
+    }
+}
+fn enter_chat(){
+    ui_mode = "chat"
+    load_suppressed()
+    load_pending_plan()
+    ui.case_list.set_visible(false)
+    ui.detail_list.set_visible(false)
+    ui.chat_list.set_visible(true)
+    ui.action_row.set_visible(false)
+    // v0.10.0：主页 chrome（标题/输入行/守护灯卡/AI 行/hint）聊天态隐藏——管家页有自己的标题区
+    ui.home_chrome.set_visible(false)
+    render_views()
+}
+fn back_from_chat(){
+    ui_mode = "list"
+    ui.chat_list.set_visible(false)
+    ui.case_list.set_visible(true)
+    ui.action_row.set_visible(false)
+    // 回列表：主页 chrome 恢复
+    ui.home_chrome.set_visible(true)
+    render_views()
+    ui.hint.set_text("已回到守护列表；点卡片看单条详情")
+}
+
+// === #10 新增：切换筛选标签（GestureView on_tap 回调入口） ===
+// 入口参数 ft 是目标筛选值字符串："all"/"Proposing"/"Confirmed"/"Cancelled"
+// 逻辑放函数上下文（不放在 on_render 内），重建扁平字符串数组后驱动渲染
+fn set_filter(ft){
+    let prev = "" + current_filter
+    current_filter = "" + ft
+    rebuild_lines()
+    render_views()
+    // hint 反馈：切了哪个标签 + 当前命中条数
+    let label_all = "全部"
+    if ft == "Proposing" { label_all = "待拍板" }
+    if ft == "Confirmed" { label_all = "已确认" }
+    if ft == "Cancelled" { label_all = "已取消" }
+    ui.hint.set_text("筛选：" + label_all + " · 共 " + filter_count_str + " 条 / 总 " + filter_total_str + " 条")
+}
+
+// === #12 新增：搜索词入口（TextInput on_change 回调；与 set_filter 同样放函数上下文）
+// q 是用户输入的搜索词（空串=清空）；逻辑放函数上下文才能在 cases[j]["activity/place/text"]
+// 上调 search(p)>=0；on_render 闭包只读扁平字符串。set_query 只动 current_query + 触发重建 +
+// 更新 hint，不动 current_filter，所以搜索词与标签是叠加而非替换。
+fn set_query(q){
+    current_query = "" + q
+    rebuild_lines()
+    render_views()
+    if current_query == "" {
+        ui.hint.set_text("已清空搜索，按当前标签显示（" + filter_count_str + " / " + filter_total_str + " 条）")
+    } else {
+        ui.hint.set_text("搜索 " + current_query + " · 共 " + filter_count_str + " / " + filter_total_str + " 条")
+    }
+}
+
+// === #43 D 切片：回执风格切换（循环 standard→brief→emoji→standard）
+//   1. 翻转 receipt_style（按当前值决定下一档）；
+//   2. 写 pref.json {"receipt_style": <new>}——fs.write 返回非 nil = 失败（照 #13 save() 范式）；
+//      失败也要在**本次会话**让 receipt_style 生效（用户视觉立刻变），仅 hint 明示「偏好保存失败
+//      （风格本次会话仍生效）」——会话内不影响体验，重启才丢档；
+//   3. rebuild_lines 让已有守护的 case_receipt 立即按新风格重排（快照语义不变——ra/rp/rt 不动）；
+//   4. ui.style_btn.set_text(...) 命令式更新底部按钮文案（照 ui.hint.set_text 范式，根组件静态区
+//      靠 imperative set_text 而非 on_render 重算——task 明确允许此路径）；
+//   5. ui.hint.set_text(...) 给用户反馈（成功/失败两路）。
+//   注：style_btn 是根组件 ButtonFlat 的具名绑定（详见根组件布局），set_text 范式已在
+//      ui.hint 上多次实证（line 493, 504 等），runtime 可靠。
+fn set_receipt_style(){
+    let next = "standard"
+    if receipt_style == "standard" { next = "brief" }
+    else if receipt_style == "brief" { next = "emoji" }
+    else if receipt_style == "emoji" { next = "standard" }
+    // 其他值（理论上 load() 已兜底，但保险起见）→ 回 standard
+    receipt_style = next
+    // 写 pref.json（to_json 把字符串包成 {"receipt_style":"brief"} 形式）
+    let pw = fs.write("pref.json", {receipt_style: receipt_style}.to_json())
+    let write_ok = true
+    if pw != nil {
+        let pwmsg = "" + pw
+        if pwmsg != "" { write_ok = false }
+    }
+    rebuild_lines()
+    render_views()
+    // 按钮文案命令式更新：根组件 if 不重算，但 on_click 事件回调内 imperative set_text 可靠
+    if ui.style_btn != nil {
+        ui.style_btn.set_text("风格：" + style_label_for(receipt_style))
+    }
+    let label_cn = style_label_for(receipt_style)
+    if write_ok {
+        // 成功：明示持久化+已有守护立即生效
+        ui.hint.set_text("回执风格已切换为 " + label_cn + "（已有守护的回执立即按新风格重排）")
+    } else {
+        // 失败：本次会话仍生效（receipt_style 已翻，case_receipt 已 rebuild），仅持久化未落盘
+        ui.hint.set_text("偏好保存失败（风格本次会话仍生效）：" + label_cn)
+    }
+}
+
+// === #43 辅助：把 receipt_style 内部值映射成按钮文案用的中文短词
+//   三档分别显示「标准 / 简短 / 带emoji」——按钮文字 + hint 反馈共用此映射
+//   （与 receipt_style 三合法值一一对应；其他值兜底返回「标准」）
+fn style_label_for(s){
+    if s == "brief" { return "简短" }
+    if s == "emoji" { return "带emoji" }
+    return "标准"
+}
+

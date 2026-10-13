@@ -1,0 +1,43 @@
+// ═══ 部件 15/16：设计 token（HTML 附录 A 对照）与组件工厂 Card/Badge/SectionLabel
+// ═══ 源文件 bundle-src/95-tokens.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+let ink = #x2b2722
+let secondary = #x6e675e
+let accent = #xc7402f
+
+// 组件工厂：第一方 RoundedView/徽章范式（#7 落实）
+// show_bg:true 是必填，否则 RoundedView 不绘背景
+// #48 「红线」设计pass：纸白卡 + 发丝描边 + 暖投影（全部零布局尺寸变化）
+let Card = RoundedView{width: Fill height: Fit flow: Down spacing: 8 padding: Inset{left: 12 right: 12 top: 12 bottom: 12}
+    show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
+    draw_bg.shadow_color: #x2b272212 draw_bg.shadow_radius: 8.0 draw_bg.shadow_offset: vec2(0.0, 1.0)}
+// === v0.9.0 WP2 设计 token（HTML 规范附录 A 一一对应；splash 颜色必须字面量，
+//     本区块是唯一权威对照处——改色先改这里再全文件替换） ===
+//   canvas  暖纸   #xf7f2ec  页面底
+//   surface 宣纸   #xfffdfa  卡面（Card 默认）
+//   ink     墨色   #x2b2722  主文字/标题
+//   secondary     #x6e675e  次要文字
+//   faint         #xa89e91  更弱/占位/原文引行
+//   line   发丝线  #xe9dfd2  分隔线/卡描边
+//   accent 朱砂    #xc7402f  红线/主按钮/当前态（hover #xd0563f down #xa83424；晕环 #xc7402f2e）
+//   jade   玉绿    #x2f7d4f  已确认/已清/✓（底 #xe8f3ec）
+//   amber  琥珀    #xa87516  冲突/待收尾/欠（底 #xf7ebd3）
+//   danger 赭石    #xa14d3c  取消/危险（底 #xf6e8e3）
+//   neutral 灰泥   #xf1ece4  待拍板/中性 chip（字 #x6e675e）
+//   thread-todo   #xe1d7ca  红线未到段
+//   knot-todo     #xc9bfb2  未到结描边
+//   圆角三档：卡 14 / chip 12 / 按钮 22（主按钮高 ≥44）
+//   字阶：21 页题 / 15.5 卡题 / 14 键值 / 13 正文 / 12.5 元信息 / 11-12 chip
+//   已知边界：运行时无删除线（diff 旧值用 faint+──▶ 承担）；无字距控制（分区标签
+//   用「账 目 · AA」空格语义代替 letter-spacing）。
+let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 4 bottom: 4}
+    show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 7.0}
+let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 11}}
+let TitleLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 16}
+let TextLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
+let ReceiptLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 12}
+
+// === #9 新增：内联展开用的小字段标签（次级色粗体 13），照 #8 DetailSection 范式 ===
+let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 13}}
+let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 14}
+let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 13}
+

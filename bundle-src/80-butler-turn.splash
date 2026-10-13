@@ -1,0 +1,121 @@
+// ═══ 部件 8/16：管家回合：probe_ai_cap / ai_timeout / chat_push / build_agent_turn / butler_send
+// ═══ 源文件 bundle-src/80-butler-turn.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// === 决赛 S3：管家模式 —— agent 驱动全流程，人只拍板 ===
+// 唯一 AI 通道：octos.turn.start（Rinx 宿主仅接受 {text} 单参数，其他键直接报错——源码级核实）。
+// 回包自由文本：尾部带 PLAN{...}（单行 JSON，扁平字符串字段）即为机器提案，
+// 解析进 plan_* 全局 + plan_pending="yes"，聊天视图渲染「拍板/放弃」；
+// 人点「拍板」才走白名单动作（create/confirm/reschedule/cancel/add_people/set_bill）。
+// card-host 无服务 → 诚实降级：sys 气泡明示，本地规则路径（建守护）原样可用。
+
+// #46 A切片（S3 改版）：AI 通道可见性——只探测管家通道（turn.start）
+fn probe_ai_cap(){
+    if host.has("octos.turn.start") {
+        return "AI：管家对话通道可用（首次需宿主允许）"
+    }
+    return "AI：本机无管家服务，本地规则兜底"
+}
+
+// 决赛改进②（S3 改版）：30s 降级定时器，带代际核对 + 聊天面同步
+fn ai_timeout(my){
+    if my == ai_seq && ai_pending == "yes" {
+        ai_pending = "no"
+        chat_push("sys", "管家无响应（45 秒）——已降级本地规则，点「建守护」即可")
+        render_views()
+        ui.hint.set_text("AI 无响应（45 秒），已降级本地规则——直接点「建守护」即可")
+    }
+}
+// 对话气泡入栈（role: "me"/"ai"/"sys"）；聊天视图可见时即时重渲染
+fn chat_push(role, text){
+    chat_role.push("" + role)
+    chat_text.push("" + text)
+    if ui_mode == "chat" {
+        ui.chat_list.render()
+    }
+}
+
+// 管家回合提示词：静态角色前导（含 PLAN 协议）+ 当前守护快照 + 用户消息。
+// Rinx 不给 mini-app 注入 AGENT.md（宿主侧 turn_input 无 guidance 分支，源码级核实），
+// 所以角色与协议必须由 app 自己嵌入 turn 文本——与 AGENT.md v3 同文，双处一致。
+fn build_agent_turn(user_text){
+    let pre = "你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账/收款/撤销/清空/导出，先用一两句人话说明，然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\",\"bill_total\":\"\"}。op 全集：create(text 必填原文)/confirm/reschedule(+slot_day+slot_part)/cancel/add_people(+people)/set_bill(+bill_total)/complete/draft_dunning（催收草稿，数字由 app 算）/mark_paid(+who+amount 记某人已付款)/undo（撤销刚取消的守护，5 秒窗内）/clear（清空全部，危险，两段确认）/export（导出数据，可带 id 导出单条证据包）——除 create/clear/export 外都必须包含 \"id\":\"<目标守护数字>\"（例：{\"op\":\"confirm\",\"id\":\"2\"}；{\"op\":\"mark_paid\",\"id\":\"1\",\"who\":\"张三\",\"amount\":\"100\"}），缺 id 会被拒；字段值全部双引号字符串，值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒；6)天气/时间等实时信息必须调用工具（get_weather/clock）查询，工具不可用或查询失败就明确说「暂无法查询实时数据」，禁止凭记忆编造任何数字；7)若本回合带【上次提案被拒】，必须按该理由调整方案，不许原样重提。回复中文、简短（≤120字）。"
+    let st = pre + "\n\n【当前守护】\n"
+    if cases.len() == 0 {
+        st = st + "（还没有守护）"
+    } else {
+        for i in cases.len() {
+            st = st + "#" + ("" + cases[i]["id"]) + " " + ("" + cases[i]["activity"])
+            st = st + "｜" + ("" + cases[i]["slot_day"]) + "-" + ("" + cases[i]["slot_part"])
+            st = st + "｜" + ("" + cases[i]["place"])
+            st = st + "｜" + ("" + cases[i]["status"])
+            // v0.8.0 W1 快照富化：管家能看到人与账，才能答「张三交了吗」这类问题
+            st = st + "｜人:" + ("" + cases[i]["people"])
+            st = st + "｜账:" + ("" + cases[i]["bill_total"])
+            if ("" + cases[i]["bill_cleared"]) == "yes" { st = st + "(已收齐)" }
+            if ("" + cases[i]["conflict"]) == "yes" { st = st + "｜⚡冲突" }
+            st = st + "\n"
+        }
+    }
+    // v0.8.0 W1：拍板反馈回路——拒绝理由一次性注入（调用方 build 后立即清空）
+    if decline_feedback != "" {
+        st = st + "\n【上次提案被拒】" + decline_feedback
+    }
+    return st + "\n【用户消息】\n" + user_text
+}
+
+// 管家入口：输入框文本 → 聊天视图 → turn.start（无服务则诚实降级）
+fn butler_send(){
+    if ai_pending == "yes" {
+        ui.hint.set_text("管家还在思考，请稍候（30 秒无响应自动降级）")
+        return
+    }
+    let text = ui.msg_input.text()
+    if text == "" {
+        ui.hint.set_text("先粘贴一条群消息，再点「交给管家」")
+        return
+    }
+    chat_push("me", text)
+    ui.msg_input.set_text("")
+    enter_chat()
+    if host.has("octos.turn.start") {
+        ai_pending = "yes"
+        ai_seq = ai_seq + 1
+        let my = ai_seq
+        chat_push("sys", "管家思考中…（约 45 秒，无响应自动降级本地规则）")
+        // v0.8.0 W1：拒绝理由一次性反馈——先注入进 turn 文本再清空（只影响本回合）
+        let turn_text = build_agent_turn(text)
+        decline_feedback = ""
+        start_timeout(45.0, || ai_timeout(my))
+        host.request("octos.turn.start", {text: turn_text}, fn(r){
+            // 决赛改进②：迟到回调按序号丢弃——已被新回合取代时不动任何 UI 状态
+            if my != ai_seq { return }
+            ai_pending = "no"
+            if r.is_ok {
+                let reply = "" + r.data.text
+                if reply == "" { reply = "（管家返回了空回复）" }
+                chat_push("ai", reply)
+                plan_parse(reply)
+                if plan_pending == "yes" {
+                    ui.hint.set_text("管家出了提案——过目后点「拍板」执行")
+                } else {
+                    ui.hint.set_text("管家已回复（见对话）")
+                }
+            } else {
+                // #46b 诚实可见性：host.has 只证「已注册」，实测失败要把「可用」字样撤下
+                chat_push("sys", "AI 通道无响应（" + r.error + "）——已降级本地规则，点「建守护」即可")
+                ui.ai_cap_label.set_text("AI：通道实测无响应，本地规则兜底")
+                ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
+            }
+            render_views()
+        })
+    } else {
+        // 诚实降级：无 AI 服务（card-host 即此态）——不假装管家在听
+        chat_push("sys", "本机没有管家服务（host 无 octos.turn.start）——本地规则兜底：点「建守护」走分诊建卡")
+        ui.ai_cap_label.set_text(probe_ai_cap())
+        ui.hint.set_text("本机无 AI 服务，已降级本地规则——点「建守护」即可")
+        render_views()
+    }
+}
+
+// === 决赛 S3：PLAN{...} 提案解析 ===
+// 决赛 S4b 兼容修：宿主字符串方法表没有 index_of/last_index_of（Rinx vendored makepad
+//   6cf0385 实测 "method index_of not found on string" 崩掉整段回调；最新 card-host 的

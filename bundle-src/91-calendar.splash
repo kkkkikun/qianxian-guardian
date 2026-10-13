@@ -1,0 +1,186 @@
+// ═══ 部件 12/16：日历：Hinnant 历法换算 / ICS 生成导出 / set_completed / set_bill_cleared
+// ═══ 源文件 bundle-src/91-calendar.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// === 决赛 v0.4.0 S2 地基：绝对日期解析（槽位词 → 下一该周几的 YYYY-MM-DD） ===
+// local_time() 返回 {year month day hour minute second weekday}（weekday 0=周日），
+// card-host 为 UTC（SCRIPT-API ✓ run）——北京 UTC+8 用 hour 修正跨日。
+// 只解析日期不发明钟点（日历写入用 all-day，不吃 no-facts 红线）。
+fn days_from_civil(y, m, d){
+    // Hinnant days_from_civil（纯整数历法，proleptic Gregorian）
+    let yy = y
+    if m <= 2 { yy = yy - 1 }
+    let era = 0
+    if yy >= 0 { era = yy / 400 } else { era = (yy - 399) / 400 }
+    let yoe = yy - era * 400
+    let mp = 0
+    if m > 2 { mp = m - 3 } else { mp = m + 9 }
+    let doy = (153 * mp + 2) / 5 + d - 1
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe
+}
+fn civil_from_days(z, out){
+    // out = [y, m, d] 就地写回（C4：不跨闭包返回多值）
+    // 注意：z 与 days_from_civil 同约定（自 0000-03-01 的天数），无 +719468
+    // （800 天历法抽查抓出过此 bug——两种约定混用会整年 +1970）
+    let era = 0
+    if z >= 0 { era = z / 146097 } else { era = (z - 146096) / 146097 }
+    let doe = z - era * 146097
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    let y = yoe + era * 400
+    let doy2 = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    let mp = (5 * doy2 + 2) / 153
+    let d2 = doy2 - (153 * mp + 2) / 5 + 1
+    let m2 = mp + 3
+    if m2 <= 12 {
+        out[0] = y
+    } else {
+        out[0] = y + 1
+    }
+    out[1] = m2
+    out[2] = d2
+}
+fn weekday_word_to_num(w){
+    if w == "周一" { return 1 }
+    if w == "周二" { return 2 }
+    if w == "周三" { return 3 }
+    if w == "周四" { return 4 }
+    if w == "周五" { return 5 }
+    if w == "周六" { return 6 }
+    if w == "周日" { return 0 }
+    return -1
+}
+fn pad2(n){
+    if n < 10 { return "0" + ("" + n) }
+    return "" + n
+}
+fn resolve_slot_date(slot_day){
+    // 返回 "YYYY-MM-DD"；slot_day 不在词表/解析失败返回 ""（no-facts）
+    let wd = weekday_word_to_num("" + slot_day)
+    if wd < 0 { return "" }
+    let t = local_time()
+    // 北京 = UTC+8：UTC 16 点后北京已是次日
+    let day_shift = 0
+    if t.hour >= 16 { day_shift = 1 }
+    let z = days_from_civil(t.year, t.month, t.day) + day_shift
+    let cur_wd = t.weekday
+    if day_shift == 1 {
+        cur_wd = cur_wd + 1
+        if cur_wd > 6 { cur_wd = 0 }
+    }
+    // 「下周 X」语义不在抽取词表——同名日取最近未来（含今天）
+    let delta = wd - cur_wd
+    if delta < 0 { delta = delta + 7 }
+    let out = [0, 0, 0]
+    civil_from_days(z + delta, out)
+    return ("" + out[0]) + "-" + pad2(out[1]) + "-" + pad2(out[2])
+}
+
+// === 决赛 v0.4.0 S5：ICS 日历导出（本机可真实验证的写入路径） ===
+fn ics_escape(t){
+    let r = "" + t
+    let parts = r.split("\\")
+    r = ""
+    for i in parts.len() { r = r + parts[i] }
+    let parts2 = r.split(";")
+    r = ""
+    for i in parts2.len() { r = r + parts2[i] }
+    let parts3 = r.split(",")
+    r = ""
+    for i in parts3.len() { r = r + parts3[i] }
+    return r
+}
+fn build_ics(ci){
+    let dt = resolve_slot_date(cases[ci]["slot_day"])
+    if dt == "" { return "" }
+    let dd = dt.split("-")
+    let ymd = dd[0] + dd[1] + dd[2]
+    let act = ics_escape(cases[ci]["activity"])
+    if act == "" { act = "聚会" }
+    let loc = ics_escape(cases[ci]["place"])
+    let lines = []
+    lines.push("BEGIN:VCALENDAR")
+    lines.push("VERSION:2.0")
+    lines.push("PRODID:-//qianxian//guardian//CN")
+    lines.push("BEGIN:VEVENT")
+    lines.push("UID:qianxian-" + ("" + cases[ci]["id"]) + "-" + ymd + "@qianxian")
+    lines.push("DTSTART;VALUE=DATE:" + ymd)
+    lines.push("SUMMARY:" + act + "（牵线守护 #" + ("" + cases[ci]["id"]) + "）")
+    if loc != "" { lines.push("LOCATION:" + loc) }
+    lines.push("DESCRIPTION:来自牵线守护（" + ("" + cases[ci]["status"]) + "）。原文：" + ics_escape(cases[ci]["text"]))
+    lines.push("END:VEVENT")
+    lines.push("END:VCALENDAR")
+    let out = ""
+    for i in lines.len() { out = out + lines[i] + "\r\n" }
+    return out
+}
+fn export_ics(id_str){
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    let ics = build_ics(cur)
+    if ics == "" {
+        ui.hint.set_text("日历：#" + id_str + " 没有可解析的日期（slot 未抽取），未生成 ICS")
+        return
+    }
+    let r = fs.write("calendar/qianxian-" + id_str + ".ics", ics)
+    if r == nil {
+        ui.hint.set_text("日历：ICS 已生成 calendar/qianxian-" + id_str + ".ics（通用格式，可导入任意日历）")
+    } else {
+        ui.hint.set_text("日历：ICS 生成失败（" + ("" + r) + "）")
+    }
+}
+
+// === 决赛 v0.4.0 S4：完成态 + AA 收尾 ===
+let state_save_result = "ok"
+fn set_completed(id_str){
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if cases[cur]["status"] != "Confirmed" {
+        ui.hint.set_text("只有已确认的守护能标记完成（#" + id_str + " 现为 " + status_badge_text("" + cases[cur]["status"]) + "）")
+        return
+    }
+    cases[cur]["status"] = "Completed"
+    audit("complete", "#" + id_str + "（" + last_actor + "）")
+    // 活动结束：冲突解除
+    mark_conflicts()
+    rebuild_lines()
+    save()
+    state_save_result = save_result
+    render_views()
+    if state_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " 已标记完成（保存失败，仅在内存）")
+    } else {
+        ui.hint.set_text("#" + id_str + " 已标记完成——聚会圆满，AA 收齐后徽章自动清")
+    }
+}
+fn set_bill_cleared(id_str){
+    let cur = -1
+    for i in cases.len() {
+        if "" + cases[i]["id"] == id_str { cur = i }
+    }
+    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if ("" + cases[cur]["bill_total"]) == "" {
+        ui.hint.set_text("没记过 AA，无需收尾（#" + id_str + "）")
+        return
+    }
+    if cases[cur]["bill_cleared"] == "yes" {
+        ui.hint.set_text("AA 已收齐过（#" + id_str + "）")
+        return
+    }
+    cases[cur]["bill_cleared"] = "yes"
+    audit("bill_cleared", "#" + id_str + "（人工收尾）")
+    rebuild_lines()
+    save()
+    state_save_result = save_result
+    render_views()
+    if state_save_result == "fail" {
+        ui.hint.set_text("#" + id_str + " AA 已收齐（保存失败，仅在内存）")
+    } else {
+        ui.hint.set_text("#" + id_str + " AA 已收齐——收尾完成")
+    }
+}
+

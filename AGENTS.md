@@ -14,9 +14,11 @@ Follow the harness, and do not invent requirements or APIs:
 
 The loop, with `OCTO=<path to OctoSense-App-Flow>/tools/octo` (the CLI
 lives in the harness repository, not here), run from this directory: edit
-`bundle/main.splash` → `$OCTO run bundle --port 8141 --detach` → drive it
+`bundle-src/` 部件（不是 `bundle/main.splash`——它是 `tools/qx-pack.sh`
+的拼接生成物；运行时只认单文件入口，见 app-contract/src/entry.rs）→
+`tools/qx-pack.sh` 重新拼接 → `$OCTO run bundle --port 8141 --detach` → drive it
 (`/click`, `/t`, `/snap`) and `$OCTO shot 8141 out.png` → `curl -s 127.0.0.1:8141/quit`
-→ `$OCTO check bundle`.
+→ `$OCTO check bundle`。
 
 Rules:
 

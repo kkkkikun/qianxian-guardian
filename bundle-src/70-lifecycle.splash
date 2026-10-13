@@ -1,0 +1,223 @@
+// ═══ 部件 7/16：生命周期动作：confirm / reschedule / cancel / undo_cancel（白名单动作端）
+// ═══ 源文件 bundle-src/70-lifecycle.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+fn confirm_case(){
+    // 同意 → 放弃任何待确认 + 关掉撤销窗口（操作后用户应当看到最新状态）
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    let t = target_id()
+    if t["id"] == 0 {
+        ui.hint.set_text("列表为空：先建一条守护再拍板")
+        return
+    }
+    for i in cases.len() {
+        if cases[i]["id"] == t["id"] {
+            if cases[i]["status"] == "Confirmed" {
+                let tag = ""
+                if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
+                ui.hint.set_text("已确认，未重复（#" + "" + t["id"] + " 仍是 Confirmed）" + tag)
+                return
+            }
+            if cases[i]["status"] == "Cancelled" {
+                ui.hint.set_text("该守护已取消，不可确认（#" + "" + t["id"] + "）")
+                return
+            }
+            cases[i]["status"] = "Confirmed"
+            audit("confirm", "#" + "" + t["id"] + " slot=" + cases[i]["slot_day"] + "-" + cases[i]["slot_part"])
+            rebuild_lines()
+            save()   // 结果写入全局 save_result
+            render_views()
+            let tag = ""
+            if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
+            if save_result == "fail" {
+                ui.hint.set_text("保存失败：守护数据可能未落盘（#已被改为 Confirmed in-memory；#" + "" + t["id"] + "）" + tag)
+            } else {
+                ui.hint.set_text("已确认 #" + "" + t["id"] + " → Confirmed（组织者拍板，读回一致）" + tag)
+                // v0.4.0：确认后动作——ICS 自动生成 + 群分享尝试（回调覆盖 hint 为终态文案）
+                post_confirm_actions("" + t["id"])
+            }
+            return
+        }
+    }
+}
+
+fn reschedule_case(){
+    // 改口 → 放弃任何待确认 + 关掉撤销窗口
+    clear_cancel_pending("")
+    undo_win_open = "no"
+    let t = target_id()
+    if t["id"] == 0 {
+        ui.hint.set_text("列表为空：先建一条守护再改口")
+        return
+    }
+    for i in cases.len() {
+        if cases[i]["id"] == t["id"] {
+            if cases[i]["status"] == "Cancelled" {
+                ui.hint.set_text("该守护已取消，改口无效（#" + "" + t["id"] + "）")
+                return
+            }
+            cases[i]["status"] = "Proposing"
+            // === #18 新增：改口后让回执随下次确认刷新；receipt_done 置 ""，
+            //   rebuild_lines 里 Confirmed 分支的幂等判断就会重新填充 receipt_* ===
+            cases[i]["receipt_activity"] = ""
+            cases[i]["receipt_place"] = ""
+            cases[i]["receipt_text"] = ""
+            cases[i]["receipt_done"] = ""
+            rebuild_lines()
+            save()   // 结果写入全局 save_result
+            render_views()
+            let tag = ""
+            if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
+            if save_result == "fail" {
+                ui.hint.set_text("保存失败：守护数据可能未落盘（#已回到 Proposing in-memory；#" + "" + t["id"] + "）" + tag)
+            } else {
+                ui.hint.set_text("改口：#" + "" + t["id"] + " 回到 Proposing，重新收敛（旧确认作废）" + tag)
+            }
+            return
+        }
+    }
+}
+
+// === #8 保留：取消二次确认（两段式按钮态，不用模态） ===
+// 第一次点：进入"待确认"态，按钮文案变"再点一次取消（5s）"，hint 提示；
+// 第二次点：在 5 秒内才执行真正的取消；超时/选其他卡/点其他按钮 → 放弃
+fn cancel_case(){
+    let t = target_id()
+    if t["id"] == 0 {
+        ui.hint.set_text("列表为空：先建一条守护再取消")
+        return
+    }
+    let target = t["id"]
+
+    // 当前已经在对该条目标等待二次确认 → 第二次点击，执行真正取消
+    if cancel_pending_id == target {
+        for i in cases.len() {
+            if cases[i]["id"] == target {
+                cancel_prev_status = "" + cases[i]["status"]
+                cases[i]["status"] = "Cancelled"
+                audit("cancel", "#" + "" + target)
+                // === #18 新增：取消后回执无意义，连同 receipt_done 一起清空；
+                //   若后续撤销恢复状态，下次确认时 rebuild_lines 会重新快照 ===
+                cases[i]["receipt_activity"] = ""
+                cases[i]["receipt_place"] = ""
+                cases[i]["receipt_text"] = ""
+                cases[i]["receipt_done"] = ""
+                cancel_pending_id = 0
+                cancel_pending_deadline = 0
+                cancel_pending_flag = "no"  // #11：确认态按钮撤下
+                // === #25：记录本次被取消的那条 id；undo_cancel 据此只恢复这一条，
+                //   不会把更早被取消的别的条连带恢复（#24 自审 S8 实证 bug）
+                cancelled_last_id = target
+                // === #9：撤销窗口打开 —— 现在起 5 秒内可点「撤销取消」 ===
+                undo_win_open = "yes"
+                undo_show_flag2 = "yes"    // #11：让 on_render 渲染可点的「撤销取消」
+                rebuild_lines()
+                save()   // 结果写入全局 save_result
+                render_views()
+                let tag = ""
+                if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
+                if save_result == "fail" {
+                    ui.hint.set_text("保存失败：守护数据可能未落盘（#已取消 in-memory；#" + "" + target + "，5 秒内可尝试撤销）" + tag)
+                } else {
+                    ui.hint.set_text("已取消 #" + "" + target + "（5 秒内可点「撤销取消」）" + tag)
+                }
+                // 5 秒后撤销窗口到期：自动清掉 hint 文案里的"可撤销"暗示
+                // === #9 修：守卫 undo_win_open —— 若用户已撤销则不再覆盖 ===
+                start_timeout(5.0, || {
+                    if undo_win_open == "yes" {
+                        undo_show_flag2 = "no"          // #11：撤下撤销按钮
+                    undo_win_open = "no"
+                        cancel_prev_status = ""
+                        // === #25：撤销窗口到期，撤销目标也归零；
+                        //   之后任何 undo_cancel 都找不到目标（C4 重建 + 全局数字标记）
+                        cancelled_last_id = 0
+                        rebuild_lines()
+                        render_views()
+                        ui.hint.set_text("取消 #" + "" + target + " 已生效（撤销窗口已过）")
+                    }
+                })
+                return
+            }
+        }
+        return
+    }
+
+    // 第一次点击：进入待确认态（不执行任何状态变更）
+    for i in cases.len() {
+        if cases[i]["id"] == target {
+            cancel_pending_id = target
+            cancel_prev_status = "" + cases[i]["status"]
+            cancel_pending_deadline = 1
+            cancel_pending_flag = "yes"   // #11：让 on_render 渲染「确认取消（5s）」变体
+            rebuild_lines()
+            render_views()
+            let tag = ""
+            if t["fallback"] { tag = "（作用于最新一条，因未选中）" }
+            ui.hint.set_text("再点一次「确认取消」才会真取消 #" + "" + target + "；5 秒内点别的按钮或选别的卡可放弃" + tag)
+            // 5 秒后超时 → 放弃确认态
+            start_timeout(5.0, || {
+                if cancel_pending_id == target {
+                    cancel_pending_id = 0
+                    cancel_pending_deadline = 0
+                    cancel_prev_status = ""
+                    cancel_pending_flag = "no"
+                    undo_show_flag2 = "no"
+                    rebuild_lines()
+                    render_views()
+                    ui.hint.set_text("已放弃取消 #" + "" + target + "（5 秒内未再点取消）")
+                }
+            })
+            return
+        }
+    }
+}
+
+// === #8 保留 + #9 修 + #25 修：撤销刚发生的取消（5 秒窗口内，仅恢复刚取消的那一条） ===
+fn undo_cancel(){
+    if cancel_prev_status == "" || undo_win_open == "no" || cancelled_last_id == 0 {
+        ui.hint.set_text("没有可撤销的取消（5 秒窗口已过或未取消过）")
+        return
+    }
+    let restored_id = "0"
+    let target_id_str = "" + cancelled_last_id
+    // === #25：只恢复 id==cancelled_last_id 的那一条，其余 Cancelled 不动 ===
+    for i in cases.len() {
+        if ("" + cases[i]["id"]) == target_id_str {
+            if cases[i]["status"] == "Cancelled" {
+                cases[i]["status"] = cancel_prev_status
+                // === #18：恢复状态后让回执重新快照（之前清掉的字段保留空，
+                //   下次确认/重建时由 rebuild_lines 兜底拉新值） ===
+                restored_id = "" + cases[i]["id"]
+            } else {
+                // 防御性分支：id 命中但状态已经不是 Cancelled（极端时序错位），
+                // 也提示用户并清掉撤销目标，避免悬空
+                restored_id = "0"
+            }
+            break   // #25：id 唯一，找到即可跳出（C4 重写法：不重建数组，只改一条）
+        }
+    }
+    cancel_pending_id = 0
+    cancel_pending_deadline = 0
+    let prev = cancel_prev_status
+    cancel_prev_status = ""
+    // === #25：撤销成功后归零，避免后续 undo_cancel 重复恢复同一目标 ===
+    cancelled_last_id = 0
+    // === #9 关键：关撤销窗口 + 阻止 5s 定时器覆盖当前 hint ===
+    undo_win_open = "no"
+    undo_show_flag2 = "no"   // #11：撤下可点的撤销按钮
+    cancel_pending_flag = "no"
+    rebuild_lines()
+    save()   // 结果写入全局 save_result
+    render_views()
+    if save_result == "fail" {
+        if restored_id != "0" && restored_id != "" {
+            ui.hint.set_text("保存失败：守护数据可能未落盘（#已撤销取消 in-memory；#" + restored_id + " 恢复到 " + prev + "）")
+        } else {
+            ui.hint.set_text("保存失败：守护数据可能未落盘（已撤销取消 in-memory）")
+        }
+    } else if restored_id != "0" && restored_id != "" {
+        ui.hint.set_text("已撤销取消 #" + restored_id + " → 恢复到 " + prev + "（仅本次，其他已取消条目维持）")
+    } else {
+        ui.hint.set_text("已撤销取消（但目标条目已不在 Cancelled 状态，未改动）")
+    }
+}
+

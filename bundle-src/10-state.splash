@@ -1,0 +1,274 @@
+// ═══ 部件 1/16：全局状态与基础工具（扁平数组/草稿/audit/count_people/状态徽章映射）
+// ═══ 源文件 bundle-src/10-state.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
+// 「牵线」聚会筹办守护 — script-app 主提交物（A 路线）
+// 无 AI 完整可用：本地规则分诊 → 提案 → 确认 → 活动簿，全部确定性可复现。
+// AI 仅为可选增强（有 octos.* 宿主服务时才出现按钮），不可用时明确降级。
+
+let cases = []
+let case_ids = []           // 每条 case 的 id 字符串（扁平化供 on_render 只读）
+let case_lines = []         // 每条 case 的标题字符串（#N · 活动）
+let case_text_lines = []    // 每条 case 的原文字符串
+let case_statuses = []      // 每条 case 的状态字符串（"Proposing"/"Confirmed"/"Cancelled"）
+let case_selected = []      // 每条 case 的选中标记字符串（"yes"/"no"）
+let case_badge_text = []    // 每条 case 的徽章文字字符串
+let case_receipt = []       // 每条 case 的回执四行（字符串数组，无回执为空数组 []）
+let case_place_lines = []   // 每条 case 的地点字符串（供 on_render 读，避免闭包读对象字段）
+// === #17b 新增：时间槽抽取 + 冲突检测（扁平字符串数组，供 on_render 只读） ===
+// slot_day/slot_part 两者都抽到才有冲突检测意义；任一抽不到就留空，
+// 即「宁可空着不猜」（防编造）。conflict 是 "yes"/"no"。
+let case_slot_day = []      // 每条 case 的「星期几」字符串（"周一"…/"周日"/""）
+let case_slot_part = []     // 每条 case 的「时段」字符串（"上午"/"中午"/"下午"/"晚上"/""）
+let case_conflict = []      // 每条 case 的冲突标记（"yes"/"no"）
+let case_people_line = []            // 每条 case 的参与人字符串（"未填写" 或 "小明、小红"）
+let case_conflict_lines = []
+let case_conflict_party = []   // 冲突双方整行（扁平字符串，单独存避免 split/嵌套）// 每条 case 的冲突卡内容字符串数组（双方拼成单个字符串，防陷阱 A）
+// === #30 新增：AA 收账（均摊）— 每条 case 两条扁平字符串 ===
+// bill_total_str  = "300" / "300.5" / ""（原样存用户输入，展示前再转 f64）
+// bill_split_text = 已用 bill_display 算好的「约 ¥X.XX/人」或「未记账」（on_render 只读）
+let case_bill_total_str = []
+let case_bill_split_text = []
+let bill_save_result = "ok"           // C7 字符串标记：保存失败可见
+let ui_mode = "list"                   // #31f 外环修：列表/详情模式切换（flag+render 既有模式）
+let ai_pending = "no"                  // #32：AI 回合进行中（回调可能不触发，start_timeout 兜底降级）
+let ai_seq = 0                         // 决赛改进②：AI 回合代际序号——迟到回调按序号丢弃，不覆盖降级提示
+let people_draft = ""                  // #31f：参与人输入草稿（on_render 内输入行走草稿，免具名绑定）
+let bill_draft = ""                    // #31f：AA总额输入草稿
+
+// === 决赛 S3：管家模式（agent 驱动全流程，人只拍板）状态 ===
+// 对话 transcript 用双扁平数组（on_render 只读字符串数组，#4/#5 硬约束）：
+//   chat_role[i] = "me"（用户）/ "ai"（管家）/ "sys"（系统提示，居中灰字）
+let chat_role = []
+let chat_text = []
+// 待拍板提案（一次至多一个；管家回复尾部的 PLAN{...} 解析结果）。
+//   plan_op: create/confirm/reschedule/cancel/add_people/set_bill
+//   plan_id: 目标守护 id 字符串（create 为空）
+//   plan_src: create 时的消息原文（no-facts 溯源；空则拒绝执行）
+//   plan_summary: 管家给人看的一句说明（PLAN 行之前的话）
+//   plan_lines: 提案卡逐行展示内容（函数上下文预构建，on_render 只读）
+let plan_pending = "no"
+let plan_op = ""
+let plan_id = ""
+let plan_src = ""
+let plan_summary = ""
+let plan_activity = ""
+let plan_day = ""
+let plan_part = ""
+let plan_place = ""
+let plan_people = ""
+let plan_bill = ""
+// v0.9.0 WP1：mark_paid 的字段（who/amount）；clear 两段式确认的阶段标记
+let plan_who = ""
+let plan_amount = ""
+let plan_clear_stage = 0
+let plan_lines = []
+// === v0.8.0 W1（调研报告 P0）：拍板反馈回路 —— 拒绝不是死路，是改道入口 ===
+//   decline_prompt: 两段式理由选择态（第一次点「放弃」先问理由，8 秒不选自动收回）
+//   decline_feedback: 一次性反馈（【上次提案被拒：…】随下一轮管家 turn 注入后清空）
+//   三级拍板作用域只取两档——「仅此次」（默认）与「拒绝并改写」；「同类放行」与
+//   「人只拍板」红线冲突，诚实不做（Copilot CLI 三档在案的取舍，理由记 evidence）。
+let decline_prompt = "no"
+let decline_feedback = ""
+fn set_people_draft(s){
+    people_draft = s
+}
+fn set_bill_draft(s){
+    bill_draft = s
+}
+// === #9 新增：每条 case 的内联展开态（"yes"/"no"），用字符串标记数组驱动 on_render ===
+let case_expanded = []      // 点卡片 = 选中 + 切换该条的展开/折叠
+
+// === v0.6.0 S-P2：按人收款（独立文件 payments.json，扁平数组供 on_render 只读） ===
+// records: {case_id, person, amount:字符串}；独立文件避开 cases 对象嵌套数组坑（C4/陷阱 A）
+let pay_case = []
+let pay_person = []
+let pay_amount = []
+let pay_save_result = "ok"
+// === v0.6.0 P4：操作审计日志（Evidence Pack 数据源；actor=user/agent）
+let audit_log = []
+let last_actor = "user"
+fn audit(action, detail){
+    let t = local_time()
+    let ts = ("" + t.year) + "-" + pad2(t.month) + "-" + pad2(t.day) + "T" + pad2(t.hour) + ":" + pad2(t.minute) + ":" + pad2(t.second) + "Z+8"
+    audit_log.push(ts + " | " + last_actor + " | " + action + " | " + ("" + detail))
+    // v0.10.0 WP5：审计链持久化（结案报告时间线 + Evidence Pack 重启后仍可用）。
+    //   截尾 200 防文件无界增长；best-effort（写失败不打断动作本身，下条会自然重写）。
+    while audit_log.len() > 200 { audit_log.pop() }
+    fs.write("audit.json", {audit: audit_log}.to_json())
+}
+
+// === #30 新增：AA 收账均摊（参考 evidence/probe30-float-paradigm.md 真机范式） ===
+// 总额存原样字符串，展示前再 to_f64；人数复用 people 字段逗号计数。
+//   0/负数/空/垃圾 → 由 bill_display 的 total_f > 0 正向守卫统一兜底为「未记账」。
+//   不用 \n 换行（手册 B5）；不用嵌套数组（手册 C2/陷阱 A）。
+fn cut2(x){
+    let s = "" + x
+    let cs = s.to_chars()
+    let n = cs.len()
+    let dot = -1
+    for i in n {
+        if cs[i] == 46 { dot = i }
+    }
+    let take = n
+    if dot >= 0 {
+        take = dot + 3
+        if take > n { take = n }
+    }
+    let out = ""
+    for i in take {
+        if cs[i] == 46 { out = out + "." } else { out = out + ("" + (cs[i] - 48)) }
+    }
+    if dot < 0 { out = out + ".00" }
+    if dot >= 0 {
+        if (n - dot) == 2 { out = out + "0" }
+    }
+    return out
+}
+fn bill_display(total_str, n_f){
+    let bt = "" + total_str
+    let total_f = bt.to_f64()
+    let out = "未记账"
+    if total_f > 0 {
+        if n_f > 0 {
+            out = "约 ¥" + cut2(total_f / n_f) + "/人"
+        }
+    }
+    return out
+}
+fn count_people(people_str){
+    let s = "" + people_str
+    let n = 0
+    if s == "" { return 0 }
+    for nm in s.split(",") {
+        if nm.trim() != "" { n = n + 1 }
+    }
+    return n
+}
+
+let seq = 0
+let selected_id = 0  // 选中态：0 表示无选中
+
+// === #8 保留：取消二次确认 + 撤销态 ===
+let cancel_pending_id = 0           // 第一次点取消时的目标 id（0 = 无待确认）
+let cancel_prev_status = ""         // 取消前该条的状态（用于撤销恢复）
+let cancel_pending_deadline = 0     // 取消二次确认的截止时刻（ms 级 epoch，由 start_timeout 推进）
+// === #25 新增：撤销目标限定（解决 #24 自审 S8 + 外环复核 #25 实证 bug）===
+// 原 undo_cancel 遍历所有 cases 把 status=="Cancelled" 的全恢复，导致
+//「取消 #1 → 取消 #2 → 撤销」把 #1 也连带恢复，违反"撤销只针对刚发生的操作"。
+// 修法 = 记录本次取消的那一条 id（cancelled_last_id，0 表示无），撤销时只恢复 id
+// 与其相等的那一条，其余 Cancelled 维持原状；恢复成功后 cancelled_last_id=0。
+let cancelled_last_id = 0           // 最近一次被取消的那条 id（0 = 无；撤销成功 / 放弃 / 5s 到期后归零）
+
+// === #9 新增：撤销窗口标记 —— 防止 5 秒定时器在用户已撤销之后再次覆盖 hint 文案 ===
+// 撤销窗口打开 = 撤销按钮可用；一旦撤销成功或窗口到期，必须把它关掉，
+// 否则 5s 后那个 start_timeout 回调会把"已撤销 #N"的提示覆盖掉。
+let undo_win_open = "no"
+let cancel_pending_flag = "no"          // 取消待确认标记（供 on_render 渲染确认态按钮）
+let undo_show_flag2 = "no"             // 撤销条可见标记（供 on_render 渲染撤销按钮）            // "yes"/"no"
+
+// === #14 新增：示例填充 / 导出 / 清空全部 三个数据控制动作的状态 ===
+// 清空走"两段式确认"复用 cancel_pending_flag 的 5s 思路：
+//   第一次点：clear_pending_flag = "yes"，按钮文案变"再点一次清空（5s）"，hint 提示；
+//   第二次点（5s 内）：fs.remove("cases.json") + 内存清空 + hint 明示条数；
+//   超时 / 点别的按钮 → 放弃。
+// 用**字符串标记**而非布尔，与 cancel_pending_flag 同源；本 runtime 下函数返回
+// 布尔在调用点 == false 比较不可靠（黑板 #13 实证）。
+let clear_pending_flag = "no"           // 清空待确认标记（"yes"/"no"）
+let clear_pending_deadline = 0         // 清空确认的截止时刻（仅占位，不做时间比较，start_timeout 自身 5s 守护）
+let clear_prev_count = 0               // 进入待确认态时记下当前条数，用于最终 hint 明示
+
+// === #19 新增：「仍然建守护」二次确认态（分诊仅命中时间词时使用）===
+// 当 triage 返回 "time_only"（仅命中时间词、缺活动/约定/聚会场景词），
+// 不直接拦死用户——而是进入"待用户主动确认"态：force_create_pending = "yes"，
+// force_create_text 记下首次按"建守护"时的输入原文；hint 文案明示
+// "有时间，但这看起来不像聚会安排——要牵线跟这条吗？"并提示再点一次"建守护"即可。
+// 第二次按"建守护"且原文未变 → 强制建守护（标记 level="force"，便于回执/hint 溯源）。
+// 用户改了输入原文 / 5s 超时 / 点了别的按钮 → 放弃。
+let force_create_pending = "no"
+let force_create_text = ""
+let force_create_deadline = 0
+
+// === #10 新增：筛选状态 + 计数（扁平字符串，不读 cases[i][...]） ===
+// current_filter 是当前选中的筛选标签："all" / "Proposing" / "Confirmed" / "Cancelled"
+// filtered_idxs 是按当前筛选过滤后的下标整数数组（驱动 on_render 列表，避免字符串→int 回转）
+// filter_count_str 是右侧"共 N 条"的展示字符串（数字必须字符串化，#4/#5 实证）
+// filter_total_str 是总条数（用于筛选空文案："共 X 条守护，筛选后 0 条"）
+let current_filter = "all"
+let filtered_idxs = []
+let filter_count_str = "0"
+let filter_total_str = "0"
+
+// === #16 新增：「怎么用」说明卡展开标记 ===
+// 字符串标记（"yes"/"no"），与 cancel_pending_flag / undo_show_flag2 同源（本 runtime
+//   函数返回布尔不可靠，#13 实证）。默认行为：seq == 0（从未建过守护）→ "yes" 自动展开；
+//   seq > 0（建过守护）→ "no" 默认收起。用户点首屏底部「怎么用？」按钮可手动切换。
+// 这里直接读顶层 seq 初值（load() 之前为 0；load() 完成后若 parsed_seq > 0 自动落到 "no"）。
+let howto_show_flag = if seq == 0 { "yes" } else { "no" }
+// === #12 新增：搜索词状态（"all" 之外的第二维度，叠加在标签筛选之上） ===
+// current_query 是搜索框当前文本（实时过滤触发源；空串=不过滤）
+// matched_total_str 是「按当前标签的总命中数」（不含搜索词），即"共 N/M"中的 M
+let current_query = ""
+let matched_total_str = "0"
+
+// === #9 新增：扁平字段——避免 on_render 闭包读 cases[i][...]（#4/#5/#7/#8 实证坑） ===
+// 卡片内联展开后，"活动/地点/原文/状态" 这些原来只在详情层用的字段也要按行铺平，
+// 否则 on_render 闭包要去摸对象字段，触发实证过的类型/作用域问题。
+let case_activity_lines = []        // 每条 case 的活动字符串（无则"（未抽取到）"）
+let case_place_full = []            // 每条 case 的地点字符串（无则"（未抽取到）"）
+let case_status_text = []           // 每条 case 的状态中文（"待拍板"/"已确认"/"已取消"）
+
+// 状态色：行首徽章文字色与底色（Proposing 灰 / Confirmed 绿 / Cancelled 红）
+// 注：颜色必须是颜色字面量（#x…），不能返回字符串——draw_bg.color 期望 Vec4f
+fn status_badge_bg(st){
+    if st == "Confirmed" { return #xe8f3ec }
+    if st == "Cancelled" { return #xf6e8e3 }
+    return #xf1ece4  // Proposing / 兜底灰
+}
+fn status_badge_fg(st){
+    if st == "Confirmed" { return #x2f7d4f }
+    if st == "Cancelled" { return #xa14d3c }
+    return #x6e675e  // Proposing / 兜底灰
+}
+fn status_badge_text(st){
+    if st == "Confirmed" { return "已确认" }
+    if st == "Completed" { return "已完成" }
+    if st == "Cancelled" { return "已取消" }
+    if st == "Proposing" { return "待拍板" }
+    return "" + st
+}
+fn status_bar_color(st){
+    if st == "Confirmed" { return #x2f7d4f }
+    if st == "Cancelled" { return #xa14d3c }
+    return #xc9bfb2  // Proposing / 兜底
+}
+
+// === 决赛 S3：#42 旧「AI 建议卡」机制整体退役（ai_card_visible/ai_act/ai_day/ai_part/
+//   ai_place/ai_badge_bg/ai_badge_fg 全部移除，配套 ai_parse/ai_adopt/ai_dismiss/parse_apply
+//   一并退役）——由管家模式取代：
+//   单通道 octos.turn.start 对话（Rinx 宿主仅接受 {text} 单参数，契约实测），
+//   回复尾部 PLAN{...} 机器提案 → 待拍板卡 → 人点「拍板」才走白名单动作。
+//   LLM 依旧不直接碰状态机（评审红线不变），且「拍板」比旧「采纳到输入框」更进一步：
+//   一次点击完成核对+执行，人工点击数从 3 次降到 1 次。
+
+// === #43 D 切片：回执模板三档可切换（standard/brief/emoji）+ pref.json 持久化 ===
+// 字符串标记（与 howto_show_flag/ai_card_visible 同源；照 #13 实证范式）。
+// 合法值三档，其他值一律按 standard 兜底（rebuild_lines 内归一化）。
+// "app 记住人的偏好" 演示：点首屏底部「风格：X」按钮循环切换，写 pref.json，
+// 重启后 load() 读回内存 → 已有守护立即按新风格重排（rebuild_lines 即时刷新）。
+let receipt_style = "standard"
+// pref.json 写入失败标记（照 save_result 范式字符串：调用点用 == "fail" 判定）。
+// 与 save_result 不同：本任务不需返回值给调用点（hint 已内置两路文案），
+// 留全局只为方便调试/未来追溯；hint 范式已要求 fs.write 返回非 nil = 失败。
+let pref_save_result = "ok"
+
+// 重建：把所有渲染所需的字段都扁平化为字符串/字符串数组，
+// 让 on_render 闭包只读字符串数组，不读 cases[i][...]（#4/#5/#7/#8 实证坑）
+let guard_light = ""
+// === v0.9.0 WP2：守护灯 chips 扁平数组 + 详情红线阶段（闭包只读，硬约束同源） ===
+let guard_chip_text = []
+let guard_chip_kind = []
+let guard_title = "守护中"
+let guard_chips_text = ""
+let case_stage = []          // 生命周期阶段：-1=已取消（不画线）0=待拍板 1=已确认 2=已完成未收尾 3=已收尾
+let case_bill_cleared = []   // 每条守护的 bill_cleared（chips「待收尾」与红线收尾段用）
+let case_conflict_with = []  // v0.9.0 WP2：冲突横幅紧凑文案「与 #N·活动」（闭包只读）
+let case_conflict_other = [] // v0.10.1：冲突对方「#N·活动」单独扁平化——横幅按 HTML 分段（加粗对方）

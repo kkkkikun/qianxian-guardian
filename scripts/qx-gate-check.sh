@@ -14,6 +14,9 @@ check() { # check <名称> <实测> <期望>
 }
 
 echo "== ① git HEAD 与 manifest digest =="
+# 拆分后第一课：bundle/main.splash 是 bundle-src/ 的拼接生成物，不同步=门禁失败
+if bash tools/qx-pack.sh --check >/dev/null 2>&1; then say "pack 同步（bundle-src→bundle）" "PASS"
+else say "pack 同步（bundle-src→bundle）" "FAIL（先跑 tools/qx-pack.sh）"; FAIL=1; fi
 HEAD_SHORT=$(git rev-parse --short HEAD)
 say "git HEAD (short)" "$HEAD_SHORT"
 MANIFEST_DIGEST=$(python3 -c "import json; print(json.load(open('bundle/manifest.json'))['integrity']['bundle_blake3'])")
