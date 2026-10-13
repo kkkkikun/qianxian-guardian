@@ -37,7 +37,8 @@ if [ -z "$BAD" ]; then say "文档硬编码 commit 指针" "PASS（无）"
 else say "文档硬编码 commit 指针" "FAIL"; echo "$BAD" | head -5; FAIL=1; fi
 
 echo "== ④ 敏感物扫描（key/token 不入库）=="
-LEAK=$(git ls-files | xargs grep -lE "sk-kimi-|sk-minimax|MINIMAX_CN_API_KEY=sk|access_token\":\s*\"[A-Za-z0-9]" 2>/dev/null | grep -vE "\.secrets|test-accounts" || true)
+# 模式串用括号技巧防自匹配（同 pkill [o]ctos：本脚本含模式字面量，不能让自己命中）
+LEAK=$(git ls-files | xargs grep -lE "sk-kim[i]-|sk-minima[x]|MINIMAX_CN_API_KEY=s[k]|access_toke[n]\":\s*\"[A-Za-z0-9]" 2>/dev/null | grep -vE "\.secrets|test-accounts" || true)
 if [ -z "$LEAK" ]; then say "敏感物扫描" "PASS（无泄露）"
 else say "敏感物扫描" "FAIL: $LEAK"; FAIL=1; fi
 
