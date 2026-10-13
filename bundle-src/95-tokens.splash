@@ -4,6 +4,20 @@ let ink = #x2b2722
 let secondary = #x6e675e
 let accent = #xc7402f
 
+// === v0.10.2：真粗体 CJK 字族（像素级实测发现的关键修正）===
+//   theme.font_bold 的 font_family 只有 latin 成员（IBMPlexSans-SemiBold），CJK 落到
+//   LXGWWenKaiRegular —— 中文"粗体"一直是假粗。运行时内嵌 LXGWWenKaiBold.ttf
+//   （makepad_widgets:resources/，探针实证可渲染、笔画明显加粗），显式接上。
+//   用法与 theme.font_bold 同款：draw_text.text_style: font_bold_cjk{font_size: 9}
+let font_bold_cjk = TextStyle{
+    font_family: FontFamily{
+        latin := FontMember{res: crate_resource("makepad_widgets:resources/IBMPlexSans-SemiBold.ttf") asc: -0.1 desc: 0.0}
+        chinese := FontMember{res: crate_resource("makepad_widgets:resources/LXGWWenKaiBold.ttf") asc: 0.0 desc: 0.0}
+        emoji := FontMember{res: crate_resource("makepad_widgets:resources/NotoColorEmoji.ttf") asc: 0.0 desc: 0.0}
+    }
+    line_spacing: 1.2
+}
+
 // 组件工厂：第一方 RoundedView/徽章范式（#7 落实）
 // show_bg:true 是必填，否则 RoundedView 不绘背景
 // #48 「红线」设计pass：纸白卡 + 发丝描边 + 暖投影（全部零布局尺寸变化）
@@ -31,13 +45,13 @@ let Card = RoundedView{width: Fill height: Fit flow: Down spacing: 8 padding: In
 //   用「账 目 · AA」空格语义代替 letter-spacing）。
 let Badge = RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 4 bottom: 4}
     show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 7.0}
-let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 8}}
+let BadgeText = Label{text: "" draw_text.color: secondary draw_text.text_style: font_bold_cjk{font_size: 8}}
 let TitleLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 11}
 let TextLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 9}
 let ReceiptLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 8}
 
 // === #9 新增：内联展开用的小字段标签（次级色粗体 13），照 #8 DetailSection 范式 ===
-let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 9}}
+let SectionLabel = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style: font_bold_cjk{font_size: 9}}
 let BodyLine = Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_size: 10}
 let MetaLine = Label{width: Fill text: "" draw_text.color: secondary draw_text.text_style.font_size: 9}
 

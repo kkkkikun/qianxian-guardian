@@ -12,7 +12,7 @@ fn start_converge(){
     for i in cases.len() {
         if cases[i]["id"] == selected_id { ci = i }
     }
-    if ci < 0 { ui.hint.set_text("先选中一条守护再发投票"); return }
+    if ci < 0 { set_hint("先选中一条守护再发投票"); return }
     let id_str = "" + cases[ci]["id"]
     let act = "" + cases[ci]["activity"]
     if act == "" { act = "聚会" }
@@ -27,16 +27,16 @@ fn start_converge(){
     if host.has("matrix.send_message") {
         host.request("matrix.send_message", {body: body}, fn(r){
             if r.is_ok {
-                ui.hint.set_text("投票卡已发到群 ✓——成员回复字母后，回来点「刷新计票」")
+                set_hint("投票卡已发到群 ✓——成员回复字母后，回来点「刷新计票」")
                 audit("converge_start", "#" + converge_case_id + "（文字投票卡）")
             } else {
-                ui.hint.set_text("发投票失败：" + r.error + "（可用下方文案手动转发）")
+                set_hint("发投票失败：" + r.error + "（可用下方文案手动转发）")
             }
         })
     } else {
         // 诚实降级：无 matrix 服务→屏显文案供手动转发
         ui.msg_input.set_text(body)
-        ui.hint.set_text("本宿主无 matrix 服务——投票文案已填入输入框，复制转发到群即可（成员回复后回这里刷新计票）")
+        set_hint("本宿主无 matrix 服务——投票文案已填入输入框，复制转发到群即可（成员回复后回这里刷新计票）")
     }
     audit("converge_start", "#" + id_str + "（文字投票卡发起）")
     render_views()
@@ -44,26 +44,26 @@ fn start_converge(){
 // ② 刷新计票：读伴生进程写的 converge.json（进程读房间消息归票；无文件=提示先跑伴生进程）
 fn refresh_converge(){
     if !fs.exists("converge.json") {
-        ui.hint.set_text("还没有计票数据——先跑伴生进程：python3 tools/qx-converge-bridge.py --room '<房间>' --jail <jail>（它会读群消息归票）")
+        set_hint("还没有计票数据——先跑伴生进程：python3 tools/qx-converge-bridge.py --room '<房间>' --jail <jail>（它会读群消息归票）")
         return
     }
     let v = ("" + fs.read("converge.json")).parse_json()
     if v == nil {
-        ui.hint.set_text("converge.json 解析失败（伴生进程写入中？稍后再试）")
+        set_hint("converge.json 解析失败（伴生进程写入中？稍后再试）")
         return
     }
     if converge_case_id == "" {
         converge_case_id = "" + v["case_id"]
     }
     if ("" + v["case_id"]) != converge_case_id {
-        ui.hint.set_text("计票文件属于另一场投票（#" + ("" + v["case_id"]) + "）——先完成那场或重新发起")
+        set_hint("计票文件属于另一场投票（#" + ("" + v["case_id"]) + "）——先完成那场或重新发起")
         return
     }
     converge_summary = "" + v["summary"]
     converge_winner = "" + v["winner"]
     converge_winner_slot = "" + v["winner_slot"]
     render_views()
-    ui.hint.set_text("计票：" + converge_summary)
+    set_hint("计票：" + converge_summary)
 }
 // ③ 管家收敛：把计票注入 turn，让模型出 reschedule PLAN（白名单拍板链）
 fn converge_butler(){
@@ -80,7 +80,7 @@ fn converge_butler(){
         }
     }
     if converge_case_id == "" || converge_winner_slot == "" {
-        ui.hint.set_text("先「刷新计票」拿到票数分布（平票/零票时请人工定夺，不收敛）")
+        set_hint("先「刷新计票」拿到票数分布（平票/零票时请人工定夺，不收敛）")
         return
     }
     let id_str = converge_case_id
@@ -88,7 +88,7 @@ fn converge_butler(){
     for i in cases.len() {
         if "" + cases[i]["id"] == id_str { ci = i }
     }
-    if ci < 0 { ui.hint.set_text("找不到 #" + id_str); return }
+    if ci < 0 { set_hint("找不到 #" + id_str); return }
     // 直接用确定性白名单构造提案（不经模型——计票收敛是纯确定性场景；
     //   「票数不足的时段」记沉默留痕）
     plan_op = "reschedule"
@@ -117,7 +117,7 @@ fn converge_butler(){
     }
     audit("converge_plan", "#" + id_str + " → " + converge_winner_slot + "（" + converge_summary + "）")
     enter_chat()
-    ui.hint.set_text("管家已按群投票出提案——过目后点「拍板」")
+    set_hint("管家已按群投票出提案——过目后点「拍板」")
 }
 
 fn share_fin_report(){
@@ -139,13 +139,13 @@ fn share_fin_report(){
     if host.has("matrix.send_message") {
         host.request("matrix.send_message", {body: body}, fn(r){
             if r.is_ok {
-                ui.hint.set_text("聚会回顾已分享到群 ✓")
+                set_hint("聚会回顾已分享到群 ✓")
             } else {
-                ui.hint.set_text("分享失败：" + r.error + "（回顾卡已在详情页，可手动复制转发）")
+                set_hint("分享失败：" + r.error + "（回顾卡已在详情页，可手动复制转发）")
             }
         })
     } else {
-        ui.hint.set_text("本宿主无 matrix 服务，无法发群——回顾卡已在详情页，可手动复制转发")
+        set_hint("本宿主无 matrix 服务，无法发群——回顾卡已在详情页，可手动复制转发")
     }
 }
 
@@ -173,10 +173,10 @@ fn post_confirm_actions(id_str){
             let body = "✅ 牵线确认：#" + id_str + " " + act + "（" + ("" + cases[cur2]["slot_day"]) + "-" + ("" + cases[cur2]["slot_part"]) + "）· " + ("" + cases[cur2]["place"]) + " —— T-24h 提醒已登记"
             host.request("matrix.send_message", {body: body}, fn(r){
                 if r.is_ok {
-                    ui.hint.set_text("群分享：已发送到授权房间 ✓（T-24h 提醒已登记）")
+                    set_hint("群分享：已发送到授权房间 ✓（T-24h 提醒已登记）")
                 } else {
                     // 46b 诚实可见性：透出真实失败原因，不吞错误
-                    ui.hint.set_text("群分享失败：" + r.error + " —— 提醒已在本机登记，ICS 已生成")
+                    set_hint("群分享失败：" + r.error + " —— 提醒已在本机登记，ICS 已生成")
                 }
             })
         }
@@ -198,7 +198,7 @@ fn post_confirm_actions(id_str){
 let cal_write_id = ""
 let cal_handle = ""
 fn cal_degrade(stage, err){
-    ui.hint.set_text("本机日历：" + stage + "失败（" + err + "）——已生成 ICS，可导入任何日历软件")
+    set_hint("本机日历：" + stage + "失败（" + err + "）——已生成 ICS，可导入任何日历软件")
 }
 fn calendar_write_case(id_str){
     cal_write_id = id_str
@@ -211,7 +211,7 @@ fn calendar_write_case(id_str){
     // all-day 事件需要绝对日期（no-facts：相对词对不上日历就不写，不发明）
     let td = "" + cases[cur]["target_date"]
     if td == "" {
-        ui.hint.set_text("本机日历：活动日期未解析到（" + ("" + cases[cur]["slot_day"]) + " 对不上具体日期）——已生成 ICS，可手动导入")
+        set_hint("本机日历：活动日期未解析到（" + ("" + cases[cur]["slot_day"]) + " 对不上具体日期）——已生成 ICS，可手动导入")
         return
     }
     host.request("device_calendar.permission.request", {}, fn(r){
@@ -285,7 +285,7 @@ fn calendar_write_case(id_str){
                 host.request("device_calendar.events.create", {handle: cal_handle, event: {title: title2, start_ms: start_ms, end_ms: start_ms + 86400000, timezone: "UTC", all_day: true, location: loc2, notes: notes2}}, fn(r4){
                     if r4.is_ok {
                         audit("calendar_write", "#" + cal_write_id + " → 系统日历（原生面板确认）")
-                        ui.hint.set_text("本机日历：已写入系统日历 ✓（你在原生面板按了确认）——提醒与 ICS 同步在案")
+                        set_hint("本机日历：已写入系统日历 ✓（你在原生面板按了确认）——提醒与 ICS 同步在案")
                     } else {
                         cal_degrade("写入", r4.error)
                     }

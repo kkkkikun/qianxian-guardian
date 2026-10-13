@@ -2,7 +2,7 @@
 // ═══ 源文件 bundle-src/88-slots-conflicts.splash；bundle/main.splash 是 tools/qx-pack.sh 的拼接生成物，勿直接编辑。
 fn set_slot(id_str, nd, np){
     if id_str == "" || id_str == "0" {
-        ui.hint.set_text("先选中一条守护再改时间")
+        set_hint("先选中一条守护再改时间")
         return
     }
     let cur = -1
@@ -10,15 +10,15 @@ fn set_slot(id_str, nd, np){
         if "" + cases[si]["id"] == id_str { cur = si }
     }
     if cur < 0 {
-        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        set_hint("找不到 #" + id_str + "，请重新选中")
         return
     }
     if cases[cur]["status"] == "Cancelled" {
-        ui.hint.set_text("该守护已取消，改时间无效（#" + id_str + "）")
+        set_hint("该守护已取消，改时间无效（#" + id_str + "）")
         return
     }
     if nd == "" && np == "" {
-        ui.hint.set_text("改期需要时间（星期几/时段至少其一）")
+        set_hint("改期需要时间（星期几/时段至少其一）")
         return
     }
     // C4 重建数组（改 slot 两字段 + slot_init_asked 归零，其余原样保留）
@@ -59,11 +59,11 @@ fn set_slot(id_str, nd, np){
     slot_save_result = save_result
     render_views()
     if slot_save_result == "fail" {
-        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（保存失败，仅在内存）")
+        set_hint("#" + id_str + " 改期 " + nd + "-" + np + "（保存失败，仅在内存）")
     } else if my_conflict == "yes" {
-        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（与另一条同时段，仍冲突）")
+        set_hint("#" + id_str + " 改期 " + nd + "-" + np + "（与另一条同时段，仍冲突）")
     } else {
-        ui.hint.set_text("#" + id_str + " 改期 " + nd + "-" + np + "（已无冲突）")
+        set_hint("#" + id_str + " 改期 " + nd + "-" + np + "（已无冲突）")
     }
 }
 

@@ -21,7 +21,7 @@ fn ai_timeout(my){
         ai_pending = "no"
         chat_push("sys", "管家无响应（45 秒）——已降级本地规则，点「建守护」即可")
         render_views()
-        ui.hint.set_text("AI 无响应（45 秒），已降级本地规则——直接点「建守护」即可")
+        set_hint("AI 无响应（45 秒），已降级本地规则——直接点「建守护」即可")
     }
 }
 // 对话气泡入栈（role: "me"/"ai"/"sys"）；聊天视图可见时即时重渲染
@@ -65,12 +65,12 @@ fn build_agent_turn(user_text){
 // 管家入口：输入框文本 → 聊天视图 → turn.start（无服务则诚实降级）
 fn butler_send(){
     if ai_pending == "yes" {
-        ui.hint.set_text("管家还在思考，请稍候（30 秒无响应自动降级）")
+        set_hint("管家还在思考，请稍候（30 秒无响应自动降级）")
         return
     }
     let text = ui.msg_input.text()
     if text == "" {
-        ui.hint.set_text("先粘贴一条群消息，再点「交给管家」")
+        set_hint("先粘贴一条群消息，再点「交给管家」")
         return
     }
     chat_push("me", text)
@@ -95,15 +95,15 @@ fn butler_send(){
                 chat_push("ai", reply)
                 plan_parse(reply)
                 if plan_pending == "yes" {
-                    ui.hint.set_text("管家出了提案——过目后点「拍板」执行")
+                    set_hint("管家出了提案——过目后点「拍板」执行")
                 } else {
-                    ui.hint.set_text("管家已回复（见对话）")
+                    set_hint("管家已回复（见对话）")
                 }
             } else {
                 // #46b 诚实可见性：host.has 只证「已注册」，实测失败要把「可用」字样撤下
                 chat_push("sys", "AI 通道无响应（" + r.error + "）——已降级本地规则，点「建守护」即可")
                 ui.ai_cap_label.set_text("AI：通道实测无响应，本地规则兜底")
-                ui.hint.set_text("AI 不可用，已降级为本地规则（" + r.error + "）")
+                set_hint("AI 不可用，已降级为本地规则（" + r.error + "）")
             }
             render_views()
         })
@@ -111,7 +111,7 @@ fn butler_send(){
         // 诚实降级：无 AI 服务（card-host 即此态）——不假装管家在听
         chat_push("sys", "本机没有管家服务（host 无 octos.turn.start）——本地规则兜底：点「建守护」走分诊建卡")
         ui.ai_cap_label.set_text(probe_ai_cap())
-        ui.hint.set_text("本机无 AI 服务，已降级本地规则——点「建守护」即可")
+        set_hint("本机无 AI 服务，已降级本地规则——点「建守护」即可")
         render_views()
     }
 }

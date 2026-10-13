@@ -257,10 +257,10 @@ let pay_draft = ""
 fn set_pay_draft(s2){ pay_draft = s2 }
 fn add_payment(){
     let raw = ("" + pay_draft).trim()
-    if raw == "" { ui.hint.set_text("格式：姓名 金额（如：阿明 150）"); return }
+    if raw == "" { set_hint("格式：姓名 金额（如：阿明 150）"); return }
     // 取最后一个空格分段：前段=姓名，后段=金额
     let sp = raw.split(" ")
-    if sp.len() < 2 { ui.hint.set_text("格式：姓名 金额（如：阿明 150）"); return }
+    if sp.len() < 2 { set_hint("格式：姓名 金额（如：阿明 150）"); return }
     let amt = sp[sp.len() - 1]
     let who = ""
     for i in sp.len() - 1 {
@@ -269,13 +269,13 @@ fn add_payment(){
     }
     who = who.trim()
     let amt_f = amt.to_f64()
-    if who == "" || amt_f <= 0 { ui.hint.set_text("金额要大于 0（格式：姓名 金额）"); return }
+    if who == "" || amt_f <= 0 { set_hint("金额要大于 0（格式：姓名 金额）"); return }
     let id_str = "" + selected_id
     let ci = -1
     for i in cases.len() {
         if "" + cases[i]["id"] == id_str { ci = i }
     }
-    if ci < 0 { ui.hint.set_text("先选中一条守护再记收款"); return }
+    if ci < 0 { set_hint("先选中一条守护再记收款"); return }
     pay_case.push(id_str)
     pay_person.push(who)
     pay_amount.push("" + amt_f)
@@ -286,7 +286,7 @@ fn add_payment(){
     rebuild_lines()
     save()
     render_views()
-    ui.hint.set_text("已记收款：" + who + " ¥" + cut2(amt_f) + "（差额见对账行；收齐自动清待收尾）")
+    set_hint("已记收款：" + who + " ¥" + cut2(amt_f) + "（差额见对账行；收齐自动清待收尾）")
 }
 
 // === v0.6.0 P4：Evidence Pack 导出（case 快照 + 审计链 + 确定性断言） ===
@@ -296,7 +296,7 @@ fn export_evidence(id_str){
     for i in cases.len() {
         if "" + cases[i]["id"] == id_str { ci = i }
     }
-    if ci < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if ci < 0 { set_hint("找不到 #" + id_str) ; return }
     // 确定性断言：应付 = bill_total/人数，已收 = 收款求和，差 = 应付-已收
     let bt = "" + cases[ci]["bill_total"]
     let total_f = bt.to_f64()
@@ -341,9 +341,9 @@ fn export_evidence(id_str){
     let ev = {case: cases[ci], ledger: {total: bt, people_count: ("" + n), due_per_person: cut2(due), paid_total: cut2(paid), outstanding: cut2(total_f - paid)}, assertion: {rule: "due_per_person = bill_total / count_people; paid_total = sum(payments); outstanding = bill_total - paid_total", bill_total: bt, people_count: ("" + n), paid_total: cut2(paid), computed_outstanding: cut2(total_f - paid)}, audit: audit_log, replay: {actions_summary: replay_actions, first_event: first_ev, last_event: last_ev, rule: "全程审计链可回放；提案出处与拍板 actor（user/agent）逐条在案"}, suppressed: sup_e}
     let r = fs.write("evidence/case-" + id_str + ".json", ev.to_json())
     if r == nil {
-        ui.hint.set_text("证据包已导出：evidence/case-" + id_str + ".json（快照+审计链+回放统计+沉默留痕，可离线校验）")
+        set_hint("证据包已导出：evidence/case-" + id_str + ".json（快照+审计链+回放统计+沉默留痕，可离线校验）")
     } else {
-        ui.hint.set_text("证据包导出失败：" + ("" + r))
+        set_hint("证据包导出失败：" + ("" + r))
     }
 }
 

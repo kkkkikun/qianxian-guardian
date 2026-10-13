@@ -108,6 +108,8 @@ fn load(){
     // #48b：detail_list 初始隐藏（命令式，声明里写 visible:false 会被 render() 的
     //   声明 re-apply 覆盖回去——见 detail_list 声明处注释）
     ui.detail_list.set_visible(false)
+    // v0.10.2：hint 初始为空 → 启动即隐藏（空 Label 也占 20px 行高幻影，实测）
+    ui.hint.set_visible(false)
     // v0.6.0：读 payments.json（按人收款，独立文件）
     // v0.8.0 修真实 bug：这里原写成 to_json()（字符串→json 字符串），payments 字段
     //   取不到 → 重启后收款记录静默丢失、对账归零。与 cases.json 同款 parse_json。
@@ -152,7 +154,7 @@ fn load(){
     render_views()
     // v0.10.0：载入完成不写 hint（静默——守护灯卡已显示「共 N 条」，无需重复）
     if hint_suffix != "" {
-        ui.hint.set_text(hint_suffix)
+        set_hint(hint_suffix)
     }
 }
 

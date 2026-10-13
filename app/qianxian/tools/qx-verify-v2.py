@@ -374,13 +374,29 @@ while len(folded_after) < 1 and recover_steps < 6:
     folded_after = [t for t, r in labels(snap()["s"]) if any(title_re(k).match(t) for k in (1, 2, 3, 5, 6))]
     recover_steps += 1
 rec(11, f"滚动后物化稳定（卡 {len(folded_after)}，恢复 {recover_steps} 步）", len(folded_after) >= 1, f"scroll-api=ok folded-after={len(folded_after)}")
-# 滚回顶部：R12 搜索框/计数标签在列表头部，必须在物化窗内（#36 修正）
+# 滚回顶部（#36 修正同款；v0.10.2：搜索框已迁入「怎么用？」说明卡——先展开再下滚物化）
 get("/m?k=scroll&x=200&y=500&dx=0&dy=-2400")
 time.sleep(1.0)
 ws = snap()["s"]
 
-# R12：搜索
-si = find(ws, "搜活动或地点", "TextInput")
+# R12：搜索（搜索框在说明卡内）
+# 状态感知：seq==0 首启动时说明卡已自动展开——不能再点（点了=收起）。
+# 判定：卡体文本「低频操作」/「粘贴群消息，点」在树即已展开，只有收起态才点按钮。
+ws0 = snap()["s"]
+if find(ws0, "低频操作") is None and find(ws0, "粘贴群消息，点") is None:
+    ht = find(ws0, "怎么用？", "Button")
+    if ht:
+        hx, hy = center(ht)
+        get(f"/click?x={hx}&y={hy}")
+        time.sleep(1.6)
+si = None
+for _si_try in range(10):
+    ws = snap()["s"]
+    si = find(ws, "搜活动或地点", "TextInput")
+    if si:
+        break
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=300")
+    time.sleep(1.0)
 if si:
     x, y = center(si)
     get(f"/click?x={x}&y={y}")
@@ -396,8 +412,12 @@ if si:
     time.sleep(0.6)
     get("/t?t=")
     time.sleep(1.0)
+    # 滚回列表顶部恢复头部语境（后续步骤在列表头部操作）
+    get("/m?k=scroll&x=200&y=500&dx=0&dy=-2400")
+    time.sleep(1.0)
 else:
-    rec(12, "搜索框可见", False, "无搜索 TextInput")
+    _dbg = [t for t, r in labels(snap()["s"])][-8:]
+    rec(12, "搜索框可见（说明卡内）", False, f"无搜索 TextInput；尾部labels={_dbg}")
 
 # R13：清空全部两段式（#36 修正：说明卡在列表尾部、展开标志与历史相关——
 # 先试找按钮；找不到再确保展开（点「怎么用？」），滚动向下逐次物化查找）

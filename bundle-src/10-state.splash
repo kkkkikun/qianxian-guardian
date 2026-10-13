@@ -86,6 +86,13 @@ let pay_save_result = "ok"
 // === v0.6.0 P4：操作审计日志（Evidence Pack 数据源；actor=user/agent）
 let audit_log = []
 let last_actor = "user"
+// === v0.10.2：hint 空文时隐藏（实测：空 Label 仍占 20px 行高幻影，破坏 HTML 紧凑节奏）===
+//   set_hint 是唯一入口：非空才可见。Label 是叶子控件，set_visible 对叶子可靠
+//   （#48b 的 set_visible 不可靠教训针对的是复合 View 容器）。
+fn set_hint(t){
+    ui.hint.set_text(t)
+    if t == "" { ui.hint.set_visible(false) } else { ui.hint.set_visible(true) }
+}
 fn audit(action, detail){
     let t = local_time()
     let ts = ("" + t.year) + "-" + pad2(t.month) + "-" + pad2(t.day) + "T" + pad2(t.hour) + ":" + pad2(t.minute) + ":" + pad2(t.second) + "Z+8"

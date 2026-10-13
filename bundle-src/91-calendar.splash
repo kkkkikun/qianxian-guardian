@@ -117,17 +117,17 @@ fn export_ics(id_str){
     for i in cases.len() {
         if "" + cases[i]["id"] == id_str { cur = i }
     }
-    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if cur < 0 { set_hint("找不到 #" + id_str) ; return }
     let ics = build_ics(cur)
     if ics == "" {
-        ui.hint.set_text("日历：#" + id_str + " 没有可解析的日期（slot 未抽取），未生成 ICS")
+        set_hint("日历：#" + id_str + " 没有可解析的日期（slot 未抽取），未生成 ICS")
         return
     }
     let r = fs.write("calendar/qianxian-" + id_str + ".ics", ics)
     if r == nil {
-        ui.hint.set_text("日历：ICS 已生成 calendar/qianxian-" + id_str + ".ics（通用格式，可导入任意日历）")
+        set_hint("日历：ICS 已生成 calendar/qianxian-" + id_str + ".ics（通用格式，可导入任意日历）")
     } else {
-        ui.hint.set_text("日历：ICS 生成失败（" + ("" + r) + "）")
+        set_hint("日历：ICS 生成失败（" + ("" + r) + "）")
     }
 }
 
@@ -138,9 +138,9 @@ fn set_completed(id_str){
     for i in cases.len() {
         if "" + cases[i]["id"] == id_str { cur = i }
     }
-    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if cur < 0 { set_hint("找不到 #" + id_str) ; return }
     if cases[cur]["status"] != "Confirmed" {
-        ui.hint.set_text("只有已确认的守护能标记完成（#" + id_str + " 现为 " + status_badge_text("" + cases[cur]["status"]) + "）")
+        set_hint("只有已确认的守护能标记完成（#" + id_str + " 现为 " + status_badge_text("" + cases[cur]["status"]) + "）")
         return
     }
     cases[cur]["status"] = "Completed"
@@ -152,9 +152,9 @@ fn set_completed(id_str){
     state_save_result = save_result
     render_views()
     if state_save_result == "fail" {
-        ui.hint.set_text("#" + id_str + " 已标记完成（保存失败，仅在内存）")
+        set_hint("#" + id_str + " 已标记完成（保存失败，仅在内存）")
     } else {
-        ui.hint.set_text("#" + id_str + " 已标记完成——聚会圆满，AA 收齐后徽章自动清")
+        set_hint("#" + id_str + " 已标记完成——聚会圆满，AA 收齐后徽章自动清")
     }
 }
 fn set_bill_cleared(id_str){
@@ -162,13 +162,13 @@ fn set_bill_cleared(id_str){
     for i in cases.len() {
         if "" + cases[i]["id"] == id_str { cur = i }
     }
-    if cur < 0 { ui.hint.set_text("找不到 #" + id_str) ; return }
+    if cur < 0 { set_hint("找不到 #" + id_str) ; return }
     if ("" + cases[cur]["bill_total"]) == "" {
-        ui.hint.set_text("没记过 AA，无需收尾（#" + id_str + "）")
+        set_hint("没记过 AA，无需收尾（#" + id_str + "）")
         return
     }
     if cases[cur]["bill_cleared"] == "yes" {
-        ui.hint.set_text("AA 已收齐过（#" + id_str + "）")
+        set_hint("AA 已收齐过（#" + id_str + "）")
         return
     }
     cases[cur]["bill_cleared"] = "yes"
@@ -178,9 +178,9 @@ fn set_bill_cleared(id_str){
     state_save_result = save_result
     render_views()
     if state_save_result == "fail" {
-        ui.hint.set_text("#" + id_str + " AA 已收齐（保存失败，仅在内存）")
+        set_hint("#" + id_str + " AA 已收齐（保存失败，仅在内存）")
     } else {
-        ui.hint.set_text("#" + id_str + " AA 已收齐——收尾完成")
+        set_hint("#" + id_str + " AA 已收齐——收尾完成")
     }
 }
 

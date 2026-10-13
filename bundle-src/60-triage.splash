@@ -71,7 +71,7 @@ fn add_case(){
     undo_win_open = "no"
     let text = ui.msg_input.text()
     if text == "" {
-        ui.hint.set_text("先输入一条群消息，例如：周六上午去深圳湾骑车")
+        set_hint("先输入一条群消息，例如：周六上午去深圳湾骑车")
         return
     }
     // === #19 新增：「仍然建守护」二次确认态的第二次按压
@@ -100,19 +100,19 @@ fn add_case(){
         force_create_pending = "yes"
         force_create_text = text
         force_create_deadline = 1
-        ui.hint.set_text("有时间，但这看起来不像聚会安排——要牵线跟这条吗？再点一次「建守护」即可（仍是您主动）")
+        set_hint("有时间，但这看起来不像聚会安排——要牵线跟这条吗？再点一次「建守护」即可（仍是您主动）")
         start_timeout(5.0, || {
             if force_create_pending == "yes" {
                 force_create_pending = "no"
                 force_create_text = ""
                 force_create_deadline = 0
-                ui.hint.set_text("「仍然建守护」确认已过期（5s 内未再点），未建守护")
+                set_hint("「仍然建守护」确认已过期（5s 内未再点），未建守护")
             }
         })
         return
     }
     if level == "none" {
-        ui.hint.set_text("澄清卡：这条消息里没看到时间或聚会意图，不建守护（规则分诊未命中）")
+        set_hint("澄清卡：这条消息里没看到时间或聚会意图，不建守护（规则分诊未命中）")
         return
     }
     build_case_from_text(text, level)
@@ -165,9 +165,9 @@ fn build_case_from_text(text, level){
     save()   // 结果写入全局 save_result
     render_views()
     if save_result == "fail" {
-        ui.hint.set_text("保存失败：守护数据可能未落盘（已建守护 #" + "" + seq + "，分诊命中：" + level + "）")
+        set_hint("保存失败：守护数据可能未落盘（已建守护 #" + "" + seq + "，分诊命中：" + level + "）")
     } else {
-        ui.hint.set_text("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，点卡片可展开详情")
+        set_hint("已建守护 #" + "" + seq + "（分诊命中：" + level + "），已选中，点卡片可展开详情")
     }
 }
 

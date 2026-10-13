@@ -310,14 +310,14 @@ fn build_plan_lines(){
 // === 拍板：唯一人工确认点。校验通过才按 op 分发到白名单动作（全部复用既有函数） ===
 fn butler_approve(){
     if plan_pending != "yes" {
-        ui.hint.set_text("没有待拍板的提案")
+        set_hint("没有待拍板的提案")
         return
     }
     if plan_check != "ok" {
         chat_push("sys", "提案被拒：" + plan_check)
         plan_pending = "no"
         render_views()
-        ui.hint.set_text("提案未通过校验，已放弃（可让管家重新出）")
+        set_hint("提案未通过校验，已放弃（可让管家重新出）")
         return
     }
     let op = "" + plan_op
@@ -361,7 +361,7 @@ fn butler_approve(){
             if "" + cases[i]["id"] == plan_id { ci2 = i }
         }
         if ci2 < 0 {
-            ui.hint.set_text("找不到 #" + plan_id)
+            set_hint("找不到 #" + plan_id)
             last_actor = "user"
             return
         }
@@ -451,7 +451,7 @@ fn butler_approve(){
         ui.msg_input.set_text(draft)
         audit("draft_dunning", tier + " #" + plan_id + " 差额 ¥" + cut2(out))
         chat_push("sys", "催收草稿已生成（梯度 " + tier + " 档，按活动日期确定性选档；金额/差额全部由代码从状态机算出）——已填入输入框，核对后复制发送即可")
-        ui.hint.set_text("催收草稿已生成（" + tier + " 档）——数字全部来自状态机快照，模型零参与")
+        set_hint("催收草稿已生成（" + tier + " 档）——数字全部来自状态机快照，模型零参与")
         last_actor = "user"
         return
     } else if op == "mark_paid" {
@@ -482,7 +482,7 @@ fn butler_approve(){
             plan_clear_stage = 1
             audit("clear_arm", "危险提案第一次拍板（确认态，5s）")
             chat_push("sys", "⚠ 已确认一次：再点「拍板执行」才真正清空（8 秒内）")
-            ui.hint.set_text("清空提案待二次确认（8 秒）")
+            set_hint("清空提案待二次确认（8 秒）")
             last_actor = "user"
             return   // 保持 plan_pending，等第二次拍板
         } else {
@@ -494,7 +494,7 @@ fn butler_approve(){
             } else {
                 clear_all_data()
                 chat_push("sys", "二次确认窗口已过——已重新挂起确认，再点一次「拍板执行」（8 秒内）")
-                ui.hint.set_text("清空提案重新待确认（8 秒）")
+                set_hint("清空提案重新待确认（8 秒）")
                 last_actor = "user"
                 return
             }
@@ -511,7 +511,7 @@ fn butler_approve(){
             chat_push("sys", "已拍板：全部守护数据已屏显（hint 区可复制备份）")
         }
     } else {
-        ui.hint.set_text("未知提案类型：" + op)
+        set_hint("未知提案类型：" + op)
         last_actor = "user"
         return
     }
@@ -555,7 +555,7 @@ fn decline_finish(reason_label, feedback){
         chat_push("sys", "已拒绝（理由已记录：「" + reason_label + "」）——下一轮管家会带着这个理由改方案")
     }
     render_views()
-    ui.hint.set_text("提案已处理")
+    set_hint("提案已处理")
 }
 fn decline_reason_time(){ decline_finish("时间不对", "时间不对——请重新收敛时段（拿不准可先问用户具体哪天）") }
 fn decline_reason_place(){ decline_finish("地点不对", "地点不对——请重新确认地点") }

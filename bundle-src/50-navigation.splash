@@ -6,10 +6,10 @@
 fn toggle_howto(){
     if howto_show_flag == "yes" {
         howto_show_flag = "no"
-        ui.hint.set_text("已收起「怎么用」说明卡")
+        set_hint("已收起「怎么用」说明卡")
     } else {
         howto_show_flag = "yes"
-        ui.hint.set_text("已展开「怎么用」说明卡")
+        set_hint("已展开「怎么用」说明卡")
     }
     render_views()
 }
@@ -28,7 +28,7 @@ fn toggle_howto(){
 //   保留 #9 toggle_case 名称以减少跨片 diff（仅删分支，不删函数）。
 fn toggle_case(id){
     if id == 0 {
-        ui.hint.set_text("先选中一条守护再展开/折叠")
+        set_hint("先选中一条守护再展开/折叠")
         return
     }
     // 切到其他行 → 放弃取消确认态（避免提示与展开态语义混淆）
@@ -59,7 +59,7 @@ fn toggle_case(id){
     } else if idx >= 0 {
         msg = "已折叠 #" + "" + id + "（点卡片可展开详情）"
     }
-    ui.hint.set_text(msg)
+    set_hint(msg)
 }
 
 // === #9 新增：点击单卡 = 切换该卡展开（用于卡片 GestureView on_tap） ===
@@ -87,7 +87,7 @@ fn on_tap_card(id){
     // #31f：选中即进详情模式（#48b 起列表/详情双 ScrollY 互斥——详情视图重显从
     //   scroll=0 起步，深位点卡详情必在视口内）
     if id == 0 {
-        ui.hint.set_text("先建一条守护")
+        set_hint("先建一条守护")
         return
     }
     if cancel_pending_id != 0 && cancel_pending_id != id {
@@ -105,7 +105,7 @@ fn on_tap_card(id){
     //   列表/聊天模式下「确认这条守护」没有目标语境，隐藏而非常驻
     ui.action_row.set_visible(true)
     render_views()
-    ui.hint.set_text("已选中 #" + "" + id + "，详情见下方；「返回列表」回到全部守护")
+    set_hint("已选中 #" + "" + id + "，详情见下方；「返回列表」回到全部守护")
 }
 
 // === #31f：返回列表模式 ===
@@ -118,7 +118,7 @@ fn back_to_list(){
     // 回列表：主页 chrome 恢复
     ui.home_chrome.set_visible(true)
     render_views()
-    ui.hint.set_text("已返回列表；点卡片看单条详情")
+    set_hint("已返回列表；点卡片看单条详情")
 }
 
 // === 决赛 S3：管家对话视图进出 ===
@@ -216,7 +216,7 @@ fn back_from_chat(){
     // 回列表：主页 chrome 恢复
     ui.home_chrome.set_visible(true)
     render_views()
-    ui.hint.set_text("已回到守护列表；点卡片看单条详情")
+    set_hint("已回到守护列表；点卡片看单条详情")
 }
 
 // === #10 新增：切换筛选标签（GestureView on_tap 回调入口） ===
@@ -232,7 +232,7 @@ fn set_filter(ft){
     if ft == "Proposing" { label_all = "待拍板" }
     if ft == "Confirmed" { label_all = "已确认" }
     if ft == "Cancelled" { label_all = "已取消" }
-    ui.hint.set_text("筛选：" + label_all + " · 共 " + filter_count_str + " 条 / 总 " + filter_total_str + " 条")
+    set_hint("筛选：" + label_all + " · 共 " + filter_count_str + " 条 / 总 " + filter_total_str + " 条")
 }
 
 // === #12 新增：搜索词入口（TextInput on_change 回调；与 set_filter 同样放函数上下文）
@@ -244,9 +244,9 @@ fn set_query(q){
     rebuild_lines()
     render_views()
     if current_query == "" {
-        ui.hint.set_text("已清空搜索，按当前标签显示（" + filter_count_str + " / " + filter_total_str + " 条）")
+        set_hint("已清空搜索，按当前标签显示（" + filter_count_str + " / " + filter_total_str + " 条）")
     } else {
-        ui.hint.set_text("搜索 " + current_query + " · 共 " + filter_count_str + " / " + filter_total_str + " 条")
+        set_hint("搜索 " + current_query + " · 共 " + filter_count_str + " / " + filter_total_str + " 条")
     }
 }
 
@@ -258,7 +258,7 @@ fn set_query(q){
 //   3. rebuild_lines 让已有守护的 case_receipt 立即按新风格重排（快照语义不变——ra/rp/rt 不动）；
 //   4. ui.style_btn.set_text(...) 命令式更新底部按钮文案（照 ui.hint.set_text 范式，根组件静态区
 //      靠 imperative set_text 而非 on_render 重算——task 明确允许此路径）；
-//   5. ui.hint.set_text(...) 给用户反馈（成功/失败两路）。
+//   5. set_hint(...) 给用户反馈（成功/失败两路）。
 //   注：style_btn 是根组件 ButtonFlat 的具名绑定（详见根组件布局），set_text 范式已在
 //      ui.hint 上多次实证（line 493, 504 等），runtime 可靠。
 fn set_receipt_style(){
@@ -284,10 +284,10 @@ fn set_receipt_style(){
     let label_cn = style_label_for(receipt_style)
     if write_ok {
         // 成功：明示持久化+已有守护立即生效
-        ui.hint.set_text("回执风格已切换为 " + label_cn + "（已有守护的回执立即按新风格重排）")
+        set_hint("回执风格已切换为 " + label_cn + "（已有守护的回执立即按新风格重排）")
     } else {
         // 失败：本次会话仍生效（receipt_style 已翻，case_receipt 已 rebuild），仅持久化未落盘
-        ui.hint.set_text("偏好保存失败（风格本次会话仍生效）：" + label_cn)
+        set_hint("偏好保存失败（风格本次会话仍生效）：" + label_cn)
     }
 }
 

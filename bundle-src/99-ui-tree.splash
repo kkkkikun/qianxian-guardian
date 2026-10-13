@@ -23,7 +23,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             View{width: Fill height: Fit flow: Right spacing: 12 align: Align{y: 0.5}
                 Svg{width: 40 height: 40 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
                 View{width: Fill height: Fit flow: Down spacing: 3
-                    Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 15}}
+                    Label{text: "牵线 · 聚会守护" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 15}}
                     Label{width: Fill text: "把群消息丢给管家，盯到人人到场、账目清零" draw_text.color: secondary draw_text.text_style.font_size: 8 max_lines: 1}
                 }
             }
@@ -35,7 +35,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                 View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.5}
                     Svg{width: 17 height: 17 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/shield.svg") color: #x2f7d4f}}
                     View{width: Fill height: Fit flow: Down spacing: 6
-                        Label{width: Fit text: guard_title draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 9}}
+                        Label{width: Fit text: guard_title draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 9}}
                         View{width: Fill height: Fit flow: Right spacing: 6
                             for gi in guard_chip_text.len() {
                                 if guard_chip_kind[gi] == "amber" {
@@ -71,10 +71,10 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: #xa89e91 color_empty_hover: #xa89e91 text_style +: {font_size: 9}}}
         ButtonFlat{text: "交给管家" height: 38 padding: Inset{left: 22 right: 22} on_click: || butler_send()
             draw_bg +: {border_radius: 19.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-            draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 9}}}
+            draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: font_bold_cjk{font_size: 9}}}
         ButtonFlat{text: "建守护" height: 38 padding: Inset{left: 22 right: 22} on_click: || add_case()
             draw_bg +: {border_radius: 19.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
-            draw_text +: {color: accent color_hover: accent color_down: accent text_style: theme.font_bold{font_size: 9}}}
+            draw_text +: {color: accent color_hover: accent color_down: accent text_style: font_bold_cjk{font_size: 9}}}
     }
     // .composer margin-bottom:6
     View{width: Fill height: 6}
@@ -96,46 +96,20 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // #48b：详情已拆到 detail_list（本视图只服务列表）；占位照 #5 范式
             View{width: Fill height: 1}
         } else {
-        // v0.10.0：守护灯卡已挪根区（输入行上方，HTML .guard-bar 位置）——此处 1px 占位
-        View{width: Fill height: 1}
         // === 决赛 S3：待拍板提案横幅（管家出了提案、人还没拍板时出现在列表顶部）——
         //   原则不变：模型文本不参与动作接线，这里只是「去拍板」的指路条（静态 copy）；
         //   零渲染零占位（plan_pending=="no" 时留 1px，#5 空分支硬约束范式）。
         if plan_pending == "yes" {
-            View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+            RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                 padding: Inset{left: 12 right: 12 top: 8 bottom: 8}
                 show_bg: true draw_bg.color: #xfbe9e5 draw_bg.border_radius: 12.0
-                Label{width: Fill text: "📋 管家有提案待拍板" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 9}}
+                Label{width: Fill text: "📋 管家有提案待拍板" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 9}}
                 ButtonFlat{text: "去拍板" height: 36 padding: Inset{left: 12 right: 12} on_click: || enter_chat()
                     draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
                     draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}}
-        } else {
-            // 无待拍板提案时 1px 占位（#5 硬约束：on_render 空分支至少一个子节点）
-            View{width: Fill height: 1}
         }
-        // === #12 新增：搜索框（放在筛选栏之上、确认取消变体之上；
-        //   根组件 if 只在首次求值定型，所以搜索框必须放在 on_render 闭包内；
-        //   闭包内只读 current_query 字符串，不读 cases[i][...]） ===
-        // on_change 实时调 set_query(q)；× 用 GestureView on_tap 清空；空字符串不过滤。
-        // 照第一方 news 搜索框写法：TextInput empty_text + on_change 触发布尔过滤。
-        let q_now = "" + current_query
-        View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-            // 搜索框本体（占满剩余宽度）
-            TextInput{width: Fill height: 40 empty_text: "搜活动或地点，如：深圳湾"
-                text: q_now
-                draw_bg +: {color: #xfffdfa color_hover: #xfffdfa color_focus: #fffdfa color_empty: #fffdfa border_radius: 12.0}
-                draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: #xa89e91 color_empty_hover: #xa89e91 text_style +: {font_size: 9}}
-                on_change: |t| set_query("" + t)}
-            // 清空按钮：有词才显示（用 q_now 字面量作可见性条件，闭包内可读全局字符串）
-            if q_now != "" {
-                GestureView{on_tap: |x, y| set_query("") height: 36
-                    RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 6 bottom: 6}
-                        show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
-                        Label{text: "× 清空" draw_text.color: secondary draw_text.text_style.font_size: 9}
-                    }
-                }
-            }
-        }
+        // v0.10.2：搜索框迁入「怎么用？」说明卡（见本文件尾部 howto 卡）——HTML 屏 01
+        //   无此元素，主页逐元素对齐基准稿；功能保留，展开说明卡即可达（回归 R-12 同步适配）。
         // === #11 外环修：取消确认态变体（根组件 if 不随状态重算，必须放闭包内）===
         if cancel_pending_flag == "yes" {
             View{width: Fill height: Fit flow: Right align: Align{y: 0.5}
@@ -143,8 +117,6 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     draw_bg +: {border_radius: 16.0 color: #xa14d3c color_hover: #x8f4335 color_down: #x7d382c border_size: 0.0}
                     draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
             }
-        } else {
-            View{width: Fill height: 1}
         }
         // === #10 新增：筛选标签栏 + 计数（必须放 on_render 内：根组件属性不随状态重算，#8 实证） ===
         // 照第一方 news:301-306 写法：if t.id == tab {TabButtonActive{}} else {TabButton{}}
@@ -241,7 +213,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             //   写在 on_render 闭包里（#8/#10 实证：根组件属性不随状态重算）。
             if seq == 0 {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
-                    Label{width: Fill text: "第一次用？把群消息丢给管家" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 11}}
+                    Label{width: Fill text: "第一次用？把群消息丢给管家" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 11}}
                     Label{width: Fill text: "管家分诊、查冲突、出提案——你只点「拍板」；改期/加人/记账跟管家说就行。" draw_text.color: secondary draw_text.text_style.font_size: 9}
                     View{width: Fill height: Fit flow: Right
                         ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 14 right: 14} on_click: || fill_example()
@@ -258,7 +230,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             //   两卡文案同为「从一条消息开始」，同屏重复。
             if seq > 0 {
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
-                    Label{width: Fill text: "还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 11}}
+                    Label{width: Fill text: "还没有守护" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 11}}
                     Label{width: Fill text: "把群里那句聚会邀约贴进来，剩下的交给管家。\n（无 AI 服务时点「建守护」走本地规则兜底）" draw_text.color: secondary draw_text.text_style.font_size: 9}
                 }
             }
@@ -267,7 +239,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
         // 分支 B：有守护但当前筛选下 0 条 —— 引导用户换筛选或建新条
         } else if filtered_idxs.len() == 0 {
             Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 28 bottom: 28} spacing: 6
-                Label{width: Fill text: "这个筛选下还没有守护" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 11}}
+                Label{width: Fill text: "这个筛选下还没有守护" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 11}}
                 Label{width: Fill text: "换个标签看看，或粘贴一条群消息开始（当前筛选：" + (if cf_now == "all" { "全部" } else if cf_now == "Proposing" { "待拍板" } else if cf_now == "Confirmed" { "已确认" } else if cf_now == "Completed" { "已完成" } else { "已取消" }) + "）。" draw_text.color: secondary draw_text.text_style.font_size: 9}
             }
             // 筛选空分支兜底：同样留 1px 占位
@@ -277,10 +249,10 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // 撤销条必须放在渲染闭包里——根组件属性只在首次定型，不随状态变。
             // undo_win_open 守卫防止 5s 定时器在用户已撤销后再次覆盖。
             if undo_win_open == "yes" {
-                View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                     padding: Inset{left: 12 right: 12 top: 8 bottom: 8}
                     show_bg: true draw_bg.color: #xfbe9e5 draw_bg.border_radius: 12.0
-                    Label{width: Fill text: "撤销窗口已开（点下方按钮恢复）" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 9}}
+                    Label{width: Fill text: "撤销窗口已开（点下方按钮恢复）" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 9}}
                     ButtonFlat{text: "撤销取消" height: 44 padding: Inset{left: 14 right: 14} on_click: || undo_cancel()
                         draw_bg +: {border_radius: 16.0 color: #xc7402f color_hover: #xa83424 color_down: #x8f2b1d border_size: 0.0}
                         draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff}}
@@ -328,7 +300,10 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         // ── 段一：标题行（左题右 chips，chips 独立行间距 5，HTML .case-badges）──
                         View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                             // 标题 Fit 优先占宽（不被 chips 挤压折行/截断）；chips 区 Fill 右对齐
-                            Label{width: Fit text: case_lines[j] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 11} max_lines: 1}
+                            Label{width: Fit text: case_lines[j] draw_text.color: ink draw_text.text_style: TextStyle{font_size: 11 font_family: FontFamily{
+                                latin := FontMember{res: crate_resource("makepad_widgets:resources/IBMPlexSans-SemiBold.ttf") asc: -0.1 desc: 0.0}
+                                chinese := FontMember{res: crate_resource("makepad_widgets:resources/LXGWWenKaiBold.ttf") asc: 0.0 desc: 0.0}
+                            }} max_lines: 1}
                             View{width: Fill height: 1}
                             View{width: Fit height: Fit flow: Right spacing: 5 align: Align{y: 0.5}
                             // 状态 chip（neutral/jade/danger 按 HTML 语义；padding 3×10 radius 12）
@@ -379,11 +354,11 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             } else {
                                 View{width: Fit height: Fit flow: Right spacing: 0
                                     Label{width: Fit text: _day + " · " draw_text.color: #x6e675e draw_text.text_style.font_size: 8}
-                                    Label{width: Fit text: _part draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 8}}
+                                    Label{width: Fit text: _part draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 8}}
                                 }
                             }
                             if _pl_got == "yes" {
-                                Label{width: Fit text: _pl_disp draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 8}}
+                                Label{width: Fit text: _pl_disp draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 8}}
                             } else {
                                 Label{width: Fit text: _pl_disp draw_text.color: #x6e675e draw_text.text_style.font_size: 8}
                             }
@@ -396,7 +371,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         // ── 段三：发丝线 + 迷你红线（带阶段标签；已取消不画线；HTML 规范 .case-thread）──
                         //   HTML：thread margin-top 11 + padding-top 11（发丝线上方 11、结/签在发丝线下 11）
                         if case_statuses[j] != "Cancelled" {
-                            View{width: Fill height: 1 margin: Inset{top: 11} show_bg: true draw_bg.color: #xe9dfd2}
+                            RoundedView{width: Fill height: 1 margin: Inset{top: 11} show_bg: true draw_bg.color: #xe9dfd2 draw_bg.border_radius: 0.5}
                             View{width: Fill height: Fit flow: Right align: Align{y: 0.0} margin: Inset{top: 11}
                                 // 结 1（待拍板）
                                 View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
@@ -409,16 +384,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         }
                                     }
                                     if case_stage[j] == 0 {
-                                        Label{text: "待拍板" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                        Label{text: "待拍板" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                     } else {
                                         Label{text: "待拍板" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                     }
                                 }
                                 // 段 1
                                 if case_stage[j] > 0 {
-                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 6.5}}
+                                    RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 6.5} draw_bg.border_radius: 1.0}
                                 } else {
-                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 6.5}}
+                                    RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 6.5} draw_bg.border_radius: 1.0}
                                 }
                                 // 结 2（已确认）
                                 View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
@@ -433,16 +408,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         }
                                     }
                                     if case_stage[j] == 1 {
-                                        Label{text: "已确认" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                        Label{text: "已确认" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                     } else {
                                         Label{text: "已确认" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                     }
                                 }
                                 // 段 2
                                 if case_stage[j] > 1 {
-                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 6.5}}
+                                    RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 6.5} draw_bg.border_radius: 1.0}
                                 } else {
-                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 6.5}}
+                                    RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 6.5} draw_bg.border_radius: 1.0}
                                 }
                                 // 结 3（已完成）
                                 View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
@@ -457,16 +432,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         }
                                     }
                                     if case_stage[j] == 2 {
-                                        Label{text: "已完成" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                        Label{text: "已完成" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                     } else {
                                         Label{text: "已完成" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                     }
                                 }
                                 // 段 3
                                 if case_stage[j] > 2 {
-                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 6.5}}
+                                    RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 6.5} draw_bg.border_radius: 1.0}
                                 } else {
-                                    View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 6.5}}
+                                    RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 6.5} draw_bg.border_radius: 1.0}
                                 }
                                 // 结 4（已收尾）
                                 View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
@@ -481,7 +456,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         }
                                     }
                                     if case_stage[j] == 3 {
-                                        Label{text: "已收尾" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                        Label{text: "已收尾" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                     } else {
                                         Label{text: "已收尾" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                     }
@@ -492,13 +467,13 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         //   对方「#N·活动」加粗；margin-top 11 padding 8×11 radius 10）──
                         if case_conflict[j] == "yes" {
                             if case_statuses[j] != "Cancelled" {
-                                View{width: Fill height: Fit flow: Right spacing: 4 align: Align{y: 0.5} margin: Inset{top: 11}
+                                RoundedView{width: Fill height: Fit flow: Right spacing: 4 align: Align{y: 0.5} margin: Inset{top: 11}
                                     padding: Inset{left: 9 right: 9 top: 8 bottom: 8}
                                     show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 10.0
                                     Label{width: Fit text: "⚡" draw_text.color: #xa87516 draw_text.text_style.font_size: 8}
                                     if case_conflict_other[j] != "" {
                                         Label{width: Fit text: "与" draw_text.color: #xa87516 draw_text.text_style.font_size: 8}
-                                        Label{width: Fit text: case_conflict_other[j] draw_text.color: #xa87516 draw_text.text_style: theme.font_bold{font_size: 8}}
+                                        Label{width: Fit text: case_conflict_other[j] draw_text.color: #xa87516 draw_text.text_style: font_bold_cjk{font_size: 8}}
                                         Label{width: Fill text: "同占「" + case_slot_day[j] + "-" + case_slot_part[j] + "」，改个时段即解开" draw_text.color: #xa87516 draw_text.text_style.font_size: 8 max_lines: 1}
                                     } else {
                                         Label{width: Fill text: "时间冲突，改个时段即解开" draw_text.color: #xa87516 draw_text.text_style.font_size: 8 max_lines: 1}
@@ -524,8 +499,9 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             //   #36 位置语义：列表模式三分支（空态/筛选空/有卡）共用此尾部，
             //   展开后滚动到底即达——#29 的低频键在有数据时重新可达。
             if howto_show_flag == "yes" {
+                let q_now2 = "" + current_query
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
-                    Label{width: Fill text: "怎么用？" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 11}}
+                    Label{width: Fill text: "怎么用？" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 11}}
                     Label{width: Fill text: "粘贴群消息，点「交给管家」；管家出提案，你在提案卡上点「拍板」即落地。" draw_text.color: ink draw_text.text_style.font_size: 10}
                     Label{width: Fill text: "改期/加人/记账/取消直接跟管家说（如「改到周日下午」）；无 AI 服务的设备自动降级——点「建守护」走本地规则，功能完整。" draw_text.color: ink draw_text.text_style.font_size: 10}
                     // === #45 C 切片：app 不能自驱唤醒 agent（无 needs/triggers），
@@ -539,7 +515,24 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     //   闭包内可重渲染);on_click 直接调既有 fn(cycle_slot/enter_chat/
                     //   export_data/clear_all_data),无新逻辑、无新状态。
                     //   height: 44 与主区三键对齐,触控目标达 HIG 44pt 标准。
-                    Label{width: Fill text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: theme.font_bold{font_size: 9}}
+                    // === #12 搜索框（v0.10.2 迁入：主页对齐 HTML 基准，搜索归入说明卡）===
+                    //   语义不变：on_change 实时 set_query；有词时显示「× 清空」。
+                    View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                        TextInput{width: Fill height: 40 empty_text: "搜活动或地点，如：深圳湾"
+                            text: q_now2
+                            draw_bg +: {color: #fffdfa color_hover: #fffdfa color_focus: #fffdfa color_empty: #fffdfa border_radius: 12.0}
+                            draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: #xa89e91 color_empty_hover: #xa89e91 text_style +: {font_size: 9}}
+                            on_change: |t| set_query("" + t)}
+                        if q_now2 != "" {
+                            GestureView{on_tap: |x, y| set_query("") height: 36
+                                RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 6 bottom: 6}
+                                    show_bg: true draw_bg.color: #xf1ece4 draw_bg.border_radius: 16.0
+                                    Label{text: "× 清空" draw_text.color: secondary draw_text.text_style.font_size: 9}
+                                }
+                            }
+                        }
+                    }
+                    Label{width: Fill text: "低频操作（点下方按钮）" draw_text.color: secondary draw_text.text_style: font_bold_cjk{font_size: 9}}
                     // 复用 #11 AI 按钮弱化风格 + #14 灰底色,与主区三键视觉拉开层级
                     // （次级灰底 + accent/secondary 字,不抢眼）。
                     // #44 外环修：五键原单行 flow:Right 总宽 ~500px > 容器 ~380px，第 5 键
@@ -603,7 +596,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             padding: Inset{left: 14 right: 14 top: 12 bottom: 12} spacing: 8
                             // 标题 + 已收尾徽章
                             View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                                Label{width: Fill text: fin_title draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 11}}
+                                Label{width: Fill text: fin_title draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 11}}
                                 RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 3 bottom: 3}
                                     show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
                                     Label{text: "已完成 · 已收尾" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 8}}
@@ -611,31 +604,31 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             // 全绿迷你红线（生命周期句号：四结全实心朱砂）
                             View{width: Fill height: Fit flow: Right align: Align{y: 0.5}
                                 RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 1.0}
                                 RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 1.0}
                                 RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 1.0}
                                 RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 4.0}
                             }
                             // 四统计（均分四列：数字+标签）
                             View{width: Fill height: Fit flow: Right
                                 View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
-                                    Label{text: fin_stat_people draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12}}
+                                    Label{text: fin_stat_people draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 12}}
                                     Label{text: "到场" draw_text.color: #x6e675e draw_text.text_style.font_size: 7}}
                                 View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
-                                    Label{text: fin_stat_per draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12}}
+                                    Label{text: fin_stat_per draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 12}}
                                     Label{text: "人均" draw_text.color: #x6e675e draw_text.text_style.font_size: 7}}
                                 View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
-                                    Label{text: fin_stat_weather draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12}}
+                                    Label{text: fin_stat_weather draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 12}}
                                     Label{text: "当日天气" draw_text.color: #x6e675e draw_text.text_style.font_size: 7}}
                                 View{width: Fill height: Fit flow: Down spacing: 2 align: Align{x: 0.5}
-                                    Label{text: fin_stat_days draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12}}
+                                    Label{text: fin_stat_days draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 12}}
                                     Label{text: "周期天数" draw_text.color: #x6e675e draw_text.text_style.font_size: 7}}
                             }
                             // 状态变迁时间线（审计事件 + UTC+8 时间戳）
                             View{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{top: 8}
-                                Label{text: "守护时间线" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
+                                Label{text: "守护时间线" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
                                 for fi in fin_timeline.len() {
                                     View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                                         RoundedView{width: 6 height: 6 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 3.0}
@@ -645,12 +638,12 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             }
                             ButtonFlat{width: Fill text: "分享回顾到群" height: 44 on_click: || share_fin_report()
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
-                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 9}}}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 9}}}
                         }
                     }
                     // ── 标题行：#N·活动 + 状态 chips ──
                     View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
-                        Label{width: Fill text: case_lines[sel] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 12}}
+                        Label{width: Fill text: case_lines[sel] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 12}}
                         if case_statuses[sel] == "Confirmed" {
                             RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 3 bottom: 3}
                                 show_bg: true draw_bg.color: #xe8f3ec draw_bg.border_radius: 12.0
@@ -693,15 +686,15 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         RoundedView{width: 18 height: 18 align: Align{x: 0.5 y: 0.5} show_bg: true draw_bg.color: #xc7402f2e draw_bg.border_radius: 9.0 RoundedView{width: 11 height: 11 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 5.5}}}
                                 }
                                 if case_stage[sel] == 0 {
-                                    Label{text: "待拍板" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                    Label{text: "待拍板" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                 } else {
                                     Label{text: "待拍板" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                 }
                             }
                             if case_stage[sel] > 1 {
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 10 right: 6}}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 10 right: 6} draw_bg.border_radius: 1.0}
                             } else {
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 10 right: 6}}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 10 right: 6} draw_bg.border_radius: 1.0}
                             }
                             View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
                                 if case_stage[sel] > 1 {
@@ -715,15 +708,15 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}}
                                 }
                                 if case_stage[sel] == 1 {
-                                    Label{text: "已确认" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                    Label{text: "已确认" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                 } else {
                                     Label{text: "已确认" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                 }
                             }
                             if case_stage[sel] > 2 {
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 10 left: 6 right: 6}}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 10 left: 6 right: 6} draw_bg.border_radius: 1.0}
                             } else {
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 10 left: 6 right: 6}}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 10 left: 6 right: 6} draw_bg.border_radius: 1.0}
                             }
                             View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
                                 if case_stage[sel] > 2 {
@@ -737,15 +730,15 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}}
                                 }
                                 if case_stage[sel] == 2 {
-                                    Label{text: "已完成" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                    Label{text: "已完成" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                 } else {
                                     Label{text: "已完成" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                 }
                             }
                             if case_stage[sel] > 3 {
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 10 left: 6 right: 6}}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xc7402f margin: Inset{top: 10 left: 6 right: 6} draw_bg.border_radius: 1.0}
                             } else {
-                                View{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 10 left: 6 right: 6}}
+                                RoundedView{width: Fill height: 2 show_bg: true draw_bg.color: #xe1d7ca margin: Inset{top: 10 left: 6 right: 6} draw_bg.border_radius: 1.0}
                             }
                             View{width: Fit height: Fit flow: Down spacing: 5 align: Align{x: 0.5}
                                 if case_stage[sel] > 3 {
@@ -759,7 +752,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         RoundedView{width: 8 height: 8 show_bg: true draw_bg.color: #xfffdfa draw_bg.border_size: 1.5 draw_bg.border_color: #xc9bfb2 draw_bg.border_radius: 4.0}}
                                 }
                                 if case_stage[sel] == 3 {
-                                    Label{text: "已收尾" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                                    Label{text: "已收尾" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                                 } else {
                                     Label{text: "已收尾" draw_text.color: #xa89e91 draw_text.text_style.font_size: 7}
                                 }
@@ -769,29 +762,29 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     // ── 键值分区（时间/地点/参与人/AA/原文）──
                     View{width: Fill height: Fit flow: Down
                         View{width: Fill height: Fit flow: Right spacing: 12 align: Align{y: 0.5} padding: Inset{top: 6 bottom: 6}
-                            Label{width: 56 text: "时 间" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                            Label{width: Fill text: slot_now draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 10}}}
-                        View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
+                            Label{width: 56 text: "时 间" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                            Label{width: Fill text: slot_now draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 10}}}
+                        RoundedView{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2 draw_bg.border_radius: 0.5}
                         View{width: Fill height: Fit flow: Right spacing: 12 align: Align{y: 0.5} padding: Inset{top: 6 bottom: 6}
-                            Label{width: 56 text: "地 点" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                            Label{width: Fill text: case_place_full[sel] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 10}}}
-                        View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
+                            Label{width: 56 text: "地 点" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                            Label{width: Fill text: case_place_full[sel] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 10}}}
+                        RoundedView{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2 draw_bg.border_radius: 0.5}
                         View{width: Fill height: Fit flow: Right spacing: 12 align: Align{y: 0.5} padding: Inset{top: 6 bottom: 6}
-                            Label{width: 56 text: "参与人" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                            Label{width: Fill text: case_people_line[sel] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 10}}}
-                        View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
+                            Label{width: 56 text: "参与人" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                            Label{width: Fill text: case_people_line[sel] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 10}}}
+                        RoundedView{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2 draw_bg.border_radius: 0.5}
                         View{width: Fill height: Fit flow: Right spacing: 12 align: Align{y: 0.5} padding: Inset{top: 6 bottom: 6}
-                            Label{width: 56 text: "活 动" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                            Label{width: Fill text: case_activity_lines[sel] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 10}}}
+                            Label{width: 56 text: "活 动" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                            Label{width: Fill text: case_activity_lines[sel] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 10}}}
                         if case_bill_total_str[sel] != "" {
-                            View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
+                            RoundedView{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2 draw_bg.border_radius: 0.5}
                             View{width: Fill height: Fit flow: Right spacing: 12 align: Align{y: 0.5} padding: Inset{top: 6 bottom: 6}
-                                Label{width: 56 text: "分 摊" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                                Label{width: Fill text: case_bill_split_text[sel] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 10}}}
+                                Label{width: 56 text: "分 摊" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                                Label{width: Fill text: case_bill_split_text[sel] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 10}}}
                         }
                     }
                     if case_receipt[sel].len() > 0 {
-                        Label{width: Fill text: "回 执" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
+                        Label{width: Fill text: "回 执" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
                         View{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{left: 12 right: 12 top: 9 bottom: 9}
                             show_bg: true draw_bg.color: #xf7f2ec draw_bg.border_radius: 10.0
                             for _ri in case_receipt[sel].len() {
@@ -809,24 +802,24 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         Card{padding: Inset{left: 14 right: 14 top: 10 bottom: 10} spacing: 7
                             // 表头
                             View{width: Fill height: Fit flow: Right spacing: 8
-                                Label{width: 84 text: "成员" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                                Label{width: Fill text: "已付" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                                Label{width: Fit text: "状态" draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
+                                Label{width: 84 text: "成员" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                                Label{width: Fill text: "已付" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                                Label{width: Fit text: "状态" draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
                             }
                             // 行（闭包内 for+if/else 无嵌套 for——安全组合）
                             for li in ledger_name.len() {
                                 View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
-                                    Label{width: 84 text: ledger_name[li] draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 9}}
+                                    Label{width: 84 text: ledger_name[li] draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 9}}
                                     Label{width: Fill text: ledger_paid_show[li] draw_text.color: #x6e675e draw_text.text_style.font_size: 9}
                                     if ledger_kind[li] == "due" {
-                                        Label{width: Fit text: ledger_state[li] draw_text.color: #xa87516 draw_text.text_style: theme.font_bold{font_size: 9}}
+                                        Label{width: Fit text: ledger_state[li] draw_text.color: #xa87516 draw_text.text_style: font_bold_cjk{font_size: 9}}
                                     } else {
-                                        Label{width: Fit text: ledger_state[li] draw_text.color: #x2f7d4f draw_text.text_style: theme.font_bold{font_size: 9}}
+                                        Label{width: Fit text: ledger_state[li] draw_text.color: #x2f7d4f draw_text.text_style: font_bold_cjk{font_size: 9}}
                                     }
                                 }
                             }
                             // 总计行 + 恒等注脚
-                            Label{width: Fill text: ledger_total_line draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 9}}
+                            Label{width: Fill text: ledger_total_line draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 9}}
                             Label{width: Fill text: "✓ 按分取整 · 尾差由垫付最多者承担 · 总计恒等" draw_text.color: #x2f7d4f draw_text.text_style.font_size: 8}
                             if ledger_tip != "" {
                                 View{width: Fill height: Fit padding: Inset{left: 11 right: 11 top: 8 bottom: 8}
@@ -840,10 +833,10 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                     on_change: |txt| set_pay_draft("" + txt)}
                                 ButtonFlat{text: "记收款" height: 40 padding: Inset{left: 10 right: 10} on_click: || add_payment()
                                     draw_bg +: {border_radius: 13.0 color: #x2f7d4f color_hover: #x358a58 color_down: #x2d7a4a border_size: 0.0}
-                                    draw_text +: {color: #xffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 8}}}
+                                    draw_text +: {color: #xffffff color_hover: #ffffff color_down: #xffffff text_style: font_bold_cjk{font_size: 8}}}
                                 ButtonFlat{text: "导出证据" height: 40 padding: Inset{left: 10 right: 10} on_click: || export_evidence("" + selected_id)
                                     draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 8}}}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: font_bold_cjk{font_size: 8}}}
                             }
                         }
                     }
@@ -851,14 +844,14 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     if case_status_text[sel] == "已确认" {
                         ButtonFlat{width: Fill text: "标记完成" height: 44 on_click: || set_completed("" + selected_id)
                             draw_bg +: {border_radius: 22.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 9}}}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: font_bold_cjk{font_size: 9}}}
                         View{width: Fill height: Fit flow: Right spacing: 6
                             ButtonFlat{text: "AA 已收齐" height: 44 padding: Inset{left: 12 right: 12} on_click: || set_bill_cleared("" + selected_id)
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
-                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: font_bold_cjk{font_size: 8}}}
                             ButtonFlat{text: "分享到群" height: 44 padding: Inset{left: 12 right: 12} on_click: || post_confirm_actions("" + selected_id)
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
-                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 8}}}
                         }
 
                     }
@@ -867,41 +860,41 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         View{width: Fill height: Fit flow: Right spacing: 6
                             ButtonFlat{text: "发投票到群" height: 44 padding: Inset{left: 10 right: 10} on_click: || start_converge()
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
-                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 8}}}
                             ButtonFlat{text: "刷新计票" height: 44 padding: Inset{left: 10 right: 10} on_click: || refresh_converge()
                                 draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xa87516}
-                                draw_text +: {color: #xa87516 color_hover: #xa87516 color_down: #xa87516 text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #xa87516 color_hover: #xa87516 color_down: #xa87516 text_style: font_bold_cjk{font_size: 8}}}
                             ButtonFlat{text: "管家收敛" height: 44 padding: Inset{left: 10 right: 10} on_click: || converge_butler()
                                 draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
-                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: font_bold_cjk{font_size: 8}}}
                         }
                         Label{width: Fill text: "群投票：文字卡形态（本宿主不支持活卡片原地更新）——协议一致，计票手动刷新" draw_text.color: #xa89e91 draw_text.text_style.font_size: 8}
                         if converge_summary != "" {
-                            Label{width: Fill text: "📋 计票：" + converge_summary + (if converge_winner_slot != "" { " → 可收敛到 " + converge_winner_slot } else { "（平票/零票，请人工定夺）" }) draw_text.color: #x2f7d4f draw_text.text_style: theme.font_bold{font_size: 8}}
+                            Label{width: Fill text: "📋 计票：" + converge_summary + (if converge_winner_slot != "" { " → 可收敛到 " + converge_winner_slot } else { "（平票/零票，请人工定夺）" }) draw_text.color: #x2f7d4f draw_text.text_style: font_bold_cjk{font_size: 8}}
                         }
                     }
                     if case_status_text[sel] == "已完成" {
                         View{width: Fill height: Fit flow: Right spacing: 6
                             ButtonFlat{text: "发投票到群" height: 44 padding: Inset{left: 10 right: 10} on_click: || start_converge()
                                 draw_bg +: {border_radius: 22.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
-                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 8}}}
                             ButtonFlat{text: "刷新计票" height: 44 padding: Inset{left: 10 right: 10} on_click: || refresh_converge()
                                 draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xa87516}
-                                draw_text +: {color: #xa87516 color_hover: #xa87516 color_down: #xa87516 text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #xa87516 color_hover: #xa87516 color_down: #xa87516 text_style: font_bold_cjk{font_size: 8}}}
                             ButtonFlat{text: "管家收敛" height: 44 padding: Inset{left: 10 right: 10} on_click: || converge_butler()
                                 draw_bg +: {border_radius: 22.0 color: #fffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
-                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 8}}}
+                                draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: font_bold_cjk{font_size: 8}}}
                         }
                         Label{width: Fill text: "群投票：文字卡形态（本宿主不支持活卡片原地更新）——协议一致，计票手动刷新" draw_text.color: #xa89e91 draw_text.text_style.font_size: 8}
                         if converge_summary != "" {
-                            Label{width: Fill text: "📋 计票：" + converge_summary + (if converge_winner_slot != "" { " → 可收敛到 " + converge_winner_slot } else { "（平票/零票，请人工定夺）" }) draw_text.color: #x2f7d4f draw_text.text_style: theme.font_bold{font_size: 8}}
+                            Label{width: Fill text: "📋 计票：" + converge_summary + (if converge_winner_slot != "" { " → 可收敛到 " + converge_winner_slot } else { "（平票/零票，请人工定夺）" }) draw_text.color: #x2f7d4f draw_text.text_style: font_bold_cjk{font_size: 8}}
                         }
                     }
                     // 待拍板态：确认主按钮朱砂通栏（动作坞主行动按状态就位）
                     if case_status_text[sel] == "待拍板" {
                         ButtonFlat{width: Fill text: "确认这条守护" height: 44 on_click: || confirm_case()
                             draw_bg +: {border_radius: 22.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: theme.font_bold{font_size: 9}}}
+                            draw_text +: {color: #xffffff color_hover: #xffffff color_down: #xffffff text_style: font_bold_cjk{font_size: 9}}}
                     }
                     View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
                         TextInput{width: Fill height: 44 empty_text: "加参与人（逗号分隔）"
@@ -910,7 +903,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             on_change: |txt| set_people_draft("" + txt)}
                         ButtonFlat{text: "添加" height: 44 padding: Inset{left: 10 right: 10} on_click: || add_person("" + selected_id, people_draft)
                             draw_bg +: {border_radius: 13.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #xc7402f}
-                            draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: theme.font_bold{font_size: 8}}}
+                            draw_text +: {color: #xc7402f color_hover: #xc7402f color_down: #xc7402f text_style: font_bold_cjk{font_size: 8}}}
                     }
                     View{width: Fill height: Fit flow: Right spacing: 6 align: Align{y: 0.5}
                         TextInput{width: Fill height: 44 empty_text: "记 AA 总额，如300（选填）"
@@ -919,7 +912,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             on_change: |txt| set_bill_draft("" + txt)}
                         ButtonFlat{text: "记一笔" height: 44 padding: Inset{left: 10 right: 10} on_click: || update_bill_total("" + selected_id, bill_draft)
                             draw_bg +: {border_radius: 13.0 color: #xfffdfa color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 1.0 border_color: #x2f7d4f}
-                            draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: theme.font_bold{font_size: 8}}}
+                            draw_text +: {color: #x2f7d4f color_hover: #x2f7d4f color_down: #x2f7d4f text_style: font_bold_cjk{font_size: 8}}}
                     }
                 }
             }
@@ -940,13 +933,13 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             View{width: Fill height: Fit flow: Right spacing: 9 align: Align{y: 0.5}
                 Svg{width: 26 height: 26 animating: false draw_svg +: {svg: http_resource("{{assets}}/assets/icon.svg") color: #xc7402f}}
                 View{width: Fill height: Fit flow: Down spacing: 1
-                    Label{text: "交给管家" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 13}}
+                    Label{text: "交给管家" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 13}}
                     Label{width: Fill text: "agent 提案 · 人拍板 · 白名单执行" draw_text.color: secondary draw_text.text_style.font_size: 8}
                 }
                 // 文案保留「回到守护列表」（回归 R-16/R-26/27/28/29 依赖此文案定位）
                 ButtonFlat{text: "回到守护列表" height: 32 padding: Inset{left: 10 right: 10} on_click: || back_from_chat()
                     draw_bg +: {border_radius: 16.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 8}}}
+                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: font_bold_cjk{font_size: 8}}}
             }
             for ci in chat_text.len() {
                 let cr = "" + chat_role[ci]
@@ -964,7 +957,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                     View{width: Fill height: Fit flow: Right align: Align{x: 0.0}
                         RoundedView{width: Fit height: Fit flow: Down spacing: 4 padding: Inset{left: 13 right: 13 top: 10 bottom: 10}
                             show_bg: true draw_bg.color: #xfffdfa draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: #xe9dfd2
-                            Label{text: "管 家" draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 7}}
+                            Label{text: "管 家" draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 7}}
                             Label{text: ct draw_text.color: ink draw_text.text_style.font_size: 9}
                         }
                     }
@@ -987,12 +980,12 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             show_bg: true draw_bg.color: #xfcf8f1
                             RoundedView{width: Fit height: Fit padding: Inset{left: 8 right: 8 top: 2 bottom: 3}
                                 show_bg: true draw_bg.color: #xc7402f draw_bg.border_radius: 8.0
-                                Label{text: plan_op_label(plan_op) draw_text.color: #xfffdfa draw_text.text_style: theme.font_bold{font_size: 8}}
+                                Label{text: plan_op_label(plan_op) draw_text.color: #xfffdfa draw_text.text_style: font_bold_cjk{font_size: 8}}
                             }
                             Label{width: Fill text: "管家提案 · 待拍板" draw_text.color: #x6e675e draw_text.text_style.font_size: 8}
                         }
                         // 发丝分隔线（HTML border-bottom:1px solid var(--line)）
-                        View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
+                        RoundedView{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2 draw_bg.border_radius: 0.5}
                     }
                     View{width: Fill height: Fit flow: Down spacing: 6
                         padding: Inset{left: 14 right: 14 top: 10 bottom: 10}
@@ -1008,8 +1001,8 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                 if _is_diff && _has_key {
                                     let _kv = plan_lines[pi].split("：")
                                     View{width: Fill height: Fit flow: Right spacing: 10 align: Align{y: 0.5}
-                                        Label{width: 44 text: _kv[0] draw_text.color: #x6e675e draw_text.text_style: theme.font_bold{font_size: 8}}
-                                        Label{width: Fill text: _kv[1] draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 10}}
+                                        Label{width: 44 text: _kv[0] draw_text.color: #x6e675e draw_text.text_style: font_bold_cjk{font_size: 8}}
+                                        Label{width: Fill text: _kv[1] draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 10}}
                                     }
                                 } else if _is_ok {
                                     RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 4 bottom: 4}
@@ -1020,7 +1013,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                                         show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
                                         Label{text: plan_lines[pi] draw_text.color: #xa87516 draw_text.text_style.font_size: 8}}
                                 } else if _is_diff {
-                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #xc7402f draw_text.text_style: theme.font_bold{font_size: 9}}
+                                    Label{width: Fill text: plan_lines[pi] draw_text.color: #xc7402f draw_text.text_style: font_bold_cjk{font_size: 9}}
                                 } else {
                                     TextLine{text: plan_lines[pi]}
                                 }
@@ -1030,11 +1023,11 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             TextLine{text: "⚠ " + plan_check}
                         }
                         // HTML .plan-actions：两键 flex:1 通栏 + border-top 发丝线分隔
-                        View{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2}
+                        RoundedView{width: Fill height: 1 show_bg: true draw_bg.color: #xe9dfd2 draw_bg.border_radius: 0.5}
                         View{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
                             ButtonFlat{width: Fill text: "拍板执行" height: 44 on_click: || butler_approve()
                                 draw_bg +: {border_radius: 22.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
-                                draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: theme.font_bold{font_size: 9}}}
+                                draw_text +: {color: #ffffff color_hover: #ffffff color_down: #xffffff text_style: font_bold_cjk{font_size: 9}}}
                             // v0.8.0 W1：放弃 → 两段式理由快捷项（拒绝并改写；8 秒不选自动收回）
                             if decline_prompt != "yes" {
                                 ButtonFlat{width: Fill text: "放弃" height: 44 on_click: || butler_decline()
@@ -1047,16 +1040,16 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                             View{width: Fill height: Fit flow: Right spacing: 6
                                 ButtonFlat{text: "时间不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_time()
                                     draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 8}}}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: font_bold_cjk{font_size: 8}}}
                                 ButtonFlat{text: "地点不对" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_place()
                                     draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 8}}}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: font_bold_cjk{font_size: 8}}}
                                 ButtonFlat{text: "理解错了" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_intent()
                                     draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 8}}}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: font_bold_cjk{font_size: 8}}}
                                 ButtonFlat{text: "我自己来" height: 36 padding: Inset{left: 10 right: 10} on_click: || decline_reason_self()
                                     draw_bg +: {border_radius: 13.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
-                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: theme.font_bold{font_size: 8}}}
+                                    draw_text +: {color: secondary color_hover: secondary color_down: secondary text_style: font_bold_cjk{font_size: 8}}}
                             }
                         }
                         Label{width: Fill text: "拍板后走白名单动作 · 5 秒内可撤销 · 拒绝理由注入下轮——agent 从不直接改状态，它只能提案" draw_text.color: #xa89e91 draw_text.text_style.font_size: 8}

@@ -56,11 +56,11 @@ fn publish_glance(){
     clear_pending_flag = "no"
     clear_pending_deadline = 0
     if ai_pending == "yes" {
-        ui.hint.set_text("AI 还在跑，等解析完再发 glance 提醒")
+        set_hint("AI 还在跑，等解析完再发 glance 提醒")
         return
     }
     if !host.has("glance") {
-        ui.hint.set_text("本宿主无 glance 服务（card-host），无法投递 L0 卡；外环真机可跑")
+        set_hint("本宿主无 glance 服务（card-host），无法投递 L0 卡；外环真机可跑")
         return
     }
     // 找一条 Confirmed 的守护做投递目标；按 selected_id 优先，否则取第一条 Confirmed
@@ -84,7 +84,7 @@ fn publish_glance(){
         }
     }
     if target < 0 {
-        ui.hint.set_text("暂无「已确认」守护可发 glance 提醒（先确认一条守护）")
+        set_hint("暂无「已确认」守护可发 glance 提醒（先确认一条守护）")
         return
     }
     let act = "" + cases[target]["activity"]
@@ -98,9 +98,9 @@ fn publish_glance(){
         body: summary
     }, fn(r){
         if r.is_ok {
-            ui.hint.set_text("已投递 glance 屏（" + summary + "）")
+            set_hint("已投递 glance 屏（" + summary + "）")
         } else {
-            ui.hint.set_text("glance 投递失败（" + r.error + "），外环真机可排查")
+            set_hint("glance 投递失败（" + r.error + "），外环真机可排查")
         }
     })
 }
@@ -120,11 +120,11 @@ fn fill_example(){
     let cur = ui.msg_input.text()
     if cur != "" {
         // 输入框已有内容就不再覆盖，避免误丢用户手打的稿子
-        ui.hint.set_text("输入框已有内容，未替换；点「建守护」继续，或手动清空再点示例")
+        set_hint("输入框已有内容，未替换；点「建守护」继续，或手动清空再点示例")
         return
     }
     ui.msg_input.set_text("周六上午去深圳湾骑车，大概两小时？")
-    ui.hint.set_text("已填示例到输入框（不自动建守护），点「建守护」继续")
+    set_hint("已填示例到输入框（不自动建守护），点「建守护」继续")
 }
 
 // === #14 新增：导出数据（cases.json 原文屏显在 hint 区） ===
@@ -140,13 +140,13 @@ fn export_data(){
     clear_pending_flag = "no"
     clear_pending_deadline = 0
     if !fs.exists("cases.json") {
-        ui.hint.set_text("暂无 cases.json（一条守护都没建），无可导出内容")
+        set_hint("暂无 cases.json（一条守护都没建），无可导出内容")
         return
     }
     let raw = fs.read("cases.json")
     // 原样屏显 + 引导用户复制备份。hint 区是单行 Label，长内容直接塞入会撑高；
     // 这里就是用单 Label 容纳多行文本，Splash Label 自身会自然换行。
-    ui.hint.set_text("—— cases.json 原文（复制可备份）——\n" + raw + "\n—— 复制以上文本即可备份 ——")
+    set_hint("—— cases.json 原文（复制可备份）——\n" + raw + "\n—— 复制以上文本即可备份 ——")
 }
 
 // === #14 新增：清空全部（两段式确认，复用 cancel_pending_flag 的 5s 机制） ===
@@ -207,9 +207,9 @@ fn clear_all_data(){
         if removed_msg != "" {
             // 内存已清、但 cases.json 还在盘上（下次启动会再读回）——明示失败，
             // 不让用户误以为数据真的删了
-            ui.hint.set_text("清空未完成：" + removed_msg)
+            set_hint("清空未完成：" + removed_msg)
         } else {
-            ui.hint.set_text("已清空 " + "" + clear_prev_count + " 条守护（cases.json 已移除，内存已重置）")
+            set_hint("已清空 " + "" + clear_prev_count + " 条守护（cases.json 已移除，内存已重置）")
         }
         clear_prev_count = 0
         return
@@ -220,14 +220,14 @@ fn clear_all_data(){
     clear_prev_count = cur_n
     // v0.9.0 WP1：两段窗 5s→8s——PLAN 卡路径人要读完危险提示再二次拍板（真机实测
     //   5s 不够，滚动定位+二次点击超窗 → 永远只挂在确认态）；与拒绝理由窗同源 8s。
-    ui.hint.set_text("再点一次「清空全部」才会真删 " + "" + cur_n + " 条守护（不可逆）；8 秒内点别的按钮可放弃")
+    set_hint("再点一次「清空全部」才会真删 " + "" + cur_n + " 条守护（不可逆）；8 秒内点别的按钮可放弃")
     // 8 秒后超时 → 放弃确认态
     start_timeout(8.0, || {
         if clear_pending_flag == "yes" {
             clear_pending_flag = "no"
             clear_pending_deadline = 0
             clear_prev_count = 0
-            ui.hint.set_text("清空确认已过期（8s 内未再点），未删除任何数据")
+            set_hint("清空确认已过期（8s 内未再点），未删除任何数据")
         }
     })
 }

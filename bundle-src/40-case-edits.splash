@@ -18,13 +18,13 @@ fn target_id(){
 let people_save_result = "ok"
 fn add_person(id_str, raw){
     if id_str == "" || id_str == "0" {
-        ui.hint.set_text("先选中一条守护再添加参与人")
+        set_hint("先选中一条守护再添加参与人")
         return
     }
     let name = "" + raw
     name = name.trim()
     if name == "" {
-        ui.hint.set_text("请先输入姓名（多个用逗号分隔）")
+        set_hint("请先输入姓名（多个用逗号分隔）")
         return
     }
     let cur = -1
@@ -32,7 +32,7 @@ fn add_person(id_str, raw){
         if "" + cases[pi]["id"] == id_str { cur = pi }
     }
     if cur < 0 {
-        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        set_hint("找不到 #" + id_str + "，请重新选中")
         return
     }
     let old = "" + cases[cur]["people"]
@@ -44,7 +44,7 @@ fn add_person(id_str, raw){
         if one != "" { added.push(one) }
     }
     if added.len() == 0 {
-        ui.hint.set_text("没解析到有效姓名（多个请用逗号分隔）")
+        set_hint("没解析到有效姓名（多个请用逗号分隔）")
         return
     }
     // 上限 10 人（手册纪律：先检查再写）
@@ -53,7 +53,7 @@ fn add_person(id_str, raw){
         for ex in old.split(",") { if ex.trim() != "" { total = total + 1 } }
     }
     if total + added.len() > 10 {
-        ui.hint.set_text("参与人已达上限 10 人，未添加")
+        set_hint("参与人已达上限 10 人，未添加")
         return
     }
     let merged = old
@@ -99,9 +99,9 @@ fn add_person(id_str, raw){
     render_views()
     people_draft = ""
     if people_save_result == "fail" {
-        ui.hint.set_text("已加 " + "" + added.len() + " 人（保存失败，仅在内存）")
+        set_hint("已加 " + "" + added.len() + " 人（保存失败，仅在内存）")
     } else {
-        ui.hint.set_text("#" + id_str + " 参与人：" + merged)
+        set_hint("#" + id_str + " 参与人：" + merged)
     }
 }
 
@@ -110,7 +110,7 @@ fn add_person(id_str, raw){
 //   不做 trim 之外的格式校验——bill_display 的 total_f > 0 守卫天然处理空/0/负数/垃圾
 fn update_bill_total(id_str, raw){
     if id_str == "" || id_str == "0" {
-        ui.hint.set_text("先选中一条守护再记 AA 总额")
+        set_hint("先选中一条守护再记 AA 总额")
         return
     }
     let trimmed = ("" + raw).trim()
@@ -119,7 +119,7 @@ fn update_bill_total(id_str, raw){
         if "" + cases[bi]["id"] == id_str { cur = bi }
     }
     if cur < 0 {
-        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        set_hint("找不到 #" + id_str + "，请重新选中")
         return
     }
 // C4：重建数组（cur 分支写 trimmed，其余保留原 bill_total；#38 同 add_person 补 slot_init_asked）
@@ -159,11 +159,11 @@ fn update_bill_total(id_str, raw){
     render_views()
     bill_draft = ""
     if bill_save_result == "fail" {
-        ui.hint.set_text("#" + id_str + " AA 总额已记（保存失败，仅在内存）")
+        set_hint("#" + id_str + " AA 总额已记（保存失败，仅在内存）")
     } else if trimmed == "" {
-        ui.hint.set_text("#" + id_str + " 已清空 AA 总额")
+        set_hint("#" + id_str + " 已清空 AA 总额")
     } else {
-        ui.hint.set_text("#" + id_str + " AA 总额：" + trimmed)
+        set_hint("#" + id_str + " AA 总额：" + trimmed)
     }
 }
 
@@ -173,7 +173,7 @@ fn update_bill_total(id_str, raw){
 let cycle_save_result = "ok"
 fn cycle_slot(id_str){
     if id_str == "" || id_str == "0" {
-        ui.hint.set_text("先选中一条守护再改时间")
+        set_hint("先选中一条守护再改时间")
         return
     }
     let cur = -1
@@ -181,11 +181,11 @@ fn cycle_slot(id_str){
         if "" + cases[ci]["id"] == id_str { cur = ci }
     }
     if cur < 0 {
-        ui.hint.set_text("找不到 #" + id_str + "，请重新选中")
+        set_hint("找不到 #" + id_str + "，请重新选中")
         return
     }
     if cases[cur]["status"] == "Cancelled" {
-        ui.hint.set_text("该守护已取消，改时间无效（#" + id_str + "）")
+        set_hint("该守护已取消，改时间无效（#" + id_str + "）")
         return
     }
     // 5 个常见槽位序列（确定性，无日期计算——本 runtime 无时钟 API）
@@ -219,9 +219,9 @@ fn cycle_slot(id_str){
         cycle_save_result = save_result
         render_views()
         if cycle_save_result == "fail" {
-            ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）（保存标记失败，仅在内存）")
+            set_hint("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）（保存标记失败，仅在内存）")
         } else {
-            ui.hint.set_text("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）")
+            set_hint("#" + id_str + " 还没抽到时段，点「改时间」将设为 周六-上午（可再点切换）")
         }
         return
     }
@@ -291,11 +291,11 @@ fn cycle_slot(id_str){
     render_views()
     let label_new = nd + "-" + np
     if cycle_save_result == "fail" {
-        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（保存失败，仅在内存）")
+        set_hint("#" + id_str + " 时间改为 " + label_new + "（保存失败，仅在内存）")
     } else if my_conflict == "yes" {
-        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（与另一条同时段，仍冲突）")
+        set_hint("#" + id_str + " 时间改为 " + label_new + "（与另一条同时段，仍冲突）")
     } else {
-        ui.hint.set_text("#" + id_str + " 时间改为 " + label_new + "（已无冲突）")
+        set_hint("#" + id_str + " 时间改为 " + label_new + "（已无冲突）")
     }
 }
 
@@ -306,7 +306,7 @@ fn clear_cancel_pending(hint_text){
     // === #25：撤销窗口也跟着归零，避免"换操作"后旧撤销目标还能被恢复 ===
     cancelled_last_id = 0
     if hint_text != "" {
-        ui.hint.set_text(hint_text)
+        set_hint(hint_text)
     }
 }
 
