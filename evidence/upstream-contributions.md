@@ -36,3 +36,10 @@
 
 - **2026-10-12 追评**：提 issue 前已拉取上游最新代码复核——Rinx 主仓自 10-11 无新提交、
   App-Hub 拉取 87 提交后仍无 edit_message 服务面（comment 6123285301）。证据钉在 issue 里。
+
+## 2026-10-14 · 从报问题到提 PR：App-Hub #214 已修，PR #230 待审
+
+- **PR**：https://github.com/OctoSense-org/OctoSense-App-Hub/pull/230（fix/host-port-entries → main）
+- **内容**：准入层 `check_host`（app-contract/src/policy.rs）接受 `host:port` 条目——端口须纯数字且 1..=65535；空端口/非数字/超界/无主机名/多冒号/带路径/通配符逐一拒绝。裸 host 语义不变。PUBLISHING 双语档「Network hosts」节同步为「可显式带一个端口；裸 host 匹配任意端口、带端口只匹配该端口」。
+- **验证**：新增 `network_hosts_may_name_one_explicit_port`（接受 1 + 拒绝 8 例）；`cargo test -p octosense-app-contract` 全绿（61 项）。
+- **定位依据**：运行时门 `url_allowed`（splash_policy.rs）本就支持 host:port——准入与运行时对齐，而非收紧运行时（对存量零破坏，最小授权可用）。
