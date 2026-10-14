@@ -90,7 +90,7 @@
 
 ## 2026-10-14 · 上游贡献收口：三 PR + 一撤回 + 两收口评论
 
-- **App-Hub #213 修复（makepad PR #125）**：根因更正——不是 Wayland 唤醒缺口，是 Splash isolate 的脚本任务队列从不排空（isolate 无事件分发节拍）。两条 isolate 入口成功退出前跑 std 泵；回归测试红绿钉住（`a_resolution_queued_during_an_isolate_entry_resumes_on_exit`）；真机 Wayland+card-host 零输入双实验验证（定时器 promise、自签 HTTPS on_response 均空闲送达）。证据：/tmp/makepad-490 分支 fix/splash-isolate-task-pump @ e0762fa7e。
+- **App-Hub #213 修复（makepad PR #125）**：根因更正——不是 Wayland 唤醒缺口，是 Splash isolate 的脚本任务队列从不排空（isolate 无事件分发节拍）。两条 isolate 入口成功退出前跑 std 泵；回归测试红绿钉住（`a_resolution_queued_during_an_isolate_entry_resumes_on_exit`）；真机 Wayland+card-host 零输入双实验验证（定时器 promise、自签 HTTPS on_response 均空闲送达）。证据：/tmp/makepad-490 分支 fix/splash-isolate-task-pump @ 0153e2d19。
 - **Rinx #90 实现（PR #91）**：matrix.edit_message 全链路（miniapp-core 变体/parse/cost + 宿主 send::edit 发送者预校验 + review/audit 门 + wire 形态测试）。miniapp-core 31 项 + rinx lib 357 项测试全绿。证据：/tmp/rinx-90 分支 feat/matrix-edit-message @ e568f333。
 - **OctoSense #490 撤回**：复核发现字段一直可用（三个钉住 rev 的 std 探针 + 端到端自签 HTTPS 对照实验全过），当初的 named_fn_arg 报错归因错误。诚实撤回并关闭；验证逻辑固化为 makepad PR #124 回归测试。验证物料存 evidence/issue-490-verify/。
 - **OctoSense #489 收口评论**：device_calendar 已落地（App-Hub 契约 + shell macOS/Android 实现），提案核心诉求已回答；剩余缺口（Linux 覆盖、免面板写）列清留维护者裁量。
