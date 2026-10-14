@@ -1,0 +1,27 @@
+// name: SSL Repro v5-shape
+let result = "点击开始"
+let gw_url = "https://127.0.0.1:8195/"
+
+fn fetch(url){
+    let p = promise()
+    net.http_request(net.HttpRequest{url: url method: net.HttpMethod.GET headers: {"User-Agent": "qx-spike/1.0"} ignore_ssl_cert: true}) do net.HttpEvents{
+        on_response: |res| p.resolve(res)
+        on_error: |_err| p.resolve(nil)
+    }
+    p
+}
+
+fn do_fetch(){
+    ui.result.set_text("请求中…")
+    let res = fetch(gw_url).await()
+    if res == nil {
+        ui.result.set_text("NIL（on_error 路径）")
+    } else {
+        ui.result.set_text("status=" + ("" + res.status_code))
+    }
+}
+
+View{height: Fill flow: Down
+  ButtonFlat{text: "GO" height: 38 on_click: || do_fetch()}
+  result := Label{text: "idle"}
+}

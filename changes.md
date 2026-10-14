@@ -87,3 +87,12 @@
 | 2026-10-13 晚（WP4） | mail.review_send 邮件人审通路 | 契约核查：跨 app 调用=宿主评审面板（物理确认才发；agent 只能 propose_send；mail.send 一律拒；Linux/Windows 无物理审批——官方在案）；催收草稿「邮件人审发出」+结案卡「邮件回顾（人审）」（fin_report_body 组稿抽出两通路同文）；to 留空不编造地址；无服务/平台不支持→真实错误透出+文案回输入框；manifest +mail 能力 | 回归 38/38（+R-38 否定用例：无服务诚实降级+文案兜底）；hub check PASSED | verified（集成+否定）；真发送 unverified（平台阻断，官方在案） | `evidence/finals-wp4-mail-20261013.md` |
 | 2026-10-13 晚（WP5） | 主动回合扩场景 | qx-proactive-butler.py 同循环新增：T-24h 仍 Proposing→临期催拍板提案（PLAN confirm）；活动后 T+1/T+3/T+7 有账未清→梯度催收提案（PLAN draft_dunning，差额代码算）；不在窗口→suppressed.json 留痕对照；提案卡单槽契约不覆盖未消费；--once 单轮模式；kimi key 惰性读 | 回归 40/40（+R-39/R-40 守护进程 jail 级真跑断言）；两路 daemon 单驱直验（催拍板落盘+催收 T+1 差额 ¥200 代码算+留痕对照）；hub check PASSED | verified | `evidence/finals-wp5-proactive-expansion-20261013.md` |
 | 2026-10-14 | 官方桌面 shell 实测环境就绪 + App-Hub PR #230 | 桌面构建：wasmtime 需 rustc≥1.96 → 升 1.99；链接缺 -lasound/-lpulse/-ldrm → ~/.local/gosim-libs 用户态符号链接+RUSTFLAGS 绕过（v0.1.0 同款）；系统应用 id 硬断言须 os. 前缀（staging 副本改 os.qianxian，提交形态不变）；桌面启动日志实证：内核服务就绪 + glance 服务应答名单含 os.qianxian。WP7 贡献落地：App-Hub #214 修到底——PR #230（准入 check_host 接受 host:port，端口纯数字 1..=65535，八种畸形拒绝；growth.rs 新增测试；PUBLISHING 双语档同步）；贡献清单状态刷新 | cargo test -p octosense-app-contract 61 项全绿；桌面窗口实起（WSLg 真窗）；PR #230 已提交待审 | verified（桌面启动+测试）/ 桌面 GUI 实测待人点 | [PR #230](https://github.com/OctoSense-org/OctoSense-App-Hub/pull/230)、`evidence/host-desktop-20261014.png` |
+
+## 2026-10-14 · 上游贡献收口：三 PR + 一撤回 + 两收口评论
+
+- **App-Hub #213 修复（makepad PR #125）**：根因更正——不是 Wayland 唤醒缺口，是 Splash isolate 的脚本任务队列从不排空（isolate 无事件分发节拍）。两条 isolate 入口成功退出前跑 std 泵；回归测试红绿钉住（`a_resolution_queued_during_an_isolate_entry_resumes_on_exit`）；真机 Wayland+card-host 零输入双实验验证（定时器 promise、自签 HTTPS on_response 均空闲送达）。证据：/tmp/makepad-490 分支 fix/splash-isolate-task-pump @ e0762fa7e。
+- **Rinx #90 实现（PR #91）**：matrix.edit_message 全链路（miniapp-core 变体/parse/cost + 宿主 send::edit 发送者预校验 + review/audit 门 + wire 形态测试）。miniapp-core 31 项 + rinx lib 357 项测试全绿。证据：/tmp/rinx-90 分支 feat/matrix-edit-message @ e568f333。
+- **OctoSense #490 撤回**：复核发现字段一直可用（三个钉住 rev 的 std 探针 + 端到端自签 HTTPS 对照实验全过），当初的 named_fn_arg 报错归因错误。诚实撤回并关闭；验证逻辑固化为 makepad PR #124 回归测试。验证物料存 evidence/issue-490-verify/。
+- **OctoSense #489 收口评论**：device_calendar 已落地（App-Hub 契约 + shell macOS/Android 实现），提案核心诉求已回答；剩余缺口（Linux 覆盖、免面板写）列清留维护者裁量。
+- **octos #2768 设计勘察评论**：gateway 装配点（gateway_runtime.rs:665）与 serve 侧真实缺口（无总线）钉死，三个待决设计问题列明，待 RFC 共识后实施——不贸然提大 PR。
+- 台账：evidence/upstream-contributions.md 全部更新为终态表。

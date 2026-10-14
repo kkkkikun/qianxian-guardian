@@ -144,10 +144,19 @@ run.md                   复现步骤与版本锁定
 
 ## 对 OctoSense 的贡献
 
-- **snap-to-png**（无头环境控件树渲染工具）：已向 App Flow 提交 [PR #190](https://github.com/OctoSense-org/OctoSense-App-Flow/pull/190)（评审三连修复已推送）。
-- **Rinx issue [#90](https://github.com/hagency-org/Rinx/issues/90)**：mini-app 消息编辑/读取缺口（附源码级证据与最新版复查）。
-- **PLAN 协议模式模板**：[evidence/plan-pattern-template.md](evidence/plan-pattern-template.md)（agent 提案→白名单校验→人拍板→落盘回执 四段式 + 机器可读 op 表）。
-- 全部清单与状态：[evidence/upstream-contributions.md](evidence/upstream-contributions.md)。
+**已提 PR**：
+
+- [App-Hub PR #230](https://github.com/OctoSense-org/OctoSense-App-Hub/pull/230)：`network.hosts` 准入接受 `host:port`（修 [#214](https://github.com/OctoSense-org/OctoSense-App-Hub/issues/214)，61 项测试全绿）。
+- [makepad PR #125](https://github.com/OctoSense-org/makepad/pull/125)：修复 [#213](https://github.com/OctoSense-org/OctoSense-App-Hub/issues/213)——Splash isolate 的 promise/任务队列在空闲事件循环下从不排空（定时器/网络回调 resolve 后 `await` 永不恢复）；带红绿钉住的回归测试，Wayland 真机零输入验证。
+- [Rinx PR #91](https://github.com/hagency-org/Rinx/pull/91)：实现 [#90](https://github.com/hagency-org/Rinx/issues/90) 的 `matrix.edit_message`（m.replace）mini-app 服务，357+31 项测试全绿。
+- [App Flow PR #190](https://github.com/OctoSense-org/OctoSense-App-Flow/pull/190)：snap-to-png 无头渲染工具（评审三连修复已推送）。
+- [makepad PR #124](https://github.com/OctoSense-org/makepad/pull/124)：`net.HttpRequest ignore_ssl_cert` 脚本侧贯通回归测试（[#490](https://github.com/OctoSense-org/OctoSense/issues/490) 经复核为我们误判，已诚实撤回并关闭，测试留下防疑云）。
+
+**收口评论**：[#489](https://github.com/OctoSense-org/OctoSense/issues/489) 日历提案按 `device_calendar` 落地重新定界；[octos #2768](https://github.com/octos-org/octos/issues/2768) 定时唤醒 RFC 补实现勘察（gateway 装配点钉死 + serve 侧三个待决设计问题）。
+
+**PLAN 协议模式模板**：[evidence/plan-pattern-template.md](evidence/plan-pattern-template.md)（agent 提案→白名单校验→人拍板→落盘回执 四段式 + 机器可读 op 表）。
+
+全部清单与状态：[evidence/upstream-contributions.md](evidence/upstream-contributions.md)。
 
 ## 文档
 
