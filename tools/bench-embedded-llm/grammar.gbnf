@@ -1,0 +1,24 @@
+# 牵线（Qianxian）PLAN 协议 GBNF 语法约束文件
+# 用于在端侧推理时强制模型输出符合 bundle/AGENT.md 的标准 PLAN 格式或纯回复，消灭语法幻觉
+
+root ::= response
+
+response ::= plain_reply | (rationale "\n" plan_block)
+
+rationale ::= [^\n]+
+
+plan_block ::= "PLAN{" ws "\"op\":" ws op_name ("," ws field)* ws "}"
+
+op_name ::= "\"create\"" | "\"confirm\"" | "\"reschedule\"" | "\"cancel\"" | "\"add_people\"" | "\"set_bill\"" | "\"complete\"" | "\"draft_dunning\"" | "\"mark_paid\"" | "\"undo\"" | "\"clear\"" | "\"export\""
+
+field ::= string_field
+
+string_field ::= key_name ":" ws string_val
+
+key_name ::= "\"activity\"" | "\"slot_day\"" | "\"slot_part\"" | "\"place\"" | "\"people\"" | "\"bill_total\"" | "\"id\"" | "\"text\"" | "\"who\"" | "\"amount\""
+
+string_val ::= "\"" [^"\\]* "\""
+
+ws ::= [ \t]*
+
+plain_reply ::= [^\n]+ ("\n" [^\n]+)*

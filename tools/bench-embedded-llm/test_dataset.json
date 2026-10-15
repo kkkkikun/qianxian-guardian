@@ -1,0 +1,139 @@
+{
+  "description": "牵线（Qianxian）端侧内置大模型基准评测数据集（稳定·快速·可靠）",
+  "version": "1.0.0",
+  "criteria": {
+    "stability": "内存占用峰值 < 1.2GB，10轮连续调用无泄漏与崩溃，输出方差低",
+    "speed": "首字延迟 TTFT < 600ms，生成速度 > 20 token/s，端到端耗时 < 3s",
+    "reliability": "100% 单行 PLAN 格式合规，严格 no-facts 铁律（抽不到留空并写「未抽取到」），零模型数学计算"
+  },
+  "cases": [
+    {
+      "id": "TC-01",
+      "category": "standard_create",
+      "description": "标准完整建守护：时间、地点、活动、人物齐全",
+      "user_message": "本周六下午三点奥森南门集合骑车，小明和小红都去，大家准时到！",
+      "expected_op": "create",
+      "required_fields": {
+        "activity": "骑车",
+        "slot_day": "周六",
+        "slot_part": "下午",
+        "place": "奥森南门",
+        "people": "小明 小红"
+      },
+      "forbidden_hallucinations": []
+    },
+    {
+      "id": "TC-02",
+      "category": "missing_fields_no_facts",
+      "description": "信息缺失（no-facts 铁律）：无地点、无具体时段，严禁臆造",
+      "user_message": "周日大家一起吃个火锅吧，我和张三李四。",
+      "expected_op": "create",
+      "required_fields": {
+        "activity": "火锅",
+        "slot_day": "周日",
+        "people": "张三 李四"
+      },
+      "assert_empty_or_unextracted": ["place", "slot_part"],
+      "forbidden_hallucinations": ["东来顺", "海底捞", "晚上", "中午"]
+    },
+    {
+      "id": "TC-03",
+      "category": "extreme_minimal",
+      "description": "极简消息：仅有活动，其他全无，严禁编造任何时间地点",
+      "user_message": "去打羽毛球不？",
+      "expected_op": "create",
+      "required_fields": {
+        "activity": "羽毛球"
+      },
+      "assert_empty_or_unextracted": ["slot_day", "slot_part", "place", "people"],
+      "forbidden_hallucinations": ["周六", "周日", "球馆"]
+    },
+    {
+      "id": "TC-04",
+      "category": "reschedule_op",
+      "description": "改期提案：将已有守护改至新时段",
+      "current_cases": "[{\"id\":\"1\",\"activity\":\"桌游\",\"slot_day\":\"周五\",\"slot_part\":\"晚上\",\"place\":\"轰趴馆\",\"status\":\"Confirmed\"}]",
+      "user_message": "周五晚上的桌游改到周六下午吧，轰趴馆不变",
+      "expected_op": "reschedule",
+      "required_fields": {
+        "id": "1",
+        "slot_day": "周六",
+        "slot_part": "下午"
+      },
+      "forbidden_hallucinations": []
+    },
+    {
+      "id": "TC-05",
+      "category": "add_people_op",
+      "description": "追加参与人提案",
+      "current_cases": "[{\"id\":\"2\",\"activity\":\"露营\",\"slot_day\":\"周日\",\"slot_part\":\"上午\",\"people\":\"王五\",\"status\":\"Confirmed\"}]",
+      "user_message": "露营再加两个人：赵六和钱七",
+      "expected_op": "add_people",
+      "required_fields": {
+        "id": "2",
+        "people": "赵六 钱七"
+      },
+      "forbidden_hallucinations": []
+    },
+    {
+      "id": "TC-06",
+      "category": "set_bill_no_math",
+      "description": "记账提案：总金额传递，模型严禁自己计算人均金额",
+      "current_cases": "[{\"id\":\"3\",\"activity\":\"聚餐\",\"people\":\"甲 乙 丙\",\"status\":\"Completed\"}]",
+      "user_message": "聚餐账单出来了，总共 450 元",
+      "expected_op": "set_bill",
+      "required_fields": {
+        "id": "3",
+        "bill_total": "450"
+      },
+      "forbidden_hallucinations": ["150", "人均"]
+    },
+    {
+      "id": "TC-07",
+      "category": "confirm_op",
+      "description": "催拍板或确认已有草案",
+      "current_cases": "[{\"id\":\"4\",\"activity\":\"看电影\",\"slot_day\":\"周六\",\"slot_part\":\"晚上\",\"status\":\"Proposing\"}]",
+      "user_message": "看电影就这么定了，赶紧确认吧",
+      "expected_op": "confirm",
+      "required_fields": {
+        "id": "4"
+      },
+      "forbidden_hallucinations": []
+    },
+    {
+      "id": "TC-08",
+      "category": "cancel_op",
+      "description": "取消活动提案",
+      "current_cases": "[{\"id\":\"5\",\"activity\":\"徒步\",\"slot_day\":\"周末\",\"status\":\"Confirmed\"}]",
+      "user_message": "周末下大雨，徒步取消吧",
+      "expected_op": "cancel",
+      "required_fields": {
+        "id": "5"
+      },
+      "forbidden_hallucinations": []
+    },
+    {
+      "id": "TC-09",
+      "category": "pure_qa_no_plan",
+      "description": "纯问答咨询：严禁输出任何 PLAN",
+      "current_cases": "[{\"id\":\"1\",\"activity\":\"聚餐\",\"slot_day\":\"周六\",\"slot_part\":\"晚上\",\"status\":\"Confirmed\"}]",
+      "user_message": "管家，我们现在一共有几个活动在进行中？",
+      "expected_op": null,
+      "must_not_contain": ["PLAN{"]
+    },
+    {
+      "id": "TC-10",
+      "category": "conflict_warning",
+      "description": "时段冲突发现并预警",
+      "current_cases": "[{\"id\":\"1\",\"activity\":\"看展览\",\"slot_day\":\"周六\",\"slot_part\":\"下午\",\"place\":\"美术馆\",\"status\":\"Confirmed\"}]",
+      "user_message": "周六下午去打篮球怎么样？",
+      "expected_op": "create",
+      "must_contain_warning": "冲突",
+      "required_fields": {
+        "activity": "打篮球",
+        "slot_day": "周六",
+        "slot_part": "下午"
+      }
+    }
+  ]
+}
