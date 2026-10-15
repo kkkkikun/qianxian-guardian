@@ -13,3 +13,18 @@ __pycache__/
 # OLP 黑板:分支无关的工作文件,不入库(防跨分支裂脑)
 .octos/OUTER_LOOP_REVIEW.md
 .octos-workspace.toml
+
+# Android 与端侧大模型权重（大文件/产物防污染）
+*.gguf
+*.bin
+*.apk
+*.aab
+models/
+target/
+build/
+android/build/
+android/app/build/
+android/app/src/main/assets/models/
+.cxx/
+local.properties
+
