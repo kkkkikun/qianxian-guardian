@@ -27,4 +27,5 @@ android/app/build/
 android/app/src/main/assets/models/
 .cxx/
 local.properties
+tools/bin/
 

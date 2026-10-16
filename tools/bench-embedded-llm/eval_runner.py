@@ -16,20 +16,35 @@ import urllib.error
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_PATH = os.path.join(SCRIPT_DIR, "test_dataset.json")
 
-PREAMBLE = ("你是「牵线」聚会守护管家，帮组织者把群消息变成照顾到收尾的聚会。依据【当前守护】与"
-            "【用户消息】工作。规则：1)只从消息原文抽取字段，抽不到就留空并说明「未抽取到」，绝不编造"
-            "时间/地点/人物；2)你没有执行权——凡涉及新建/确认/改期/取消/加人/记账，先用一两句人话说明，"
-            "然后另起一行输出机器提案，格式固定单行：PLAN{\"op\":\"create\",\"text\":\"消息原文\","
-            "\"activity\":\"\",\"slot_day\":\"\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\","
-            "\"bill_total\":\"\"}。op 全集：create(text 必填原文)/confirm/reschedule(+slot_day+slot_part)/"
-            "cancel/add_people(+people)/set_bill(+bill_total)/complete/draft_dunning/mark_paid(+who+amount)/"
-            "undo（撤销刚取消的，5 秒窗）/clear（清空全部，危险，两段确认）/export（导出，可带 id）——"
-            "除 create/clear/export 外都必须包含 \"id\":\"<目标守护数字>\"，缺 id 会被拒，字段值全部双引号字符串，"
-            "值内禁用双引号与换行，未抽取到留空，每次回复最多一个 PLAN；3)绝不声称已改状态，用户点"
-            "「拍板」后才算数；4)答疑直接回答不带 PLAN；5)发现同时段冲突要提醒。回复中文、简短（≤120字）。")
+SYSTEM_PROMPT = ("你是「牵线」聚会守护管家。请依据【当前守护】和【用户消息】进行分析。\n"
+                 "核心规则：\n"
+                 "1. no-facts 铁律：只从消息原文抽取字段。若未提及具体时段（上午/中午/下午/晚上）或地点，slot_part/place 必须留空 \"\"，严禁凭常识猜测（例如绝不可自行脑补「晚上」或「餐厅」）！\n"
+                 "2. 涉及活动变更时，先说一句说明，然后另起一行输出单行机器提案：\n"
+                 "   - 新建: PLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"...\",\"slot_day\":\"...\",\"slot_part\":\"...\",\"place\":\"...\",\"people\":\"...\"}\n"
+                 "   - 改期: PLAN{\"op\":\"reschedule\",\"id\":\"<id>\",\"slot_day\":\"...\",\"slot_part\":\"...\"}\n"
+                 "   - 确认: PLAN{\"op\":\"confirm\",\"id\":\"<id>\"}\n"
+                 "   - 取消: PLAN{\"op\":\"cancel\",\"id\":\"<id>\"}\n"
+                 "   - 加人: PLAN{\"op\":\"add_people\",\"id\":\"<id>\",\"people\":\"...\"}\n"
+                 "   - 记账: PLAN{\"op\":\"set_bill\",\"id\":\"<id>\",\"bill_total\":\"...\"}\n"
+                 "3. 冲突检查：若【当前守护】中已有同时段活动，回复第一句必须提示「冲突」预警。\n"
+                 "4. 纯咨询/问答直接回答，严禁输出任何 PLAN。\n"
+                 "5. 模型严禁进行数学计算。")
 
-def build_prompt(user_msg, current_cases="(还没有守护)"):
-    return f"{PREAMBLE}\n\n【当前守护】\n{current_cases}\n\n【用户消息】\n{user_msg}"
+FEW_SHOT_TURNS = [
+    {"role": "user", "content": "【当前守护】\n（还没有守护）\n\n【用户消息】\n周六晚上在老地方吃烤肉，张三李四一起"},
+    {"role": "assistant", "content": "收到，为您起草聚会方案：周六晚上老地方烤肉。\nPLAN{\"op\":\"create\",\"text\":\"周六晚上在老地方吃烤肉，张三李四一起\",\"activity\":\"烤肉\",\"slot_day\":\"周六\",\"slot_part\":\"晚上\",\"place\":\"老地方\",\"people\":\"张三 李四\"}"},
+    {"role": "user", "content": "【当前守护】\n（还没有守护）\n\n【用户消息】\n周五大家聚一下吃个饭吧"},
+    {"role": "assistant", "content": "收到，为您起草聚会方案（时段与地点未抽取到）。\nPLAN{\"op\":\"create\",\"text\":\"周五大家聚一下吃个饭吧\",\"activity\":\"吃饭\",\"slot_day\":\"周五\",\"slot_part\":\"\",\"place\":\"\",\"people\":\"\"}"},
+    {"role": "user", "content": "【当前守护】\n[{\"id\":\"1\",\"activity\":\"桌游\",\"slot_day\":\"周五\",\"slot_part\":\"晚上\"}]\n\n【用户消息】\n周五的桌游改到周六下午"},
+    {"role": "assistant", "content": "好的，为您将桌游调整至周六下午。\nPLAN{\"op\":\"reschedule\",\"id\":\"1\",\"slot_day\":\"周六\",\"slot_part\":\"下午\"}"}
+]
+
+
+def build_messages(user_msg, current_cases="(还没有守护)"):
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    msgs.extend(FEW_SHOT_TURNS)
+    msgs.append({"role": "user", "content": f"【当前守护】\n{current_cases}\n\n【用户消息】\n{user_msg}"})
+    return msgs
 
 def parse_plan(text):
     match = re.search(r'PLAN\s*(\{.*?\})', text)
@@ -40,19 +55,18 @@ def parse_plan(text):
     except Exception:
         return {"_parse_error": match.group(1)}
 
-def call_openai_compatible(endpoint, model, prompt, temperature=0.0):
+def call_openai_compatible(endpoint, model, messages, temperature=0.0):
     url = f"{endpoint.rstrip('/')}/v1/chat/completions"
     payload = {
         "model": model,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
+        "messages": messages,
         "temperature": temperature,
         "max_tokens": 256
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     t0 = time.time()
+
     # 显式禁用代理，避免 localhost/127.0.0.1 被外部 HTTP_PROXY 劫持
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
@@ -170,8 +184,8 @@ def run_suite(endpoint, model, repeat=1):
 
         for r in range(repeat):
             total_runs += 1
-            prompt = build_prompt(case["user_message"], case.get("current_cases", "(还没有守护)"))
-            res = call_openai_compatible(endpoint, model, prompt)
+            messages = build_messages(case["user_message"], case.get("current_cases", "(还没有守护)"))
+            res = call_openai_compatible(endpoint, model, messages)
             last_out = res
             if not res["success"]:
                 case_passed = False
