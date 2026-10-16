@@ -42,7 +42,7 @@ echo "$DEVICES"
 
 # 2. 推送端侧模型至模拟器存储
 echo ">>> 检查模拟器中的端侧嵌入式模型..."
-"$ADB" shell "mkdir -p $REMOTE_MODEL_DIR"
+TARGET_MODEL_DIR="/data/local/tmp"
 
 if [[ ! -f "$MODEL_FILE" ]]; then
     echo "❌ 本地端侧模型不存在: $MODEL_FILE"
@@ -50,14 +50,14 @@ if [[ ! -f "$MODEL_FILE" ]]; then
 fi
 
 LOCAL_SIZE=$(stat -c%s "$MODEL_FILE" 2>/dev/null || stat -f%z "$MODEL_FILE")
-REMOTE_SIZE=$("$ADB" shell "ls -l $REMOTE_MODEL_DIR/$REMOTE_MODEL_NAME 2>/dev/null" | awk '{print $5}' || true)
+REMOTE_SIZE=$("$ADB" shell "ls -l $TARGET_MODEL_DIR/$REMOTE_MODEL_NAME 2>/dev/null" | awk '{print $5}' || true)
 
 if [[ "$REMOTE_SIZE" == "$LOCAL_SIZE" ]]; then
     echo "✓ 模拟器内已有完整端侧模型 ($REMOTE_SIZE 字节)，跳过重复传输"
 else
-    echo ">>> 开始将模型推送至模拟器: $REMOTE_MODEL_DIR/$REMOTE_MODEL_NAME (${LOCAL_SIZE} 字节)..."
-    "$ADB" push "$MODEL_FILE" "$REMOTE_MODEL_DIR/$REMOTE_MODEL_NAME"
-    REMOTE_SIZE_CHECK=$("$ADB" shell "ls -l $REMOTE_MODEL_DIR/$REMOTE_MODEL_NAME" | awk '{print $5}')
+    echo ">>> 开始将模型推送至模拟器: $TARGET_MODEL_DIR/$REMOTE_MODEL_NAME (${LOCAL_SIZE} 字节)..."
+    "$ADB" push "$MODEL_FILE" "$TARGET_MODEL_DIR/$REMOTE_MODEL_NAME"
+    REMOTE_SIZE_CHECK=$("$ADB" shell "ls -l $TARGET_MODEL_DIR/$REMOTE_MODEL_NAME" | awk '{print $5}')
     if [[ "$REMOTE_SIZE_CHECK" == "$LOCAL_SIZE" ]]; then
         echo "✓ [OK] 模型推送校验成功！"
     else
@@ -66,7 +66,20 @@ else
     fi
 fi
 
-# 3. 自动化截屏走查 (Headless Screen Capture)
+# 3. 部署并执行 Android 原生端侧验证运行器
+echo ">>> 部署并执行 Android 原生端侧验证运行器 (android_runner)..."
+RUNNER_BIN="$PROJECT_ROOT/host-android/target/x86_64-linux-android/release/android_runner"
+if [[ -f "$RUNNER_BIN" ]]; then
+    "$ADB" push "$RUNNER_BIN" /data/local/tmp/android_runner
+    "$ADB" shell chmod +x /data/local/tmp/android_runner
+    echo ">>> 在 Android 模拟器内执行真实端侧意图与 PLAN 协议走查..."
+    "$ADB" shell /data/local/tmp/android_runner | tee "$EVIDENCE_DIR/android-native-runner.log"
+    echo "✓ 原生走查日志已归档至 evidence/android-native-runner.log"
+else
+    echo "⚠️ 未找到 $RUNNER_BIN，跳过原生运行器执行"
+fi
+
+# 4. 自动化截屏走查 (Headless Screen Capture)
 echo ">>> 导出模拟器当前屏幕截图至 evidence/android-emulator-smoke.png..."
 SCREEN_PNG="$EVIDENCE_DIR/android-emulator-smoke.png"
 if [[ -x "$ANDROID_CLI" ]]; then
@@ -79,7 +92,7 @@ if [[ -f "$SCREEN_PNG" && -s "$SCREEN_PNG" ]]; then
     echo "✓ 屏幕截图成功生成: $SCREEN_PNG ($(stat -c%s "$SCREEN_PNG") 字节)"
 fi
 
-# 4. 自动化导出控件树布局 (Headless UI Layout Dump)
+# 5. 自动化导出控件树布局 (Headless UI Layout Dump)
 echo ">>> 导出控件树布局至 evidence/android-emulator-layout.json..."
 LAYOUT_JSON="$EVIDENCE_DIR/android-emulator-layout.json"
 if [[ -x "$ANDROID_CLI" ]]; then
@@ -98,5 +111,6 @@ fi
 echo "=========================================================="
 echo "  ✓ [OK] Android 模拟器无头部署与走查完成！"
 echo "  截图产物: $SCREEN_PNG"
-echo "  模型路径: $REMOTE_MODEL_DIR/$REMOTE_MODEL_NAME"
+echo "  模型路径: $TARGET_MODEL_DIR/$REMOTE_MODEL_NAME"
+echo "  验证日志: $EVIDENCE_DIR/android-native-runner.log"
 echo "=========================================================="

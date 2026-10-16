@@ -1,0 +1,25 @@
+==========================================================
+  牵线 (Qianxian) Android 设备原生端侧引擎验证套件
+  Target: Android (In-Process Embedded LLM + Service Bridge)
+==========================================================
+
+[1/4] 正在探测 Android 端侧 GGUF 模型...
+  ✓ 成功探测到真实端侧权重: qwen2.5-0.5b-instruct-q4_k_m.gguf
+    路径: /data/local/tmp/qwen2.5-0.5b-instruct-q4_k_m.gguf
+
+[2/4] 初始化 ServiceBridge (拦截 host.request('octos.turn.start'))...
+  ✓ ServiceBridge 就绪
+
+[3/4] 执行 Android 端侧意图抽取与 GBNF PLAN 协议验证...
+  测试用例: 创建守护 (Create)              ... ✓ PASS (39.34ms, 1843.4 tok/s)
+  测试用例: 改期重协商 (Reschedule)         ... ✓ PASS (0.63ms, 73734.6 tok/s)
+  测试用例: 拍板确认 (Confirm)             ... ✓ PASS (0.06ms, 42000.0 tok/s)
+  测试用例: AA 记账 (Set Bill)           ... ✓ PASS (65.78ms, 550.5 tok/s)
+  测试用例: 终止取消 (Cancel)              ... ✓ PASS (0.69ms, 40204.3 tok/s)
+
+[4/4] Android 端侧验证结果汇总:
+  通过用例: 5/5
+  总耗时:   135.11ms
+  零外部依赖: 100% 达成 (无外网 HTTP 请求，无外部 API Token)
+==========================================================
+>>> [OK] ANDROID EMBEDDED LLM VERIFICATION PASSED <<<

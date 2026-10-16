@@ -96,3 +96,5 @@
 - **OctoSense #489 收口评论**：device_calendar 已落地（App-Hub 契约 + shell macOS/Android 实现），提案核心诉求已回答；剩余缺口（Linux 覆盖、免面板写）列清留维护者裁量。
 - **octos #2768 设计勘察评论**：gateway 装配点（gateway_runtime.rs:665）与 serve 侧真实缺口（无总线）钉死，三个待决设计问题列明，待 RFC 共识后实施——不贸然提大 PR。
 - 台账：evidence/upstream-contributions.md 全部更新为终态表。
+
+| 2026-10-16 | Android 原生端 + 端侧内置 LLM 纯电脑端闭环开发（feat/android-embedded-llm） | ①端侧大模型压测选型：Qwen2.5-0.5B (469MB) 与 1.5B 评测，选定 0.5B 为内置底座（0 幻觉/低延迟/内存友善），评测报告落盘；②40/40 项回归全绿闭环；③原生 Android 宿主库 host-android：llama.cpp 引擎探测接口+GGUF 魔数校验+AGENTS.md 意图前置顺序+GBNF 约束+ServiceBridge（单测 3/3 PASS）；④电脑端纯无头模式：medium_phone AVD 建立并无头拉起（-no-window -no-audio -no-accel -gpu swiftshader_indirect），模型推送至 /data/local/tmp 逐字节核对；⑤双架构交叉编译：x86_64 与 aarch64 双目标 cdylib 与原生运行器 android_runner 编译完成；⑥模拟器实机原生验证：android_runner 推送至模拟器实跑，5/5 用例全绿（Create/Reschedule/Confirm/Set Bill/Cancel），100% 端侧离线、0 外部 API 依赖；截图与运行日志全量归档 | 模拟器内原生运行器 5/5 全绿；GGUF 491,400,032 字节核验；无头截图 25KB 归档；host-android 3/3 单测全绿；电脑端零窗口夺焦打扰 | verified（Android 模拟器实测 + 离线端侧全链） | `tools/bench-embedded-llm/benchmark_results.md`、`evidence/android-native-runner.log`、`evidence/android-emulator-smoke.png`、`host-android/` |

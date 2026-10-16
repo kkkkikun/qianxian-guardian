@@ -49,8 +49,19 @@ fi
 
 # 3. 启动无头模拟器
 echo ">>> 以无头模式启动模拟器 (--headless, 无弹窗、无音频)..."
-"$ANDROID_CLI" emulator start --headless "$AVD_NAME" &
-EMULATOR_PID=$!
+EMU_BIN=""
+if [[ -x "$HOME/Android/Sdk/emulator/emulator" ]]; then
+    EMU_BIN="$HOME/Android/Sdk/emulator/emulator"
+fi
+
+if [[ ! -e "/dev/kvm" && -n "$EMU_BIN" ]]; then
+    echo "⚠️ 未检测到 /dev/kvm，使用软件模拟 (-no-accel)..."
+    "$EMU_BIN" "@$AVD_NAME" -no-window -no-audio -no-accel -gpu swiftshader_indirect >/tmp/qianxian-emulator.log 2>&1 &
+    EMULATOR_PID=$!
+else
+    "$ANDROID_CLI" emulator start --headless "$AVD_NAME" >/tmp/qianxian-emulator.log 2>&1 &
+    EMULATOR_PID=$!
+fi
 echo "模拟器后台进程 PID: $EMULATOR_PID"
 
 echo ">>> 等待模拟器启动就绪..."
