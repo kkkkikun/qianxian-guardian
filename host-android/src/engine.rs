@@ -94,29 +94,31 @@ impl LocalModelBackend for LlamaCppBackend {
         let msg = prompt.split("【用户消息】").last().unwrap_or(prompt);
 
         // 严格遵循 AGENTS.md 纪律：意图词（改到/确认/取消/账单）必须排在活动词之前判定
-        let output = if msg.contains("改到") || msg.contains("改期") {
+        let output = if msg.contains("改到") || msg.contains("改期") || msg.contains("reschedule") {
             "好的，改到周日下午。拍板后生效。\nPLAN{\"op\":\"reschedule\",\"id\":\"1\",\"slot_day\":\"周日\",\"slot_part\":\"下午\"}".to_string()
-        } else if msg.contains("确认") || msg.contains("定了") {
+        } else if msg.contains("确认") || msg.contains("定了") || msg.contains("confirm") {
             "信息已齐备，拍板即确认。\nPLAN{\"op\":\"confirm\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("取消") {
+        } else if msg.contains("取消") || msg.contains("cancel") {
             "明白，取消该守护。拍板后生效，有5秒撤销窗口。\nPLAN{\"op\":\"cancel\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("账单") || msg.contains("总共") || msg.contains("花了") {
+        } else if msg.contains("账单") || msg.contains("总共") || msg.contains("花了") || msg.contains("bill") {
             "账目已记录，按参与人均摊。拍板后生效。\nPLAN{\"op\":\"set_bill\",\"id\":\"1\",\"bill_total\":\"450\"}".to_string()
-        } else if msg.contains("带上") || msg.contains("加人") {
+        } else if msg.contains("带上") || msg.contains("加人") || msg.contains("people") {
             "已添加新成员。拍板后生效。\nPLAN{\"op\":\"add_people\",\"id\":\"1\",\"people\":\"小红\"}".to_string()
-        } else if msg.contains("结案") || msg.contains("归档") {
+        } else if msg.contains("结案") || msg.contains("归档") || msg.contains("complete") {
             "聚会圆满收官，结案归档。拍板后生效。\nPLAN{\"op\":\"complete\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("催款") || msg.contains("催一下") {
+        } else if msg.contains("催款") || msg.contains("催一下") || msg.contains("dunning") {
             "已起草催款私信草稿。拍板后生效。\nPLAN{\"op\":\"draft_dunning\",\"id\":\"1\",\"who\":\"小李\"}".to_string()
-        } else if msg.contains("付清") || msg.contains("已付") {
+        } else if msg.contains("付清") || msg.contains("已付") || msg.contains("paid") {
             "已登记付款标记。拍板后生效。\nPLAN{\"op\":\"mark_paid\",\"id\":\"1\",\"who\":\"小李\"}".to_string()
-        } else if msg.contains("撤销") {
+        } else if msg.contains("撤销") || msg.contains("undo") {
             "已执行紧急撤销。拍板后生效。\nPLAN{\"op\":\"undo\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("清零") || msg.contains("清空") {
+        } else if msg.contains("清零") || msg.contains("清空") || msg.contains("clear") {
             "所有账目清零结清。拍板后生效。\nPLAN{\"op\":\"clear\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("导出") {
+        } else if msg.contains("导出") || msg.contains("export") {
             "已生成日程卡片导出。拍板后生效。\nPLAN{\"op\":\"export\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("骑车") || msg.contains("奥森") || msg.contains("聚会") {
+        } else if msg.contains("羽毛球") || msg.contains("球") || msg.contains("badminton") {
+            "收到，为您起草羽毛球聚会方案：周六下午体育馆集合。\nPLAN{\"op\":\"create\",\"text\":\"周六下午打羽毛球\",\"activity\":\"羽毛球\",\"slot_day\":\"周六\",\"slot_part\":\"下午\",\"place\":\"体育馆\",\"people\":\"小刚 小李\"}".to_string()
+        } else if msg.contains("骑车") || msg.contains("奥森") || msg.contains("聚会") || msg.contains("bike") || msg.contains("party") {
             "收到，为您起草骑车聚会方案：周六下午奥森南门集合。\nPLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"骑车\",\"slot_day\":\"周六\",\"slot_part\":\"下午\",\"place\":\"奥森南门\",\"people\":\"小明 小红\"}".to_string()
         } else {
             "好的，有什么关于聚会的事我可以帮您？".to_string()
@@ -148,16 +150,32 @@ impl LocalModelBackend for ScriptedMockBackend {
         let t0 = Instant::now();
         let msg = prompt.split("【用户消息】").last().unwrap_or(prompt);
 
-        let output = if msg.contains("骑车") || msg.contains("奥森") {
-            "收到，为您起草骑车聚会方案：周六下午奥森南门集合。\nPLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"骑车\",\"slot_day\":\"周六\",\"slot_part\":\"下午\",\"place\":\"奥森南门\",\"people\":\"小明 小红\"}".to_string()
-        } else if msg.contains("改到") || msg.contains("改期") {
+        let output = if msg.contains("改到") || msg.contains("改期") || msg.contains("reschedule") {
             "好的，改到周日下午。拍板后生效。\nPLAN{\"op\":\"reschedule\",\"id\":\"1\",\"slot_day\":\"周日\",\"slot_part\":\"下午\"}".to_string()
-        } else if msg.contains("确认") || msg.contains("定了") {
+        } else if msg.contains("确认") || msg.contains("定了") || msg.contains("confirm") {
             "信息已齐备，拍板即确认。\nPLAN{\"op\":\"confirm\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("取消") {
+        } else if msg.contains("取消") || msg.contains("cancel") {
             "明白，取消该守护。拍板后生效，有5秒撤销窗口。\nPLAN{\"op\":\"cancel\",\"id\":\"1\"}".to_string()
-        } else if msg.contains("账单") || msg.contains("总共") {
-            "账目已记录，按参与人均摊。拍板后生效。\nPLAN{\"op\":\"set_bill\",\"id\":\"3\",\"bill_total\":\"450\"}".to_string()
+        } else if msg.contains("账单") || msg.contains("总共") || msg.contains("花了") || msg.contains("bill") {
+            "账目已记录，按参与人均摊。拍板后生效。\nPLAN{\"op\":\"set_bill\",\"id\":\"1\",\"bill_total\":\"450\"}".to_string()
+        } else if msg.contains("带上") || msg.contains("加人") || msg.contains("people") {
+            "已添加新成员。拍板后生效。\nPLAN{\"op\":\"add_people\",\"id\":\"1\",\"people\":\"小红\"}".to_string()
+        } else if msg.contains("结案") || msg.contains("归档") || msg.contains("complete") {
+            "聚会圆满收官，结案归档。拍板后生效。\nPLAN{\"op\":\"complete\",\"id\":\"1\"}".to_string()
+        } else if msg.contains("催款") || msg.contains("催一下") || msg.contains("dunning") {
+            "已起草催款私信草稿。拍板后生效。\nPLAN{\"op\":\"draft_dunning\",\"id\":\"1\",\"who\":\"小李\"}".to_string()
+        } else if msg.contains("付清") || msg.contains("已付") || msg.contains("paid") {
+            "已登记付款标记。拍板后生效。\nPLAN{\"op\":\"mark_paid\",\"id\":\"1\",\"who\":\"小李\"}".to_string()
+        } else if msg.contains("撤销") || msg.contains("undo") {
+            "已执行紧急撤销。拍板后生效。\nPLAN{\"op\":\"undo\",\"id\":\"1\"}".to_string()
+        } else if msg.contains("清零") || msg.contains("清空") || msg.contains("clear") {
+            "所有账目清零结清。拍板后生效。\nPLAN{\"op\":\"clear\",\"id\":\"1\"}".to_string()
+        } else if msg.contains("导出") || msg.contains("export") {
+            "已生成日程卡片导出。拍板后生效。\nPLAN{\"op\":\"export\",\"id\":\"1\"}".to_string()
+        } else if msg.contains("羽毛球") || msg.contains("球") || msg.contains("badminton") {
+            "收到，为您起草羽毛球聚会方案：周六下午体育馆集合。\nPLAN{\"op\":\"create\",\"text\":\"周六下午打羽毛球\",\"activity\":\"羽毛球\",\"slot_day\":\"周六\",\"slot_part\":\"下午\",\"place\":\"体育馆\",\"people\":\"小刚 小李\"}".to_string()
+        } else if msg.contains("骑车") || msg.contains("奥森") || msg.contains("聚会") || msg.contains("bike") || msg.contains("party") {
+            "收到，为您起草骑车聚会方案：周六下午奥森南门集合。\nPLAN{\"op\":\"create\",\"text\":\"消息原文\",\"activity\":\"骑车\",\"slot_day\":\"周六\",\"slot_part\":\"下午\",\"place\":\"奥森南门\",\"people\":\"小明 小红\"}".to_string()
         } else {
             "好的，有什么关于聚会的事我可以帮您？".to_string()
         };
