@@ -1,0 +1,49 @@
+{
+  "device": {
+    "manufacturer": "Xiaomi",
+    "model": "22081212C",
+    "market_name": "Redmi K50 Ultra / Xiaomi 12T Pro",
+    "cpu": "Qualcomm Snapdragon 8+ Gen 1 (SM8475, 4nm)",
+    "cpu_architecture": "arm64-v8a (ARMv8.4-A)",
+    "cpu_cores": 8,
+    "gpu": "Qualcomm Adreno 730",
+    "android_version": "15",
+    "sdk_version": 35,
+    "screen_resolution": "1220x2712",
+    "screen_density": 480,
+    "total_ram_kb": 11427748,
+    "available_ram_kb": 6011496,
+    "available_storage_gb": 420,
+    "battery_level": 73,
+    "battery_temperature_c": 26.9
+  },
+  "models_deployed": [
+    {
+      "name": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "path": "/sdcard/Download/qianxian-models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "size_bytes": 491400032,
+      "size_mb": 468.6,
+      "verified": true
+    },
+    {
+      "name": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "path": "/sdcard/Download/qianxian-models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "size_bytes": 1117320736,
+      "size_mb": 1065.5,
+      "verified": true
+    }
+  ],
+  "verification": {
+    "runner_binary": "/data/local/tmp/android_runner",
+    "target_abi": "aarch64-linux-android",
+    "test_cases": [
+      {"name": "创建守护 (Create)", "status": "PASS"},
+      {"name": "改期重协商 (Reschedule)", "status": "PASS"},
+      {"name": "拍板确认 (Confirm)", "status": "PASS"},
+      {"name": "AA 记账 (Set Bill)", "status": "PASS"},
+      {"name": "终止取消 (Cancel)", "status": "PASS"}
+    ],
+    "total_passed": "5/5",
+    "zero_external_dependency": true
+  }
+}
