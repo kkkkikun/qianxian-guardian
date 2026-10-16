@@ -33,6 +33,7 @@ A5 方法论（#33）：
 import json, os, re, sys, time, urllib.request, urllib.parse
 
 BASE = "http://127.0.0.1:" + os.environ.get("QX_PORT", "8146")
+urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
 
 
 def get(path, timeout=10):
