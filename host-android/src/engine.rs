@@ -44,7 +44,37 @@ impl LlamaCppBackend {
             model_name: fname,
         })
     }
+
+    /// 自动在 Android 设备与本地桌面常见路径中探测可用的端侧模型
+    pub fn auto_detect() -> Result<Self, EngineError> {
+        let candidate_paths = [
+            // Android 外部存储路径 (由 android-push-model.sh 推送)
+            "/sdcard/Download/qianxian-models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "/sdcard/Download/qianxian-models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            // Android 临时调试目录
+            "/data/local/tmp/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "/data/local/tmp/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            // Android 应用私有数据目录
+            "/data/data/dev.aurorax.qianxian/files/models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "/data/data/dev.aurorax.qianxian/files/models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            // 本地开发评测目录 (tools/bench-embedded-llm/models/)
+            "tools/bench-embedded-llm/models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "tools/bench-embedded-llm/models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "../tools/bench-embedded-llm/models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "../tools/bench-embedded-llm/models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        ];
+
+        for path_str in &candidate_paths {
+            let path = Path::new(path_str);
+            if path.exists() {
+                return Self::new(path);
+            }
+        }
+
+        Err(EngineError::ModelNotFound("未找到任何可用端侧模型（已扫描 Android 与本地默认路径）".into()))
+    }
 }
+
 
 impl LocalModelBackend for LlamaCppBackend {
     fn generate(&self, _prompt: &str, _grammar: Option<&str>) -> Result<(String, GenerationMetrics), EngineError> {
@@ -106,3 +136,17 @@ impl LocalModelBackend for ScriptedMockBackend {
         "scripted-mock"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auto_detect_downloaded_models() {
+        let backend = LlamaCppBackend::auto_detect();
+        assert!(backend.is_ok(), "应能成功自动探测到已下载的端侧 GGUF 模型");
+        let b = backend.unwrap();
+        assert!(b.model_name.contains("qwen2.5"));
+    }
+}
+

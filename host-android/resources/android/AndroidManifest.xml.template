@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  牵线（Qianxian）Android 原生应用清单模板
+  由 cargo-makepad 在打包构建时解析并替换变量
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="{package_id}"
+    android:versionCode="{version_code}"
+    android:versionName="{version_name}">
+
+    <uses-sdk
+        android:minSdkVersion="{min_sdk_version}"
+        android:targetSdkVersion="{target_sdk_version}" />
+
+    <!-- 硬件特性：OpenGL ES 2.0+ (Makepad UI 渲染必须) -->
+    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+
+    <!-- 离线与存储权限：读取端侧大模型权重文件与本地守护数据 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+
+    <!-- 系统日历权限：确认守护后一键同步手机系统日历 -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
+    <!-- 本地环回与基础网络 (用于本地进程间 IPC 通信) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:label="{label}"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/MakepadAppTheme"
+        android:allowBackup="true"
+        android:supportsRtl="true"
+        android:debuggable="{debuggable}"
+        android:largeHeap="true"
+        tools:targetApi="{target_sdk_version}">
+
+        <meta-data android:name="android.max_aspect" android:value="2.4" />
+
+        <activity
+            android:name=".{class_name}"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
