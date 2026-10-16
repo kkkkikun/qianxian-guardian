@@ -1,0 +1,22 @@
+[package]
+name = "qianxian-android"
+version = "0.10.1"
+edition = "2021"
+description = "牵线 · 聚会筹办守护 原生 Android 独立运行程序"
+
+[dependencies]
+makepad-widgets = { path = "../../repos/makepad/widgets", version = "2.0.0" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+host-android = { path = "../host-android" }
+
+[package.metadata.packager]
+identifier = "dev.aurorax.qianxian"
+product_name = "牵线 · 聚会守护"
+
+[package.metadata.makepad.android]
+package_name = "dev.aurorax.qianxian"
+version_code = 1
+version_name = "0.10.1"
+min_sdk_version = 28
+target_sdk_version = 34
