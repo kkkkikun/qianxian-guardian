@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="MakepadLaunchTheme" parent="@style/MakepadAppTheme">
+        <item name="android:windowSplashScreenBackground">@color/qianxian_bg</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+        <item name="android:statusBarColor">@color/qianxian_bg</item>
+        <item name="android:navigationBarColor">@color/qianxian_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+    </style>
+</resources>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <color name="qianxian_bg">#FFF7F2EC</color>
+
+    <style name="MakepadAppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/qianxian_bg</item>
+        <item name="android:statusBarColor">@color/qianxian_bg</item>
+        <item name="android:navigationBarColor">@color/qianxian_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+    </style>
+
+    <style name="MakepadLaunchTheme" parent="@style/MakepadAppTheme">
+        <item name="android:windowBackground">@color/qianxian_bg</item>
+        <item name="android:statusBarColor">@color/qianxian_bg</item>
+        <item name="android:navigationBarColor">@color/qianxian_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+    </style>
+</resources>

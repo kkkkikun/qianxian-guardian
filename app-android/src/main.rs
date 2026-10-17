@@ -161,10 +161,14 @@ impl App {
             "octos.turn.start".to_string(),
             "qianxian.clipboard.read".to_string(),
             "qianxian.notify".to_string(),
+            "qianxian.app.minimize".to_string(),
         ]);
 
         let script = MAIN_SPLASH_SRC.replace("{{assets}}", origin.trim_end_matches('/'));
         splash.set_text(cx, &script);
+
+        // 初始化 Android 系统栏颜色与图标深度（暖纸底色无缝化）
+        setup_system_bars();
 
         // 启动时初始化常驻守护通知胶囊
         cx.show_notification(
@@ -271,7 +275,28 @@ impl AppMain for App {
                     req.req_id,
                     Ok("{}"),
                 );
+            } else if req.service == "qianxian.app.minimize" {
+                minimize_app();
+                let _ = makepad_widgets::splash_host::splash_host_respond(
+                    cx,
+                    req.heap_key,
+                    req.req_id,
+                    Ok("{}"),
+                );
             }
+        }
+
+        match event {
+            Event::Resume | Event::Foreground | Event::WindowGotFocus(_) => {
+                setup_system_bars();
+            }
+            Event::BackPressed { handled } => {
+                // 当用户在手机上触发物理返回键或边缘侧滑返回手势时，派发到 Splash 内部状态机
+                self.card_surface.call_script_fn(cx, id!(on_back_pressed), &[]);
+                self.ui.redraw(cx);
+                handled.set(true);
+            }
+            _ => {}
         }
 
         self.ui.handle_event(cx, event, &mut Scope::empty());
@@ -289,3 +314,45 @@ fn get_system_clipboard() -> String {
 fn get_system_clipboard() -> String {
     String::new()
 }
+
+#[cfg(target_os = "android")]
+fn setup_system_bars() {
+    unsafe {
+        if !makepad_android_state::get_activity().is_null() {
+            let env = makepad_widgets::makepad_platform::os::linux::android::android_jni::attach_jni_env();
+            makepad_widgets::makepad_platform::os::linux::android::android_jni::to_java_set_system_bar_appearance(env, true);
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn setup_system_bars() {}
+
+#[cfg(target_os = "android")]
+fn minimize_app() {
+    unsafe {
+        let activity = makepad_android_state::get_activity();
+        if !activity.is_null() {
+            let env = makepad_widgets::makepad_platform::os::linux::android::android_jni::attach_jni_env();
+            let get_object_class = (**env).GetObjectClass.unwrap();
+            let get_method_id = (**env).GetMethodID.unwrap();
+            let call_boolean_method = (**env).CallBooleanMethod.unwrap();
+            let delete_local_ref = (**env).DeleteLocalRef.unwrap();
+
+            let class = get_object_class(env, activity);
+            if !class.is_null() {
+                let name = std::ffi::CString::new("moveTaskToBack").unwrap();
+                let sig = std::ffi::CString::new("(Z)Z").unwrap();
+                let mid = get_method_id(env, class, name.as_ptr(), sig.as_ptr());
+                if !mid.is_null() {
+                    let _ = call_boolean_method(env, activity, mid, 1i32);
+                }
+                delete_local_ref(env, class);
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn minimize_app() {}
+

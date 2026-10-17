@@ -841,6 +841,7 @@ name = "qianxian-android"
 version = "0.10.1"
 dependencies = [
  "host-android",
+ "makepad-android-state",
  "makepad-widgets",
  "serde",
  "serde_json",

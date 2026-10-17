@@ -10,6 +10,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 host-android = { path = "../host-android" }
 
+[target.'cfg(target_os = "android")'.dependencies]
+makepad-android-state = { version = "0.1.0" }
+
 [package.metadata.packager]
 identifier = "dev.aurorax.qianxian"
 product_name = "牵线 · 聚会守护"

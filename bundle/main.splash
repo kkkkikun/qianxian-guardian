@@ -1422,6 +1422,23 @@ fn back_from_chat(){
     set_hint("已回到守护列表；点卡片看单条详情")
 }
 
+// === Android 系统物理返回键与边缘侧滑返回手势响应 ===
+fn on_back_pressed(){
+    if ui_mode == "detail" {
+        back_to_list()
+    } else if ui_mode == "chat" {
+        back_from_chat()
+    } else if scout_visible == "yes" {
+        scout_dismiss()
+    } else if howto_show_flag == "yes" {
+        toggle_howto()
+    } else {
+        if host.has("qianxian.app.minimize") {
+            host.request("qianxian.app.minimize", {}, fn(r){})
+        }
+    }
+}
+
 // === #10 新增：切换筛选标签（GestureView on_tap 回调入口） ===
 // 入口参数 ft 是目标筛选值字符串："all"/"Proposing"/"Confirmed"/"Cancelled"
 // 逻辑放函数上下文（不放在 on_render 内），重建扁平字符串数组后驱动渲染
