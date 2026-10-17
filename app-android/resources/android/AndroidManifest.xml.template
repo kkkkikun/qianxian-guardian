@@ -14,13 +14,15 @@
         android:debuggable="{debuggable}"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
+        android:resizeableActivity="true"
         tools:targetApi="{target_sdk_version}">
         
         <profileable android:shell="true" tools:targetApi="29" />
-        <meta-data android:name="android.max_aspect" android:value="2.1" />
+        <meta-data android:name="android.max_aspect" android:value="3.0" />
 
         <activity
             android:name=".{class_name}"
+            android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTask"
