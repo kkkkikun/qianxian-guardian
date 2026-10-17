@@ -216,7 +216,7 @@ impl AppMain for App {
             } else if req.service == "qianxian.clipboard.read" {
                 let ext_file = PathBuf::from("/sdcard/Download/qianxian-clipboard.txt");
                 let cb_file = self.sandbox_dir.join("clipboard_in.txt");
-                let text = if ext_file.exists() {
+                let mut text = if ext_file.exists() {
                     let t = std::fs::read_to_string(&ext_file).unwrap_or_default();
                     let _ = std::fs::remove_file(&ext_file);
                     t
@@ -227,6 +227,12 @@ impl AppMain for App {
                 } else {
                     String::new()
                 };
+
+                // 若外部无调试文件输入，则直接读取 Android 系统物理真实剪贴板
+                if text.trim().is_empty() {
+                    text = get_system_clipboard();
+                }
+
                 let json = serde_json::json!({ "text": text }).to_string();
                 let _ = makepad_widgets::splash_host::splash_host_respond(
                     cx,
@@ -270,4 +276,16 @@ impl AppMain for App {
 
         self.ui.handle_event(cx, event, &mut Scope::empty());
     }
+}
+
+#[cfg(target_os = "android")]
+fn get_system_clipboard() -> String {
+    unsafe {
+        makepad_widgets::makepad_platform::os::linux::android::android_jni::to_java_paste_from_clipboard()
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn get_system_clipboard() -> String {
+    String::new()
 }

@@ -169,6 +169,7 @@ fn load(){
         }
     }
     scout_poll()
+    start_scout_watchdog()
     rebuild_lines()
     render_views()
     // v0.10.0：载入完成不写 hint（静默——守护灯卡已显示「共 N 条」，无需重复）

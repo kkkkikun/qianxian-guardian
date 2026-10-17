@@ -797,6 +797,7 @@ fn load(){
         }
     }
     scout_poll()
+    start_scout_watchdog()
     rebuild_lines()
     render_views()
     // v0.10.0：载入完成不写 hint（静默——守护灯卡已显示「共 N 条」，无需重复）
@@ -2128,23 +2129,31 @@ fn str_has(s, sub){
     return ("" + s).split(sub).len() > 1
 }
 
+fn scout_has_party_kw(raw){
+    let kw = [
+        "周", "明天", "后天", "今晚", "今天", "周末", "下周", "几点",
+        "聚会", "骑车", "羽毛球", "打球", "吃饭", "火锅", "烧烤", "奥森", "去吗", "约",
+        "集合", "碰头", "聚餐", "团建", "一起", "见面", "开会", "唱歌", "剧本杀",
+        "bike", "badminton", "party", "meet", "dinner", "lunch"
+    ]
+    for k in kw {
+        if str_has(raw, k) {
+            return true
+        }
+    }
+    return false
+}
+
 fn scout_inspect(text){
     let raw = ("" + text).trim()
     if raw == "" || raw == scout_last_seen { return }
 
-    // 聚会意图关键词探测
-    let is_party = false
-    let kw = ["周", "聚会", "骑车", "羽毛球", "打球", "吃饭", "火锅", "奥森", "去吗", "约", "集合", "bike", "badminton", "party"]
-    for k in kw {
-        if str_has(raw, k) {
-            is_party = true
-        }
-    }
-    if !is_party { return }
+    if !scout_has_party_kw(raw) { return }
 
     scout_raw_text = raw
     scout_summary = trim_n(raw, 26)
     scout_visible = "yes"
+    set_hint("📋 自动嗅探到群聊邀约：「" + scout_summary + "」")
     render_views()
 }
 
@@ -2166,9 +2175,48 @@ fn scout_dismiss(){
     render_views()
 }
 
-// 模拟复制微信群聊消息，一键触发探针演示
+// 用户手动轻触「📋 嗅探邀约」按钮
+fn scout_button_click(){
+    if host.has("qianxian.clipboard.read") {
+        host.request("qianxian.clipboard.read", {}, fn(r){
+            if r.is_ok {
+                let txt = ("" + r.data.text).trim()
+                if txt != "" {
+                    let has_kw = scout_has_party_kw(txt)
+                    if has_kw {
+                        scout_raw_text = txt
+                        scout_summary = trim_n(txt, 26)
+                        scout_visible = "yes"
+                        set_hint("📋 已从剪贴板嗅探到聚会邀约：「" + scout_summary + "」")
+                        render_views()
+                    } else {
+                        // 剪贴板有内容但未含典型邀约词：填入输入框，方便用户起草
+                        ui.msg_input.set_text(txt)
+                        set_hint("📋 已读取剪贴板并填入输入框，点「向管家发送」即可起草")
+                        render_views()
+                    }
+                } else {
+                    // 剪贴板暂无内容：载入精选演示邀约胶囊
+                    scout_raw_text = "周六下午奥森南门集合骑车，小明和小红都去！"
+                    scout_summary = trim_n(scout_raw_text, 26)
+                    scout_visible = "yes"
+                    set_hint("📋 剪贴板暂无内容，已为您载入演示邀约胶囊")
+                    render_views()
+                }
+            } else {
+                scout_inspect("周六下午奥森南门集合骑车，小明和小红都去！")
+                set_hint("📋 已载入演示邀约胶囊")
+            }
+        })
+    } else {
+        scout_inspect("周六下午奥森南门集合骑车，小明和小红都去！")
+        set_hint("📋 已展示嗅探邀约胶囊（演示）")
+    }
+}
+
+// 兼容既有调用
 fn scout_demo_trigger(){
-    scout_inspect("周六下午奥森南门集合骑车，小明和小红都去！")
+    scout_button_click()
 }
 
 // 轮询剪贴板（宿主能力或沙箱通道）
@@ -2176,18 +2224,25 @@ fn scout_poll(){
     if host.has("qianxian.clipboard.read") {
         host.request("qianxian.clipboard.read", {}, fn(r){
             if r.is_ok {
-                let txt = "" + r.data.text
+                let txt = ("" + r.data.text).trim()
                 if txt != "" {
                     scout_inspect(txt)
                 }
             }
         })
     } else if fs.exists("clipboard.txt") {
-        let txt = "" + fs.read("clipboard.txt")
+        let txt = ("" + fs.read("clipboard.txt")).trim()
         if txt != "" {
             scout_inspect(txt)
         }
     }
+}
+
+fn start_scout_watchdog(){
+    start_timeout(4.0, || {
+        scout_poll()
+        start_scout_watchdog()
+    })
 }
 
 // === 突发异动主动打扰与抢救预案（Proactive Crisis Resolver）===
@@ -4428,7 +4483,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 14 right: 14} on_click: || fill_example()
                             draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: accent color_hover: accent color_down: accent}}
-                        ButtonFlat{text: "📋 嗅探邀约" height: 44 padding: Inset{left: 14 right: 14} on_click: || scout_demo_trigger()
+                        ButtonFlat{text: "📋 嗅探邀约" height: 44 padding: Inset{left: 14 right: 14} on_click: || scout_button_click()
                             draw_bg +: {border_radius: 20.0 color: #xfbf4e2 color_hover: #f7ebd1 color_down: #eddcb7 border_size: 1.0 border_color: #xdca842}
                             draw_text +: {color: #xb87b14 color_hover: #a36b0f color_down: #a36b0f text_style: font_bold_cjk{font_size: 9}}}
                     }
@@ -5341,7 +5396,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
         ButtonFlat{text: "怎么用？" height: 36 padding: Inset{left: 12 right: 12} on_click: || toggle_howto()
             draw_bg +: {border_radius: 16.0 color: #xf7f2ec00 color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 0.0}
             draw_text +: {color: #x6e675e color_hover: #x6e675e color_down: #x6e675e text_style +: {font_size: 9}}}
-        ButtonFlat{text: "📋 嗅探邀约" height: 36 padding: Inset{left: 10 right: 10} on_click: || scout_demo_trigger()
+        ButtonFlat{text: "📋 嗅探邀约" height: 36 padding: Inset{left: 10 right: 10} on_click: || scout_button_click()
             draw_bg +: {border_radius: 16.0 color: #xfbf4e2 color_hover: #f7ebd1 color_down: #eddcb7 border_size: 1.0 border_color: #xdca842}
             draw_text +: {color: #xb87b14 color_hover: #a36b0f color_down: #a36b0f text_style: font_bold_cjk{font_size: 8.5}}}
         ButtonFlat{text: "⛈️ 模拟突变" height: 36 padding: Inset{left: 10 right: 10} on_click: || crisis_demo_trigger()

@@ -278,7 +278,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 14 right: 14} on_click: || fill_example()
                             draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: accent color_hover: accent color_down: accent}}
-                        ButtonFlat{text: "📋 嗅探邀约" height: 44 padding: Inset{left: 14 right: 14} on_click: || scout_demo_trigger()
+                        ButtonFlat{text: "📋 嗅探邀约" height: 44 padding: Inset{left: 14 right: 14} on_click: || scout_button_click()
                             draw_bg +: {border_radius: 20.0 color: #xfbf4e2 color_hover: #f7ebd1 color_down: #eddcb7 border_size: 1.0 border_color: #xdca842}
                             draw_text +: {color: #xb87b14 color_hover: #a36b0f color_down: #a36b0f text_style: font_bold_cjk{font_size: 9}}}
                     }
@@ -1191,7 +1191,7 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
         ButtonFlat{text: "怎么用？" height: 36 padding: Inset{left: 12 right: 12} on_click: || toggle_howto()
             draw_bg +: {border_radius: 16.0 color: #xf7f2ec00 color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 0.0}
             draw_text +: {color: #x6e675e color_hover: #x6e675e color_down: #x6e675e text_style +: {font_size: 9}}}
-        ButtonFlat{text: "📋 嗅探邀约" height: 36 padding: Inset{left: 10 right: 10} on_click: || scout_demo_trigger()
+        ButtonFlat{text: "📋 嗅探邀约" height: 36 padding: Inset{left: 10 right: 10} on_click: || scout_button_click()
             draw_bg +: {border_radius: 16.0 color: #xfbf4e2 color_hover: #f7ebd1 color_down: #eddcb7 border_size: 1.0 border_color: #xdca842}
             draw_text +: {color: #xb87b14 color_hover: #a36b0f color_down: #a36b0f text_style: font_bold_cjk{font_size: 8.5}}}
         ButtonFlat{text: "⛈️ 模拟突变" height: 36 padding: Inset{left: 10 right: 10} on_click: || crisis_demo_trigger()
