@@ -160,6 +160,15 @@ fn load(){
     // #46 A切片：根组件 ai_cap_label 首次定型为静态 placeholder，
     //   load() 末尾用 probe_ai_cap() 命令式同步真实 host 探测文案（照 #44 范式）。
     ui.ai_cap_label.set_text(probe_ai_cap())
+    // 灵动剪贴板探针：读回已忽略记录并探测剪贴板
+    if fs.exists("scout_last.json") {
+        let sraw = fs.read("scout_last.json")
+        let sv = sraw.parse_json()
+        if sv != nil && sv["last"] != nil {
+            scout_last_seen = "" + sv["last"]
+        }
+    }
+    scout_poll()
     rebuild_lines()
     render_views()
     // v0.10.0：载入完成不写 hint（静默——守护灯卡已显示「共 N 条」，无需重复）

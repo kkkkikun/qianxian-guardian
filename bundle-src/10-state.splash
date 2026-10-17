@@ -34,7 +34,22 @@ let ai_seq = 0                         // 决赛改进②：AI 回合代际序�
 let people_draft = ""                  // #31f：参与人输入草稿（on_render 内输入行走草稿，免具名绑定）
 let bill_draft = ""                    // #31f：AA总额输入草稿
 
+// === 灵动剪贴板探针（Clipboard Agentic Scout）状态 ===
+let scout_visible = "no"
+let scout_raw_text = ""
+let scout_summary = ""
+let scout_last_seen = ""
+
+// === 突发异动主动打扰与抢救预案（Proactive Crisis Resolver）状态 ===
+let crisis_open = "no"
+let crisis_case_id = ""
+let crisis_activity = ""
+let crisis_reason = ""
+let crisis_opt_a_text = ""
+let crisis_opt_b_text = ""
+
 // === 决赛 S3：管家模式（agent 驱动全流程，人只拍板）状态 ===
+
 // 对话 transcript 用双扁平数组（on_render 只读字符串数组，#4/#5 硬约束）：
 //   chat_role[i] = "me"（用户）/ "ai"（管家）/ "sys"（系统提示，居中灰字）
 let chat_role = []

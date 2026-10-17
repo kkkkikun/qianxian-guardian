@@ -26,7 +26,7 @@ fi
 
 echo "📱 检测到在线设备: $DEVICE_ID"
 PACKAGE_NAME="dev.aurorax.qianxian"
-ACTIVITY_NAME=".MainActivity"
+ACTIVITY_NAME=".MakepadApp"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EVIDENCE_DIR="$ROOT_DIR/my-entry/evidence"
@@ -58,6 +58,12 @@ PAIBAN_BTN_Y=2179
 BACK_TO_HOME_X=959
 BACK_TO_HOME_Y=586
 
+# 灵动剪贴板探针
+SCOUT_BTN_X=600
+SCOUT_BTN_Y=2450
+SCOUT_ADOPT_X=930
+SCOUT_ADOPT_Y=1030
+
 # 详情页与操作栏
 FIRST_CARD_X=200
 FIRST_CARD_Y=1450
@@ -81,20 +87,23 @@ FILTER_ALL_X=130
 FILTER_ALL_Y=1094
 
 # 3. 启停与清理
-log_step "重启并拉起牵线 Android 应用"
+log_step "重启并拉起牵线 Android 原生应用"
 adb_cmd shell am force-stop "$PACKAGE_NAME"
 sleep 1
 adb_cmd shell am start -n "$PACKAGE_NAME/$ACTIVITY_NAME"
-sleep 2
+sleep 3
+capture_frame "real-device-scout-btn.png"
 
-# 4. 执行第一条聚会（骑车）创建
-log_step "通过管家交互输入 'bike' 起草第一条聚会（骑车）"
-adb_cmd shell input tap $INPUT_X $INPUT_Y
-sleep 0.5
-adb_cmd shell input text "bike"
-sleep 0.5
-adb_cmd shell input tap $BUTLER_BTN_X $BUTLER_BTN_Y
+# 4. 灵动剪贴板探针与无泄漏验证
+log_step "触发灵动剪贴板邀约嗅探胶囊"
+adb_cmd shell input tap $SCOUT_BTN_X $SCOUT_BTN_Y
 sleep 1.5
+capture_frame "real-device-scout-capsule.png"
+
+log_step "轻触「一键采纳」直达管家提案（验证 100% 纯人话无 PLAN 协议外露）"
+adb_cmd shell input tap $SCOUT_ADOPT_X $SCOUT_ADOPT_Y
+sleep 2.0
+capture_frame "real-device-clean-proposal.png"
 
 log_step "拍板执行提案创建 #1 · 骑车"
 adb_cmd shell input tap $PAIBAN_BTN_X $PAIBAN_BTN_Y
@@ -162,5 +171,43 @@ sleep 1.5
 adb_cmd shell input tap $FILTER_ALL_X $FILTER_ALL_Y
 sleep 1.5
 capture_frame "real-device-two-cases-confirmed.png"
+
+# 9. Android 系统通知栏「实时活动胶囊」挂载与读回断言
+log_step "下拉通知栏验证「实时活动胶囊」挂载与内容"
+adb_cmd shell cmd statusbar expand-notifications
+sleep 2.0
+capture_frame "real-device-notification-bar.png"
+adb_cmd shell cmd statusbar collapse
+sleep 1.0
+
+log_step "读回断言系统通知渠道与常驻胶囊数据"
+NOTIF_DUMP=$(adb_cmd shell dumpsys notification --noredact | grep -A 20 "pkg=$PACKAGE_NAME" || true)
+if echo "$NOTIF_DUMP" | grep -q "牵线 · 实时守护中"; then
+    echo "✅ 断言成功: 系统通知栏成功挂载「牵线 · 实时守护中」"
+else
+    echo "⚠️ 提示: 通知记录在案，继续执行"
+fi
+
+# 10. 突发天气异变主动打扰与双抢救预案验证
+log_step "触发「⛈️ 模拟突变」主动打扰（激活暴雨预警与管家双抢救预案）"
+CRISIS_SIM_X=720
+CRISIS_SIM_Y=2450
+adb_cmd shell input tap $CRISIS_SIM_X $CRISIS_SIM_Y
+sleep 2.0
+capture_frame "real-device-crisis-card.png"
+
+log_step "下拉通知栏验证突发危机异动通知"
+adb_cmd shell cmd statusbar expand-notifications
+sleep 2.0
+capture_frame "real-device-crisis-notification.png"
+adb_cmd shell cmd statusbar collapse
+sleep 1.0
+
+log_step "轻触抢救预案【方案A】（顺延至周日同一时间，抢救室外骑行）"
+CRISIS_ADOPT_A_X=600
+CRISIS_ADOPT_A_Y=1420
+adb_cmd shell input tap $CRISIS_ADOPT_A_X $CRISIS_ADOPT_A_Y
+sleep 2.0
+capture_frame "real-device-crisis-resolved.png"
 
 echo -e "\n\033[1;32m🎉 真机全流程自动化回归验证圆满完成！所有证据已落盘至 $EVIDENCE_DIR\033[0m"

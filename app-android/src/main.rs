@@ -129,6 +129,8 @@ pub struct App {
     asset_server: Option<LocalAssetServer>,
     #[rust]
     service_bridge: Option<Arc<ServiceBridge>>,
+    #[rust]
+    sandbox_dir: PathBuf,
 }
 
 impl App {
@@ -151,13 +153,24 @@ impl App {
 
         let sandbox_dir = resolve_sandbox_dir();
         let _ = std::fs::create_dir_all(&sandbox_dir);
+        self.sandbox_dir = sandbox_dir.clone();
 
         let splash = self.card_surface.clone();
         splash.set_sandbox_dir(cx, Some(sandbox_dir));
-        splash.set_host_caps(cx, vec!["octos.turn.start".to_string()]);
+        splash.set_host_caps(cx, vec![
+            "octos.turn.start".to_string(),
+            "qianxian.clipboard.read".to_string(),
+            "qianxian.notify".to_string(),
+        ]);
 
         let script = MAIN_SPLASH_SRC.replace("{{assets}}", origin.trim_end_matches('/'));
         splash.set_text(cx, &script);
+
+        // 启动时初始化常驻守护通知胶囊
+        cx.show_notification(
+            "🛡 牵线 · 实时守护中",
+            "全流程聚会管家已就绪，实时盯梢聚会异动与天气突变",
+        );
     }
 }
 
@@ -200,6 +213,58 @@ impl AppMain for App {
                         );
                     }
                 }
+            } else if req.service == "qianxian.clipboard.read" {
+                let ext_file = PathBuf::from("/sdcard/Download/qianxian-clipboard.txt");
+                let cb_file = self.sandbox_dir.join("clipboard_in.txt");
+                let text = if ext_file.exists() {
+                    let t = std::fs::read_to_string(&ext_file).unwrap_or_default();
+                    let _ = std::fs::remove_file(&ext_file);
+                    t
+                } else if cb_file.exists() {
+                    let t = std::fs::read_to_string(&cb_file).unwrap_or_default();
+                    let _ = std::fs::remove_file(&cb_file);
+                    t
+                } else {
+                    String::new()
+                };
+                let json = serde_json::json!({ "text": text }).to_string();
+                let _ = makepad_widgets::splash_host::splash_host_respond(
+                    cx,
+                    req.heap_key,
+                    req.req_id,
+                    Ok(&json),
+                );
+            } else if req.service == "qianxian.notify" {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&req.args_json) {
+                    let title = v.get("title").and_then(|t| t.as_str()).unwrap_or("牵线 · 守护中");
+                    let body = v.get("body").and_then(|b| b.as_str()).unwrap_or("");
+
+                    // 1. 调用 Makepad 原生通知通道触发系统通知
+                    cx.show_notification(title, body);
+
+                    // 2. 将当前胶囊实时数据持久化存盘（供外部工具、桌面 Widget 或 ADB 读回断言）
+                    let capsule_payload = serde_json::json!({
+                        "title": title,
+                        "body": body,
+                        "updated_at": format!("{:?}", std::time::SystemTime::now()),
+                        "ongoing": true,
+                        "crisis": v.get("crisis").and_then(|c| c.as_str()).unwrap_or("no"),
+                    });
+                    let _ = std::fs::write(
+                        self.sandbox_dir.join("ongoing_guard.json"),
+                        capsule_payload.to_string(),
+                    );
+                    let _ = std::fs::write(
+                        "/sdcard/Download/qianxian-live-capsule.json",
+                        capsule_payload.to_string(),
+                    );
+                }
+                let _ = makepad_widgets::splash_host::splash_host_respond(
+                    cx,
+                    req.heap_key,
+                    req.req_id,
+                    Ok("{}"),
+                );
             }
         }
 

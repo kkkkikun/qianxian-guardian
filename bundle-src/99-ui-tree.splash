@@ -38,7 +38,11 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                         Label{width: Fit text: guard_title draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 9}}
                         View{width: Fill height: Fit flow: Right spacing: 6
                             for gi in guard_chip_text.len() {
-                                if guard_chip_kind[gi] == "amber" {
+                                if guard_chip_kind[gi] == "danger" {
+                                    RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
+                                        show_bg: true draw_bg.color: #xfbdcd7 draw_bg.border_radius: 12.0
+                                        Label{text: guard_chip_text[gi] draw_text.color: #xc23824 draw_text.text_style: font_bold_cjk{font_size: 8}}}
+                                } else if guard_chip_kind[gi] == "amber" {
                                     RoundedView{width: Fit height: Fit padding: Inset{left: 10 right: 10 top: 3 bottom: 3}
                                         show_bg: true draw_bg.color: #xf7ebd3 draw_bg.border_radius: 12.0
                                         Label{text: guard_chip_text[gi] draw_text.color: #xa87516 draw_text.text_style.font_size: 8}}
@@ -96,6 +100,48 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
             // #48b：详情已拆到 detail_list（本视图只服务列表）；占位照 #5 范式
             View{width: Fill height: 1}
         } else {
+        // === 灵动剪贴板探针：嗅探邀约胶囊 ===
+        if scout_visible == "yes" {
+            RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                padding: Inset{left: 12 right: 8 top: 8 bottom: 8}
+                show_bg: true draw_bg.color: #xfbf4e2 draw_bg.border_radius: 12.0
+                draw_bg.border_size: 1.0 draw_bg.border_color: #xdca842
+                Label{text: "📋 嗅探到邀约" draw_text.color: #xb87b14 draw_text.text_style: font_bold_cjk{font_size: 9}}
+                Label{width: Fill text: scout_summary draw_text.color: #x4a4237 draw_text.text_style.font_size: 9}
+                ButtonFlat{text: "一键采纳" height: 32 padding: Inset{left: 10 right: 10} on_click: || scout_adopt()
+                    draw_bg +: {border_radius: 14.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                    draw_text +: {color: #ffffff color_hover: #ffffff color_down: #ffffff text_style: font_bold_cjk{font_size: 8.5}}}
+                ButtonFlat{text: "✕" height: 28 width: 28 padding: Inset{left: 6 right: 6} on_click: || scout_dismiss()
+                    draw_bg +: {border_radius: 14.0 color: #x00000000 color_hover: #xe8dfd1 color_down: #d5cbbe border_size: 0.0}
+                    draw_text +: {color: #8c8275 color_hover: #2b2722 color_down: #2b2722 text_style: font_bold_cjk{font_size: 9}}}
+            }
+        }
+        // === 突发异动主动打扰与抢救预案卡片（Proactive Crisis Resolver）===
+        if crisis_open == "yes" {
+            RoundedView{width: Fill height: Fit flow: Down spacing: 10
+                padding: Inset{left: 14 right: 14 top: 12 bottom: 12}
+                show_bg: true draw_bg.color: #xfdf0ed draw_bg.border_radius: 14.0
+                draw_bg.border_size: 1.5 draw_bg.border_color: #xd25b43
+                RoundedView{width: Fill height: Fit flow: Right spacing: 8 align: Align{y: 0.5}
+                    Label{text: "⛈️ 突发异变主动打扰" draw_text.color: #xc23824 draw_text.text_style: font_bold_cjk{font_size: 10.5}}
+                    Label{width: Fill text: "建议尽快决断" draw_text.color: #x8a382c draw_text.text_style.font_size: 8.5}
+                    ButtonFlat{text: "稍后再议" height: 26 padding: Inset{left: 8 right: 8} on_click: || crisis_dismiss()
+                        draw_bg +: {border_radius: 8.0 color: #xf0dedb border_size: 0.0}
+                        draw_text +: {color: #x8a382c text_style.font_size: 8}}
+                }
+                Label{width: Fill text: crisis_reason draw_text.color: #x4a2a22 draw_text.text_style.font_size: 9.5}
+                RoundedView{width: Fill height: Fit flow: Down spacing: 8
+                    ButtonFlat{width: Fill height: 38 padding: Inset{left: 12 right: 12} on_click: || crisis_adopt_a()
+                        draw_bg +: {border_radius: 10.0 color: #xc7402f color_hover: #xd0563f color_down: #xa83424 border_size: 0.0}
+                        draw_text +: {color: #ffffff text_style: font_bold_cjk{font_size: 9.0}}
+                        text: crisis_opt_a_text}
+                    ButtonFlat{width: Fill height: 38 padding: Inset{left: 12 right: 12} on_click: || crisis_adopt_b()
+                        draw_bg +: {border_radius: 10.0 color: #x2f7d4f color_hover: #x3d9460 color_down: #x256540 border_size: 0.0}
+                        draw_text +: {color: #ffffff text_style: font_bold_cjk{font_size: 9.0}}
+                        text: crisis_opt_b_text}
+                }
+            }
+        }
         // === 决赛 S3：待拍板提案横幅（管家出了提案、人还没拍板时出现在列表顶部）——
         //   原则不变：模型文本不参与动作接线，这里只是「去拍板」的指路条（静态 copy）；
         //   零渲染零占位（plan_pending=="no" 时留 1px，#5 空分支硬约束范式）。
@@ -228,10 +274,13 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
                 Card{align: Align{x: 0.5} padding: Inset{left: 20 right: 20 top: 20 bottom: 20} spacing: 8
                     Label{width: Fill text: "第一次用？把群消息丢给管家" draw_text.color: ink draw_text.text_style: font_bold_cjk{font_size: 11}}
                     Label{width: Fill text: "管家分诊、查冲突、出提案——你只点「拍板」；改期/加人/记账跟管家说就行。" draw_text.color: secondary draw_text.text_style.font_size: 9}
-                    View{width: Fill height: Fit flow: Right
+                    View{width: Fill height: Fit flow: Right spacing: 10
                         ButtonFlat{text: "用示例试试" height: 44 padding: Inset{left: 14 right: 14} on_click: || fill_example()
                             draw_bg +: {border_radius: 20.0 color: #xf1ece4 color_hover: #xe7dfd3 color_down: #xd9cec0 border_size: 0.0}
                             draw_text +: {color: accent color_hover: accent color_down: accent}}
+                        ButtonFlat{text: "📋 嗅探邀约" height: 44 padding: Inset{left: 14 right: 14} on_click: || scout_demo_trigger()
+                            draw_bg +: {border_radius: 20.0 color: #xfbf4e2 color_hover: #f7ebd1 color_down: #eddcb7 border_size: 1.0 border_color: #xdca842}
+                            draw_text +: {color: #xb87b14 color_hover: #a36b0f color_down: #a36b0f text_style: font_bold_cjk{font_size: 9}}}
                     }
                 }
             }
@@ -1142,7 +1191,13 @@ SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 18 right: 18 
         ButtonFlat{text: "怎么用？" height: 36 padding: Inset{left: 12 right: 12} on_click: || toggle_howto()
             draw_bg +: {border_radius: 16.0 color: #xf7f2ec00 color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 0.0}
             draw_text +: {color: #x6e675e color_hover: #x6e675e color_down: #x6e675e text_style +: {font_size: 9}}}
-        style_btn := ButtonFlat{text: "风格：" + style_label_for(receipt_style) height: 36 padding: Inset{left: 12 right: 12} on_click: || set_receipt_style()
+        ButtonFlat{text: "📋 嗅探邀约" height: 36 padding: Inset{left: 10 right: 10} on_click: || scout_demo_trigger()
+            draw_bg +: {border_radius: 16.0 color: #xfbf4e2 color_hover: #f7ebd1 color_down: #eddcb7 border_size: 1.0 border_color: #xdca842}
+            draw_text +: {color: #xb87b14 color_hover: #a36b0f color_down: #a36b0f text_style: font_bold_cjk{font_size: 8.5}}}
+        ButtonFlat{text: "⛈️ 模拟突变" height: 36 padding: Inset{left: 10 right: 10} on_click: || crisis_demo_trigger()
+            draw_bg +: {border_radius: 16.0 color: #xfdf0ed color_hover: #fcdbd5 color_down: #f8c3bb border_size: 1.0 border_color: #xd25b43}
+            draw_text +: {color: #xc23824 color_hover: #a52816 color_down: #a52816 text_style: font_bold_cjk{font_size: 8.5}}}
+        style_btn := ButtonFlat{text: "风格：" + style_label_for(receipt_style) height: 36 padding: Inset{left: 10 right: 10} on_click: || set_receipt_style()
             draw_bg +: {border_radius: 16.0 color: #xf7f2ec00 color_hover: #xf1ece4 color_down: #xe7dfd3 border_size: 0.0}
             draw_text +: {color: #x6e675e color_hover: #x6e675e color_down: #x6e675e text_style +: {font_size: 9}}}
     }
