@@ -23,6 +23,11 @@
 你点「拍板」才走白名单动作落地；之后它盯到人人到场、账目清零。
 无 AI 服务的设备上自动降级本地规则，功能完整可用。
 
+> 🏁 **本分支是 GOSIM Agentic App 黑客松 2026 参赛纪念快照**（决赛终版 v0.10.1 冻结）。
+> 完整参赛档案见 **[competition/](competition/README.md)**：参赛历程、
+> [赛后复盘（与前三名逐项对比）](competition/retrospective.md)、赛前调研报告、决赛榜单。
+> 作品仍在继续开发——Android 端侧推理等新方向在 `master` / `feat/*` 分支演进。
+
 ## 功能
 
 - **一句话成守护**：粘贴群消息点「交给管家」，agent 抽时间/地点/活动，抽不到就留空写「未抽取到」，绝不编造。
@@ -165,4 +170,4 @@ run.md                   复现步骤与版本锁定
 
 ## 许可证
 
-[Apache License 2.0](LICENSE) · GOSIM Agentic App 黑客松 2026 决赛作品（队伍 Aurora-X）
+[Apache License 2.0](LICENSE) · GOSIM Agentic App 黑客松 2026 决赛作品（队伍 Aurora-X）· [参赛档案](competition/README.md)
