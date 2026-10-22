@@ -10,23 +10,62 @@
     <img src="docs/readme/badges/license.svg" alt="License Apache-2.0">
   </p>
   <p>
+    <a href="#-赛后复盘--gosim-agentic-app-黑客松-2026">🏁 赛后复盘</a> ·
+    <a href="#功能">功能</a> ·
     <a href="#快速开始">快速开始</a> ·
     <a href="#工作原理">工作原理</a> ·
-    <a href="evidence/finals-verification-map.md">核验地图</a> ·
-    <a href="changes.md">变更台账</a>
+    <a href="competition/journey.md">参赛历程</a> ·
+    <a href="evidence/finals-verification-map.md">核验地图</a>
   </p>
   <p><b><a href="https://www.bilibili.com/video/BV1djp66AEfA/">📺 演示视频（B 站，103 秒，配音+字幕）</a></b></p>
 </div>
+
+---
+
+## 🏁 赛后复盘 · GOSIM Agentic App 黑客松 2026
+
+> 本分支是参赛纪念快照（决赛终版 v0.10.1 冻结）。**决赛第 10 名 · 总分 66/100**，
+> 距奖项线 8 分；初赛 73/100 入围。完整复盘 → **[competition/retrospective.md](competition/retrospective.md)**，
+> 逐日历程 → **[competition/journey.md](competition/journey.md)**。
+
+**决赛五维记分卡**（评委原话来自官方榜单页，[截图存档](competition/leaderboard-ours.png)）：
+
+| 维度 | 得分 | | 评委结论 |
+|---|---|---|---|
+| 创意 | **15**/20 | ███████░░░░░░░░░░░░░ | 群里约饭约活动，Agent 抽取时间地点人员和 AA，拍板后写入守护。 |
+| 项目完整度 | 12/20 | ██████░░░░░░░░░░░░░░ | 实测：提案、拍板、写入守护通过，存储核实；**首次授权不等待、回复漏出原始协议文本**。 |
+| 技术贡献度 | **14**/20 | ███████░░░░░░░░░░░░░ | 技术突破 72 分折算：**makepad#125**（isolate 任务队列不排空致回调不投递），另有 App-Hub#230、Rinx#91。 |
+| 应用社会价值 | 13/20 | ██████▌░░░░░░░░░░░░░ | 多人约定协调是常见需求。 |
+| App 性能 | 12/20 | ██████░░░░░░░░░░░░░░ | 实测（rc.6）：真实模型约 16 秒给出提案，抽取正确。 |
+
+**与前三名对比**（[前三榜单](competition/leaderboard.png)）：
+
+| 维度 | 牵线（我们） | 🥇 OnCue 80 | 🥈 冰箱管家 77 | 🥉 OctoBuddy 74 |
+|---|---|---|---|---|
+| 创意 | **15** | 15 | 14 | 17 |
+| 项目完整度 | 12 | 18 | 17 | 14 |
+| 技术贡献度 | 14 | 16 | 13 | 14 |
+| 应用社会价值 | 13 | 15 | 16 | 12 |
+| App 性能 | 12 | 16 | 17 | 17 |
+
+**三个关键事实**（实证，非推测）：
+
+1. **创意与冠军打平（15 = 15）**——「agent 提案，程序校验，人来拍板」的叙事角度站住了，创意不是失分点。
+2. **核心链路被评委实测通过**——提案、拍板、写入守护、存储核实全绿；PLAN 协议路线的正确性经第三方验证。失分集中在两条边界路径，已立项修复：
+   - **D1 首次授权不等待**（宿主首次 AI 授权未等待结果）；
+   - **D2 回复漏出原始协议文本**（PLAN 行剥离边界失效）。
+3. **失分 71% 在「完整度 + 性能」两维**——8 分差距 = 两个维度各进步 2-3 分，不需要全面赶超冠军。
+
+**对手强在哪**（一手仓库调研，详见复盘全文）：冠军 OnCue 用「437 项断言绑定源码哈希」的证据工程拿到完整度 18；亚军冰箱管家以 159KB VALIDATION 台账 + 主动披露未验证清单拿到 16；OctoBuddy 用「宿主收回验收权」拿到全场最高创意 17。我们的差异化资产——沉默留痕、12 op 白名单、真实场景闭环——三个对手都没有。
+
+---
+
+<div align="center"><b>以下为本分支冻结的决赛终版作品说明（v0.10.1）</b></div>
 
 牵线是运行在 OctoSense 里的 Splash 小程序（script-app）：把群里的聚会消息丢给管家，
 **agent 只做提案，人只做拍板**——管家抽取字段、查冲突、起草 PLAN 机器提案，
 你点「拍板」才走白名单动作落地；之后它盯到人人到场、账目清零。
 无 AI 服务的设备上自动降级本地规则，功能完整可用。
-
-> 🏁 **本分支是 GOSIM Agentic App 黑客松 2026 参赛纪念快照**（决赛终版 v0.10.1 冻结）。
-> 完整参赛档案见 **[competition/](competition/README.md)**：参赛历程、
-> [赛后复盘（与前三名逐项对比）](competition/retrospective.md)、赛前调研报告、决赛榜单。
-> 作品仍在继续开发——Android 端侧推理等新方向在 `master` / `feat/*` 分支演进。
 
 ## 功能
 
@@ -144,6 +183,7 @@ app/qianxian/tools/      回归驱动与校验工具（qx-verify-v2 等）
 tools/                   伴生进程与内核直连/场景录制/证据校验工具
 scripts/                 qx-gate-check.sh 门禁（版本自洽/包同步/hub check/密钥扫描/回归）
 evidence/                验收证据与核验地图（ finals-verification-map.md 为索引）
+competition/             参赛档案（复盘/历程/调研/榜单）
 run.md                   复现步骤与版本锁定
 ```
 
@@ -165,9 +205,10 @@ run.md                   复现步骤与版本锁定
 
 ## 文档
 
-[核验地图](evidence/finals-verification-map.md) ·[变更台账](changes.md) · [复现步骤](run.md) ·
+[🏁 赛后复盘](competition/retrospective.md) · [参赛历程](competition/journey.md) · [参赛档案](competition/README.md) ·
+[核验地图](evidence/finals-verification-map.md) · [变更台账](changes.md) · [复现步骤](run.md) ·
 [隐私政策](PRIVACY.md) · [设计蓝图](blueprint-gpt.md) · [局限性](limitations.md)
 
 ## 许可证
 
-[Apache License 2.0](LICENSE) · GOSIM Agentic App 黑客松 2026 决赛作品（队伍 Aurora-X）· [参赛档案](competition/README.md)
+[Apache License 2.0](LICENSE) · GOSIM Agentic App 黑客松 2026 决赛作品（队伍 Aurora-X，决赛第 10 名 66/100）· 作品持续开发中（Android 端侧推理见 `feat/android-embedded-llm`）
